@@ -1,0 +1,3273 @@
+{
+  "$defs": {
+    "AdminWorkspaceSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "active_api_key_count": {
+          "minimum": 0,
+          "title": "Active Api Key Count",
+          "type": "integer"
+        },
+        "enabled_trigger_count": {
+          "minimum": 0,
+          "title": "Enabled Trigger Count",
+          "type": "integer"
+        },
+        "membership_count": {
+          "minimum": 0,
+          "title": "Membership Count",
+          "type": "integer"
+        },
+        "trigger_count": {
+          "minimum": 0,
+          "title": "Trigger Count",
+          "type": "integer"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "membership_count",
+        "active_api_key_count",
+        "trigger_count",
+        "enabled_trigger_count",
+        "updated_at"
+      ],
+      "title": "AdminWorkspaceSummary",
+      "type": "object"
+    },
+    "AgentRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "delegate": "#/$defs/DelegatedAgentTool",
+                "gmail": "#/$defs/GmailAgentTool",
+                "http": "#/$defs/HttpAgentTool"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/HttpAgentTool"
+              },
+              {
+                "$ref": "#/$defs/DelegatedAgentTool"
+              },
+              {
+                "$ref": "#/$defs/GmailAgentTool"
+              }
+            ]
+          },
+          "maxItems": 32,
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "criteria": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Criteria"
+        },
+        "criteria_weights": {
+          "default": "",
+          "maxLength": 2048,
+          "title": "Criteria Weights",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfiguredModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parent_revision": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Revision"
+        },
+        "prompt": {
+          "$ref": "#/$defs/PromptExecutionRef"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ConnectionResourceRef"
+          },
+          "maxItems": 32,
+          "title": "Resources",
+          "type": "array"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "name",
+        "prompt",
+        "resources",
+        "created_at"
+      ],
+      "title": "AgentRevision",
+      "type": "object"
+    },
+    "AgentRevisionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "title": "AgentRevisionRef",
+      "type": "object"
+    },
+    "AgentTaskNode": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/AgentRevisionRef"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "agent_task",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Parameters",
+          "type": "object"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "agent"
+      ],
+      "title": "AgentTaskNode",
+      "type": "object"
+    },
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "media_type": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "connection",
+        "path",
+        "digest",
+        "media_type",
+        "size"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "BudgetPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_output_tokens": {
+          "default": 2048,
+          "maximum": 32768,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "monthly_token_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Monthly Token Limit"
+        }
+      },
+      "title": "BudgetPolicy",
+      "type": "object"
+    },
+    "CompositeNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "composite",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "variables": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Variables",
+          "type": "object"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "workflow"
+      ],
+      "title": "CompositeNode",
+      "type": "object"
+    },
+    "ConfiguredModelRef": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "connection",
+        "id"
+      ],
+      "title": "ConfiguredModelRef",
+      "type": "object"
+    },
+    "ConnectionResource": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "list",
+              "http"
+            ],
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CredentialRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "endpoint": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpoint"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "workspace_storage",
+            "http_server",
+            "provider_api"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "models": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Models",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "enum": [
+                "openai",
+                "anthropic",
+                "gemini"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Root"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "kind",
+        "name",
+        "capabilities"
+      ],
+      "title": "ConnectionResource",
+      "type": "object"
+    },
+    "ConnectionResourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "enum": [
+            "read",
+            "write",
+            "list",
+            "http"
+          ],
+          "title": "Capability",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "capability"
+      ],
+      "title": "ConnectionResourceRef",
+      "type": "object"
+    },
+    "ConnectionSecretUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "secret": {
+          "format": "password",
+          "maxLength": 16384,
+          "minLength": 1,
+          "title": "Secret",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "secret"
+      ],
+      "title": "ConnectionSecretUpdate",
+      "type": "object"
+    },
+    "Conversation": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/ConversationMessage"
+          },
+          "title": "Messages",
+          "type": "array"
+        },
+        "model": {
+          "$ref": "#/$defs/ConfiguredModelRef"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PromptExecutionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "unknown_outcome"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "model",
+        "status",
+        "messages",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "Conversation",
+      "type": "object"
+    },
+    "ConversationActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_activity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowAgentActivity"
+            },
+            {
+              "$ref": "#/$defs/WorkflowCapabilityActivity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Activity"
+        },
+        "conversation_id": {
+          "format": "uuid",
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "queued",
+            "started",
+            "provider_dispatch",
+            "agent_completion",
+            "message",
+            "delegation",
+            "tool",
+            "cancelled",
+            "error"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent_event_sequence": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Event Sequence"
+        },
+        "parent_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Run Id"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversation_id",
+        "sequence",
+        "kind",
+        "timestamp"
+      ],
+      "title": "ConversationActivity",
+      "type": "object"
+    },
+    "ConversationCreateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "idempotency_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "input": {
+          "maxLength": 1048576,
+          "minLength": 1,
+          "title": "Input",
+          "type": "string"
+        },
+        "max_output_tokens": {
+          "default": 2048,
+          "maximum": 32768,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfiguredModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PromptExecutionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "input",
+        "idempotency_key"
+      ],
+      "title": "ConversationCreateRequest",
+      "type": "object"
+    },
+    "ConversationMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "maxLength": 1048576,
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "provider_response_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Response Id"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderUsage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "content",
+        "created_at"
+      ],
+      "title": "ConversationMessage",
+      "type": "object"
+    },
+    "CredentialRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "CredentialRef",
+      "type": "object"
+    },
+    "DelegatedAgentTool": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/AgentRevisionRef"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "delegate",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "agent",
+        "input_schema"
+      ],
+      "title": "DelegatedAgentTool",
+      "type": "object"
+    },
+    "GmailAgentTool": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "gmail",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "search_metadata",
+            "read_message",
+            "send_message"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "operation",
+        "input_schema"
+      ],
+      "title": "GmailAgentTool",
+      "type": "object"
+    },
+    "HttpAgentTool": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "json_body_from_arguments": {
+          "title": "Json Body From Arguments",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "http",
+          "title": "Kind",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "POST"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connection",
+        "method",
+        "path",
+        "input_schema",
+        "json_body_from_arguments"
+      ],
+      "title": "HttpAgentTool",
+      "type": "object"
+    },
+    "InputNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "input",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "items": {},
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "value"
+      ],
+      "title": "InputNode",
+      "type": "object"
+    },
+    "ManualTrigger": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "manual",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ManualTrigger",
+      "type": "object"
+    },
+    "ModelEligibility": {
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Criteria",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/ModelEligibilityEvidence"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "model": {
+          "$ref": "#/$defs/ConfiguredModelRef"
+        },
+        "outcome": {
+          "enum": [
+            "eligible",
+            "ineligible",
+            "unknown"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "criteria",
+        "outcome",
+        "evidence"
+      ],
+      "title": "ModelEligibility",
+      "type": "object"
+    },
+    "ModelEligibilityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actual"
+        },
+        "comparator": {
+          "anyOf": [
+            {
+              "enum": [
+                ">",
+                ">=",
+                "<",
+                "<=",
+                "=",
+                "=="
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comparator"
+        },
+        "criterion": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Criterion",
+          "type": "string"
+        },
+        "expected": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "title": "Expected"
+        },
+        "freshness": {
+          "default": "unknown",
+          "enum": [
+            "current",
+            "stale",
+            "unknown"
+          ],
+          "title": "Freshness",
+          "type": "string"
+        },
+        "higher_is_better": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Higher Is Better"
+        },
+        "kind": {
+          "enum": [
+            "benchmark",
+            "capability",
+            "availability"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "methodology_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Methodology Url"
+        },
+        "metric": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metric"
+        },
+        "outcome": {
+          "enum": [
+            "satisfied",
+            "unsatisfied",
+            "unknown"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "retrieved": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved"
+        },
+        "score_range": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score Range"
+        },
+        "score_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score Url"
+        },
+        "source_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Url"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "criterion",
+        "kind",
+        "outcome",
+        "expected",
+        "reason"
+      ],
+      "title": "ModelEligibilityEvidence",
+      "type": "object"
+    },
+    "PortAddress": {
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "format": "uuid",
+          "title": "Node",
+          "type": "string"
+        },
+        "port": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Port",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node",
+        "port"
+      ],
+      "title": "PortAddress",
+      "type": "object"
+    },
+    "PortExposure": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/PortAddress"
+        }
+      },
+      "required": [
+        "name",
+        "target"
+      ],
+      "title": "PortExposure",
+      "type": "object"
+    },
+    "PortSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "enum": [
+            "input",
+            "output"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "multiple": {
+          "default": false,
+          "title": "Multiple",
+          "type": "boolean"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "value_type": {
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "json",
+            "artifact"
+          ],
+          "title": "Value Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "direction",
+        "value_type"
+      ],
+      "title": "PortSpec",
+      "type": "object"
+    },
+    "ProcessingNode": {
+      "additionalProperties": false,
+      "properties": {
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "processing",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfiguredModelRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operation": {
+          "enum": [
+            "uppercase",
+            "lowercase",
+            "identity",
+            "http_get"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "operation"
+      ],
+      "title": "ProcessingNode",
+      "type": "object"
+    },
+    "PromptExecutionRef": {
+      "additionalProperties": false,
+      "description": "Server-verified immutable prompt identity persisted with one execution.",
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "key": {
+          "$ref": "#/$defs/PromptKey"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "channel",
+        "digest",
+        "revision"
+      ],
+      "title": "PromptExecutionRef",
+      "type": "object"
+    },
+    "PromptKey": {
+      "additionalProperties": false,
+      "description": "Stable prompt identity independent of revisions and publication channels.",
+      "properties": {
+        "namespace": {
+          "title": "Namespace",
+          "type": "string"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        }
+      },
+      "required": [
+        "namespace",
+        "slug"
+      ],
+      "title": "PromptKey",
+      "type": "object"
+    },
+    "ProviderUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Creation Input Tokens"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Read Input Tokens"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tokens"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens"
+      ],
+      "title": "ProviderUsage",
+      "type": "object"
+    },
+    "ResultNode": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Path"
+        },
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "result",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind"
+      ],
+      "title": "ResultNode",
+      "type": "object"
+    },
+    "ScheduleTrigger": {
+      "additionalProperties": false,
+      "properties": {
+        "cron": {
+          "maxLength": 120,
+          "minLength": 9,
+          "title": "Cron",
+          "type": "string"
+        },
+        "kind": {
+          "const": "schedule",
+          "title": "Kind",
+          "type": "string"
+        },
+        "timezone": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "cron",
+        "timezone"
+      ],
+      "title": "ScheduleTrigger",
+      "type": "object"
+    },
+    "SubscriptionConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "current_period_ends_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Period Ends At"
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan"
+        },
+        "status": {
+          "enum": [
+            "unconfigured",
+            "trialing",
+            "active",
+            "past_due",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "updated_at"
+      ],
+      "title": "SubscriptionConfiguration",
+      "type": "object"
+    },
+    "ToolInputProperty": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ToolInputProperty",
+      "type": "object"
+    },
+    "ToolInputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "additional_properties": {
+          "const": false,
+          "default": false,
+          "title": "Additional Properties",
+          "type": "boolean"
+        },
+        "properties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ToolInputProperty"
+          },
+          "maxProperties": 32,
+          "title": "Properties",
+          "type": "object"
+        },
+        "required": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Required",
+          "type": "array"
+        },
+        "type": {
+          "const": "object",
+          "default": "object",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "properties",
+        "required"
+      ],
+      "title": "ToolInputSchema",
+      "type": "object"
+    },
+    "TriggerCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "discriminator": {
+            "mapping": {
+              "manual": "#/$defs/ManualTrigger",
+              "schedule": "#/$defs/ScheduleTrigger",
+              "webhook": "#/$defs/WebhookTrigger"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ManualTrigger"
+            },
+            {
+              "$ref": "#/$defs/ScheduleTrigger"
+            },
+            {
+              "$ref": "#/$defs/WebhookTrigger"
+            }
+          ],
+          "title": "Configuration"
+        },
+        "enabled": {
+          "const": false,
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "input_mapping": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TriggerInputMapping"
+          },
+          "maxItems": 32,
+          "title": "Input Mapping",
+          "type": "array"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        }
+      },
+      "required": [
+        "workflow",
+        "configuration"
+      ],
+      "title": "TriggerCreate",
+      "type": "object"
+    },
+    "TriggerDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "discriminator": {
+            "mapping": {
+              "manual": "#/$defs/ManualTrigger",
+              "schedule": "#/$defs/ScheduleTrigger",
+              "webhook": "#/$defs/WebhookTrigger"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ManualTrigger"
+            },
+            {
+              "$ref": "#/$defs/ScheduleTrigger"
+            },
+            {
+              "$ref": "#/$defs/WebhookTrigger"
+            }
+          ],
+          "title": "Configuration"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "input_mapping": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TriggerInputMapping"
+          },
+          "maxItems": 32,
+          "title": "Input Mapping",
+          "type": "array"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TriggerScheduleState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "webhook_credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookCredentialSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        }
+      },
+      "required": [
+        "workflow",
+        "configuration",
+        "id",
+        "enabled",
+        "created_at"
+      ],
+      "title": "TriggerDefinition",
+      "type": "object"
+    },
+    "TriggerDispatch": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "enum": [
+                "workflow_unavailable",
+                "execution_failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "idempotency_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "request_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Digest"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "scheduled_for": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled For"
+        },
+        "source": {
+          "enum": [
+            "manual",
+            "schedule",
+            "webhook"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "claimed",
+            "dispatched",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "trigger_id": {
+          "format": "uuid",
+          "title": "Trigger Id",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "trigger_id",
+        "source",
+        "idempotency_key",
+        "status",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "TriggerDispatch",
+      "type": "object"
+    },
+    "TriggerEnableUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "title": "TriggerEnableUpdate",
+      "type": "object"
+    },
+    "TriggerInputMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "target_kind": {
+          "enum": [
+            "input",
+            "variable"
+          ],
+          "title": "Target Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target_kind",
+        "target"
+      ],
+      "title": "TriggerInputMapping",
+      "type": "object"
+    },
+    "TriggerInvocation": {
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "maxProperties": 32,
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "title": "TriggerInvocation",
+      "type": "object"
+    },
+    "TriggerScheduleState": {
+      "additionalProperties": false,
+      "properties": {
+        "last_fire_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Fire At"
+        },
+        "lease_expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lease Expires At"
+        },
+        "lease_owner": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lease Owner"
+        },
+        "next_fire_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Fire At"
+        }
+      },
+      "title": "TriggerScheduleState",
+      "type": "object"
+    },
+    "UsageSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "period_start": {
+          "format": "date-time",
+          "title": "Period Start",
+          "type": "string"
+        },
+        "provider_calls": {
+          "minimum": 0,
+          "title": "Provider Calls",
+          "type": "integer"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "provider_calls",
+        "period_start"
+      ],
+      "title": "UsageSummary",
+      "type": "object"
+    },
+    "VariableSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "target": {
+          "$ref": "#/$defs/PortAddress"
+        },
+        "value_type": {
+          "enum": [
+            "text",
+            "number",
+            "boolean",
+            "json",
+            "artifact"
+          ],
+          "title": "Value Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "target",
+        "value_type"
+      ],
+      "title": "VariableSpec",
+      "type": "object"
+    },
+    "WebhookCredentialCreated": {
+      "additionalProperties": false,
+      "properties": {
+        "credential": {
+          "$ref": "#/$defs/WebhookCredentialSummary"
+        },
+        "secret": {
+          "format": "password",
+          "maxLength": 256,
+          "minLength": 32,
+          "title": "Secret",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "credential",
+        "secret"
+      ],
+      "title": "WebhookCredentialCreated",
+      "type": "object"
+    },
+    "WebhookCredentialSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "prefix": {
+          "maxLength": 16,
+          "minLength": 8,
+          "pattern": "^iwh_[A-Za-z0-9_-]+$",
+          "title": "Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefix",
+        "created_at"
+      ],
+      "title": "WebhookCredentialSummary",
+      "type": "object"
+    },
+    "WebhookTrigger": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "webhook",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "WebhookTrigger",
+      "type": "object"
+    },
+    "WorkflowAgentActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/AgentRevisionRef"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "node_id": {
+          "format": "uuid",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "parent_activity_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Activity Id"
+        },
+        "provider_response_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Provider Response Id",
+          "type": "string"
+        },
+        "status": {
+          "const": "succeeded",
+          "title": "Status",
+          "type": "string"
+        },
+        "type": {
+          "const": "agent_completion",
+          "title": "Type",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/ProviderUsage"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "node_id",
+        "agent",
+        "status",
+        "provider_response_id",
+        "usage"
+      ],
+      "title": "WorkflowAgentActivity",
+      "type": "object"
+    },
+    "WorkflowBlockAvailability": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "enum": [
+            "input",
+            "processing",
+            "result",
+            "composite",
+            "agent_task"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "anyOf": [
+            {
+              "enum": [
+                "uppercase",
+                "lowercase",
+                "identity",
+                "http_get"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operation"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "readiness": {
+          "enum": [
+            "executable",
+            "config_required",
+            "unavailable"
+          ],
+          "title": "Readiness",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "required_config_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Required Config Fields",
+          "type": "array"
+        },
+        "workflow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "ports",
+        "readiness",
+        "reason"
+      ],
+      "title": "WorkflowBlockAvailability",
+      "type": "object"
+    },
+    "WorkflowCapabilityActivity": {
+      "additionalProperties": false,
+      "properties": {
+        "call_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Call Id",
+          "type": "string"
+        },
+        "capability": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Capability",
+          "type": "string"
+        },
+        "child_activity_ids": {
+          "default": [],
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Child Activity Ids",
+          "type": "array"
+        },
+        "child_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Child Run Id"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "enum": [
+                "capability_not_allowed",
+                "invalid_arguments",
+                "execution_failed",
+                "depth_limit",
+                "call_limit"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "input_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowValueSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "node_id": {
+          "format": "uuid",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "output_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowValueSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "parent_activity_id": {
+          "format": "uuid",
+          "title": "Parent Activity Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "succeeded",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "tool",
+            "delegation"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "node_id",
+        "parent_activity_id",
+        "call_id",
+        "capability",
+        "status"
+      ],
+      "title": "WorkflowCapabilityActivity",
+      "type": "object"
+    },
+    "WorkflowEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/PortAddress"
+        },
+        "target": {
+          "$ref": "#/$defs/PortAddress"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "WorkflowEdge",
+      "type": "object"
+    },
+    "WorkflowEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "queued",
+            "started",
+            "progress",
+            "result",
+            "error",
+            "cancelled",
+            "interrupted"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "node_path": {
+          "default": [],
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Node Path",
+          "type": "array"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "sequence",
+        "kind",
+        "timestamp"
+      ],
+      "title": "WorkflowEvent",
+      "type": "object"
+    },
+    "WorkflowInterface": {
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PortExposure"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "outputs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PortExposure"
+          },
+          "title": "Outputs",
+          "type": "array"
+        },
+        "variables": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/VariableSpec"
+          },
+          "title": "Variables",
+          "type": "array"
+        }
+      },
+      "title": "WorkflowInterface",
+      "type": "object"
+    },
+    "WorkflowKey": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WorkflowKey",
+      "type": "object"
+    },
+    "WorkflowRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/WorkflowEdge"
+          },
+          "maxItems": 1500,
+          "title": "Edges",
+          "type": "array"
+        },
+        "interface": {
+          "$ref": "#/$defs/WorkflowInterface"
+        },
+        "key": {
+          "$ref": "#/$defs/WorkflowKey"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent_task": "#/$defs/AgentTaskNode",
+                "composite": "#/$defs/CompositeNode",
+                "input": "#/$defs/InputNode",
+                "processing": "#/$defs/ProcessingNode",
+                "result": "#/$defs/ResultNode"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/InputNode"
+              },
+              {
+                "$ref": "#/$defs/ProcessingNode"
+              },
+              {
+                "$ref": "#/$defs/ResultNode"
+              },
+              {
+                "$ref": "#/$defs/CompositeNode"
+              },
+              {
+                "$ref": "#/$defs/AgentTaskNode"
+              }
+            ]
+          },
+          "maxItems": 500,
+          "minItems": 1,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "parent_revision": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Revision"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "revision",
+        "name",
+        "nodes",
+        "edges",
+        "interface",
+        "created_at"
+      ],
+      "title": "WorkflowRevision",
+      "type": "object"
+    },
+    "WorkflowRevisionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/WorkflowKey"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "revision"
+      ],
+      "title": "WorkflowRevisionRef",
+      "type": "object"
+    },
+    "WorkflowRun": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "idempotency_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "invocation": {
+          "$ref": "#/$defs/TriggerInvocation"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "cancelling",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "interrupted"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        }
+      },
+      "required": [
+        "id",
+        "workflow",
+        "status",
+        "idempotency_key",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "WorkflowRun",
+      "type": "object"
+    },
+    "WorkflowValueSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "text",
+            "json",
+            "binary"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "size",
+        "digest"
+      ],
+      "title": "WorkflowValueSummary",
+      "type": "object"
+    },
+    "WorkspaceApiKeyCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "scopes": {
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "execute"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Scopes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "scopes"
+      ],
+      "title": "WorkspaceApiKeyCreate",
+      "type": "object"
+    },
+    "WorkspaceApiKeyCreated": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/WorkspaceApiKeySummary"
+        },
+        "secret": {
+          "format": "password",
+          "maxLength": 256,
+          "minLength": 32,
+          "title": "Secret",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "key",
+        "secret"
+      ],
+      "title": "WorkspaceApiKeyCreated",
+      "type": "object"
+    },
+    "WorkspaceApiKeySummary": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "last_used_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Used At"
+        },
+        "prefix": {
+          "maxLength": 16,
+          "minLength": 8,
+          "pattern": "^iwk_[A-Za-z0-9_-]+$",
+          "title": "Prefix",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        },
+        "scopes": {
+          "items": {
+            "enum": [
+              "read",
+              "write",
+              "execute"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Scopes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "prefix",
+        "scopes"
+      ],
+      "title": "WorkspaceApiKeySummary",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ModelEligibility"
+    },
+    {
+      "$ref": "#/$defs/WorkflowBlockAvailability"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceApiKeyCreate"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceApiKeyCreated"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceApiKeySummary"
+    },
+    {
+      "$ref": "#/$defs/TriggerCreate"
+    },
+    {
+      "$ref": "#/$defs/TriggerDefinition"
+    },
+    {
+      "$ref": "#/$defs/TriggerDispatch"
+    },
+    {
+      "$ref": "#/$defs/TriggerEnableUpdate"
+    },
+    {
+      "$ref": "#/$defs/TriggerInputMapping"
+    },
+    {
+      "$ref": "#/$defs/TriggerInvocation"
+    },
+    {
+      "$ref": "#/$defs/TriggerScheduleState"
+    },
+    {
+      "$ref": "#/$defs/WebhookCredentialCreated"
+    },
+    {
+      "$ref": "#/$defs/WebhookCredentialSummary"
+    },
+    {
+      "$ref": "#/$defs/SubscriptionConfiguration"
+    },
+    {
+      "$ref": "#/$defs/AdminWorkspaceSummary"
+    },
+    {
+      "$ref": "#/$defs/WorkflowAgentActivity"
+    },
+    {
+      "$ref": "#/$defs/WorkflowCapabilityActivity"
+    },
+    {
+      "$ref": "#/$defs/WorkflowValueSummary"
+    },
+    {
+      "$ref": "#/$defs/HttpAgentTool"
+    },
+    {
+      "$ref": "#/$defs/DelegatedAgentTool"
+    },
+    {
+      "$ref": "#/$defs/WorkflowRevision"
+    },
+    {
+      "$ref": "#/$defs/ConnectionResource"
+    },
+    {
+      "$ref": "#/$defs/ConnectionSecretUpdate"
+    },
+    {
+      "$ref": "#/$defs/AgentRevision"
+    },
+    {
+      "$ref": "#/$defs/ConversationCreateRequest"
+    },
+    {
+      "$ref": "#/$defs/Conversation"
+    },
+    {
+      "$ref": "#/$defs/ConversationActivity"
+    },
+    {
+      "$ref": "#/$defs/BudgetPolicy"
+    },
+    {
+      "$ref": "#/$defs/UsageSummary"
+    },
+    {
+      "$ref": "#/$defs/WorkflowRun"
+    },
+    {
+      "$ref": "#/$defs/WorkflowEvent"
+    }
+  ]
+}

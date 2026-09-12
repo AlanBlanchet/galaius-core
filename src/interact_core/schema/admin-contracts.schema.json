@@ -1,0 +1,696 @@
+{
+  "$defs": {
+    "BudgetDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "measured_total_tokens": {
+          "minimum": 0,
+          "title": "Measured Total Tokens",
+          "type": "integer"
+        },
+        "monthly_measured_token_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Monthly Measured Token Limit"
+        },
+        "reason": {
+          "enum": [
+            "unlimited",
+            "within_limit",
+            "request_limit",
+            "monthly_limit",
+            "unmeasured_usage",
+            "subscription_inactive"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "requested_output_tokens": {
+          "minimum": 1,
+          "title": "Requested Output Tokens",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "allowed",
+            "denied",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "measured_total_tokens",
+        "requested_output_tokens",
+        "reason"
+      ],
+      "title": "BudgetDecision",
+      "type": "object"
+    },
+    "OperatorAuditEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "operator.provisioned",
+            "account.listed",
+            "workspace.listed",
+            "service.inspected",
+            "run_failures.listed",
+            "usage.inspected",
+            "plan.saved",
+            "subscription.assigned",
+            "usage.recorded",
+            "budget.evaluated"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "actor_account_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Actor Account Id"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "target_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Id"
+        },
+        "target_kind": {
+          "enum": [
+            "account",
+            "workspace",
+            "service",
+            "run",
+            "plan",
+            "subscription",
+            "usage"
+          ],
+          "title": "Target Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "target_kind",
+        "created_at"
+      ],
+      "title": "OperatorAuditEvent",
+      "type": "object"
+    },
+    "OperatorAuthority": {
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "format": "uuid",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "authorized": {
+          "const": true,
+          "title": "Authorized",
+          "type": "boolean"
+        },
+        "provisioned_at": {
+          "format": "date-time",
+          "title": "Provisioned At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_id",
+        "authorized",
+        "provisioned_at"
+      ],
+      "title": "OperatorAuthority",
+      "type": "object"
+    },
+    "OperatorRunFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "failed",
+            "cancelled",
+            "interrupted"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "run_id",
+        "status",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "OperatorRunFailure",
+      "type": "object"
+    },
+    "OperatorServiceSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "account_count": {
+          "minimum": 0,
+          "title": "Account Count",
+          "type": "integer"
+        },
+        "failed_run_count": {
+          "minimum": 0,
+          "title": "Failed Run Count",
+          "type": "integer"
+        },
+        "operator_count": {
+          "minimum": 0,
+          "title": "Operator Count",
+          "type": "integer"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "workspace_count": {
+          "minimum": 0,
+          "title": "Workspace Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "account_count",
+        "workspace_count",
+        "operator_count",
+        "failed_run_count",
+        "recorded_at"
+      ],
+      "title": "OperatorServiceSummary",
+      "type": "object"
+    },
+    "OperatorWorkspaceSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "membership_count": {
+          "minimum": 0,
+          "title": "Membership Count",
+          "type": "integer"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "subscription": {
+          "$ref": "#/$defs/WorkspaceSubscription"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "name",
+        "membership_count",
+        "subscription"
+      ],
+      "title": "OperatorWorkspaceSummary",
+      "type": "object"
+    },
+    "SubscriptionLimit": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "minimum": 1,
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "title": "SubscriptionLimit",
+      "type": "object"
+    },
+    "SubscriptionPlanDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "entitlements": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Entitlements",
+          "type": "array"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "limits": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SubscriptionLimit"
+          },
+          "maxItems": 64,
+          "title": "Limits",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parent_revision": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Revision"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "name",
+        "created_at"
+      ],
+      "title": "SubscriptionPlanDefinition",
+      "type": "object"
+    },
+    "SubscriptionPlanRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "title": "SubscriptionPlanRef",
+      "type": "object"
+    },
+    "UsageProvenanceSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "estimated": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "measured": {
+          "$ref": "#/$defs/UsageTotals"
+        },
+        "period_start": {
+          "format": "date-time",
+          "title": "Period Start",
+          "type": "string"
+        },
+        "unknown_calls": {
+          "minimum": 0,
+          "title": "Unknown Calls",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "measured",
+        "estimated",
+        "unknown_calls",
+        "period_start"
+      ],
+      "title": "UsageProvenanceSummary",
+      "type": "object"
+    },
+    "UsageRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        },
+        "provenance": {
+          "enum": [
+            "measured",
+            "estimated",
+            "unknown"
+          ],
+          "title": "Provenance",
+          "type": "string"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/UsageSourceRef"
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tokens"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "workspace_id",
+        "source",
+        "provenance",
+        "recorded_at"
+      ],
+      "title": "UsageRecord",
+      "type": "object"
+    },
+    "UsageSourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "conversation",
+            "workflow"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider_response_id": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Response Id"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "title": "UsageSourceRef",
+      "type": "object"
+    },
+    "UsageTotals": {
+      "additionalProperties": false,
+      "properties": {
+        "calls": {
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "input_tokens": {
+          "minimum": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "calls"
+      ],
+      "title": "UsageTotals",
+      "type": "object"
+    },
+    "WorkspaceSubscription": {
+      "additionalProperties": false,
+      "properties": {
+        "assigned_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assigned At"
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubscriptionPlanRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "unconfigured",
+            "active",
+            "suspended",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "status",
+        "updated_at"
+      ],
+      "title": "WorkspaceSubscription",
+      "type": "object"
+    },
+    "WorkspaceSubscriptionUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/SubscriptionPlanRef"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "suspended",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan",
+        "status"
+      ],
+      "title": "WorkspaceSubscriptionUpdate",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/BudgetDecision"
+    },
+    {
+      "$ref": "#/$defs/OperatorAuditEvent"
+    },
+    {
+      "$ref": "#/$defs/OperatorAuthority"
+    },
+    {
+      "$ref": "#/$defs/OperatorRunFailure"
+    },
+    {
+      "$ref": "#/$defs/OperatorServiceSummary"
+    },
+    {
+      "$ref": "#/$defs/OperatorWorkspaceSummary"
+    },
+    {
+      "$ref": "#/$defs/SubscriptionPlanDefinition"
+    },
+    {
+      "$ref": "#/$defs/UsageProvenanceSummary"
+    },
+    {
+      "$ref": "#/$defs/UsageRecord"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceSubscription"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceSubscriptionUpdate"
+    }
+  ]
+}

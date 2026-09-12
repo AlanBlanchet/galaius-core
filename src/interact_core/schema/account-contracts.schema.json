@@ -1,0 +1,535 @@
+{
+  "$defs": {
+    "Account": {
+      "additionalProperties": false,
+      "properties": {
+        "account_id": {
+          "format": "uuid",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        },
+        "locale": {
+          "enum": [
+            "en",
+            "fr"
+          ],
+          "title": "Locale",
+          "type": "string"
+        },
+        "verified": {
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "account_id",
+        "email",
+        "locale",
+        "verified"
+      ],
+      "title": "Account",
+      "type": "object"
+    },
+    "AccountUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "locale": {
+          "enum": [
+            "en",
+            "fr"
+          ],
+          "title": "Locale",
+          "type": "string"
+        }
+      },
+      "title": "AccountUpdate",
+      "type": "object"
+    },
+    "Bootstrap": {
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "$ref": "#/$defs/Account"
+        },
+        "csrf_token": {
+          "minLength": 1,
+          "title": "Csrf Token",
+          "type": "string"
+        },
+        "current_workspace_id": {
+          "format": "uuid",
+          "title": "Current Workspace Id",
+          "type": "string"
+        },
+        "session_expires_at": {
+          "format": "date-time",
+          "title": "Session Expires At",
+          "type": "string"
+        },
+        "workspaces": {
+          "items": {
+            "$ref": "#/$defs/Workspace"
+          },
+          "title": "Workspaces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "account",
+        "workspaces",
+        "current_workspace_id",
+        "csrf_token",
+        "session_expires_at"
+      ],
+      "title": "Bootstrap",
+      "type": "object"
+    },
+    "LoginRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        },
+        "password": {
+          "format": "password",
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Password",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "email",
+        "password"
+      ],
+      "title": "LoginRequest",
+      "type": "object"
+    },
+    "PasswordResetRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "password": {
+          "format": "password",
+          "maxLength": 1024,
+          "minLength": 12,
+          "title": "Password",
+          "type": "string",
+          "writeOnly": true
+        },
+        "token": {
+          "format": "password",
+          "maxLength": 512,
+          "minLength": 32,
+          "title": "Token",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "token",
+        "password"
+      ],
+      "title": "PasswordResetRequest",
+      "type": "object"
+    },
+    "PlatformError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "authentication_failed",
+            "csrf_failed",
+            "invalid_origin",
+            "invalid_request",
+            "not_found",
+            "rate_limited",
+            "verification_failed",
+            "recovery_failed",
+            "unavailable"
+          ],
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "PlatformError",
+      "type": "object"
+    },
+    "RecoveryRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        }
+      },
+      "required": [
+        "email"
+      ],
+      "title": "RecoveryRequest",
+      "type": "object"
+    },
+    "SignupRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        },
+        "locale": {
+          "default": "en",
+          "enum": [
+            "en",
+            "fr"
+          ],
+          "title": "Locale",
+          "type": "string"
+        },
+        "password": {
+          "format": "password",
+          "maxLength": 1024,
+          "minLength": 12,
+          "title": "Password",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "email",
+        "password"
+      ],
+      "title": "SignupRequest",
+      "type": "object"
+    },
+    "TokenRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "token": {
+          "format": "password",
+          "maxLength": 512,
+          "minLength": 32,
+          "title": "Token",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "title": "TokenRequest",
+      "type": "object"
+    },
+    "Workspace": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "owner",
+            "admin",
+            "member",
+            "viewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "name",
+        "role"
+      ],
+      "title": "Workspace",
+      "type": "object"
+    },
+    "WorkspaceCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkspaceCreate",
+      "type": "object"
+    },
+    "WorkspaceInvitation": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "admin",
+            "member",
+            "viewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "accepted",
+            "cancelled",
+            "expired"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "role",
+        "status",
+        "created_at",
+        "expires_at"
+      ],
+      "title": "WorkspaceInvitation",
+      "type": "object"
+    },
+    "WorkspaceInvite": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "admin",
+            "member",
+            "viewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "role"
+      ],
+      "title": "WorkspaceInvite",
+      "type": "object"
+    },
+    "WorkspaceMember": {
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "$ref": "#/$defs/Account"
+        },
+        "role": {
+          "enum": [
+            "owner",
+            "admin",
+            "member",
+            "viewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "role"
+      ],
+      "title": "WorkspaceMember",
+      "type": "object"
+    },
+    "WorkspaceMemberRoleUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "owner",
+            "admin",
+            "member",
+            "viewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role"
+      ],
+      "title": "WorkspaceMemberRoleUpdate",
+      "type": "object"
+    },
+    "WorkspaceMembership": {
+      "additionalProperties": false,
+      "properties": {
+        "invitations": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceInvitation"
+          },
+          "title": "Invitations",
+          "type": "array"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/WorkspaceMember"
+          },
+          "title": "Members",
+          "type": "array"
+        }
+      },
+      "required": [
+        "members",
+        "invitations"
+      ],
+      "title": "WorkspaceMembership",
+      "type": "object"
+    },
+    "WorkspaceUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WorkspaceUpdate",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/Account"
+    },
+    {
+      "$ref": "#/$defs/AccountUpdate"
+    },
+    {
+      "$ref": "#/$defs/Bootstrap"
+    },
+    {
+      "$ref": "#/$defs/SignupRequest"
+    },
+    {
+      "$ref": "#/$defs/LoginRequest"
+    },
+    {
+      "$ref": "#/$defs/TokenRequest"
+    },
+    {
+      "$ref": "#/$defs/RecoveryRequest"
+    },
+    {
+      "$ref": "#/$defs/PasswordResetRequest"
+    },
+    {
+      "$ref": "#/$defs/PlatformError"
+    },
+    {
+      "$ref": "#/$defs/Workspace"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceCreate"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceInvitation"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceInvite"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceMember"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceMembership"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceMemberRoleUpdate"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceUpdate"
+    }
+  ]
+}
