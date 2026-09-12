@@ -17,6 +17,13 @@ from interact_core import (
     WorkflowKey,
     WorkspaceSubscription,
     SubscriptionPlanRef,
+    AgentRevision,
+    ConnectorLeaf,
+    ConfiguredModelRef,
+    ConnectionResourceRef,
+    ModelEligibility,
+    ModelProperty,
+    PromptExecutionRef,
 )
 
 
@@ -92,3 +99,45 @@ def test_standalone_package_exports_contracts_and_bundles_all_schemas() -> None:
     for path in schema_dir.iterdir():
         if path.name.endswith(".json"):
             assert "$defs" in json.loads(path.read_text())
+
+
+def test_agent_paradigms_are_ordered_and_unique() -> None:
+    prompt = PromptExecutionRef(
+        key=PromptKey(namespace="test", slug="main"),
+        channel="stable", digest="1" * 64, revision=uuid4(),
+    )
+    paradigm = PromptExecutionRef(
+        key=PromptKey(namespace="test", slug="safety"),
+        channel="stable", digest="2" * 64, revision=uuid4(),
+    )
+    value = AgentRevision(
+        id=uuid4(), revision=uuid4(), name="Agent", prompt=prompt,
+        paradigms=(paradigm,), resources=(), created_at=datetime.now(UTC),
+    )
+    assert value.paradigms == (paradigm,)
+    with pytest.raises(ValidationError, match="unique"):
+        AgentRevision(
+            id=uuid4(), revision=uuid4(), name="Agent", prompt=prompt,
+            paradigms=(paradigm, paradigm), resources=(), created_at=datetime.now(UTC),
+        )
+
+
+def test_connector_leaf_keeps_value_type_explicit() -> None:
+    assert ConnectorLeaf(name="count", type="number", value=3).value == 3
+    with pytest.raises(ValidationError, match="does not match"):
+        ConnectorLeaf(name="count", type="number", value="3")
+
+
+def test_model_property_rankability_is_additive_and_defaults_false() -> None:
+    value = ModelProperty(name="price.in", description="input cost", source="catalog", kind="number", weightable=False, percentile=True)
+    assert value.rankable is False
+    assert value.model_dump(mode="json")["rankable"] is False
+
+
+def test_model_eligibility_rank_is_optional_positive_selection_order() -> None:
+    evidence = ({"criterion": "cap.vlm", "kind": "capability", "outcome": "satisfied", "expected": True, "actual": True, "reason": "available"},)
+    model = ConfiguredModelRef(connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="http"), id="fixture/model")
+    assert ModelEligibility(model=model, criteria="cap.vlm", outcome="eligible", evidence=evidence).rank is None
+    assert ModelEligibility(model=model, criteria="cap.vlm", outcome="eligible", rank=1, evidence=evidence).rank == 1
+    with pytest.raises(ValidationError):
+        ModelEligibility(model=model, criteria="cap.vlm", outcome="eligible", rank=0, evidence=evidence)

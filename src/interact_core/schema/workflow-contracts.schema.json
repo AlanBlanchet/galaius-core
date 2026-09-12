@@ -53,6 +53,7 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "connector": "#/$defs/ConnectorAgentTool",
                 "delegate": "#/$defs/DelegatedAgentTool",
                 "gmail": "#/$defs/GmailAgentTool",
                 "http": "#/$defs/HttpAgentTool"
@@ -68,6 +69,9 @@
               },
               {
                 "$ref": "#/$defs/GmailAgentTool"
+              },
+              {
+                "$ref": "#/$defs/ConnectorAgentTool"
               }
             ]
           },
@@ -121,6 +125,15 @@
           "minLength": 1,
           "title": "Name",
           "type": "string"
+        },
+        "paradigms": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PromptExecutionRef"
+          },
+          "maxItems": 16,
+          "title": "Paradigms",
+          "type": "array"
         },
         "parent_revision": {
           "anyOf": [
@@ -449,6 +462,19 @@
           ],
           "default": null
         },
+        "credential_expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Expires At"
+        },
         "endpoint": {
           "anyOf": [
             {
@@ -471,7 +497,8 @@
           "enum": [
             "workspace_storage",
             "http_server",
-            "provider_api"
+            "provider_api",
+            "service_connector"
           ],
           "title": "Kind",
           "type": "string"
@@ -497,7 +524,12 @@
               "enum": [
                 "openai",
                 "anthropic",
-                "gemini"
+                "gemini",
+                "google_drive",
+                "github",
+                "slack",
+                "notion",
+                "gmail"
               ],
               "type": "string"
             },
@@ -585,6 +617,74 @@
         "secret"
       ],
       "title": "ConnectionSecretUpdate",
+      "type": "object"
+    },
+    "ConnectorAgentTool": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "list_files",
+            "list_repositories",
+            "list_channels",
+            "search_pages"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "connector": {
+          "enum": [
+            "google_drive",
+            "github",
+            "slack",
+            "notion",
+            "gmail"
+          ],
+          "title": "Connector",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "connector",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connector",
+        "action",
+        "input_schema"
+      ],
+      "title": "ConnectorAgentTool",
       "type": "object"
     },
     "Conversation": {
@@ -1185,6 +1285,19 @@
           ],
           "title": "Outcome",
           "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
         }
       },
       "required": [
@@ -1439,6 +1552,11 @@
         },
         "percentile": {
           "title": "Percentile",
+          "type": "boolean"
+        },
+        "rankable": {
+          "default": false,
+          "title": "Rankable",
           "type": "boolean"
         },
         "source": {

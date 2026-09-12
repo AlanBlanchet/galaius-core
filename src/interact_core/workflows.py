@@ -381,6 +381,96 @@ class ToolInputSchema(WireModel):
         return arguments
 
 
+ConnectorKind = Literal["google_drive", "github", "slack", "notion", "gmail"]
+ConnectorActionName = Literal[
+    "list_files", "list_repositories", "list_channels", "search_pages",
+    "search_metadata", "read_message", "send_message",
+]
+ConnectorBrowseActionName = Literal["list_files", "list_repositories", "list_channels", "search_pages"]
+ConnectorAuthKind = Literal["google_oauth", "access_token"]
+
+
+class ConnectorAction(WireModel):
+    connector: ConnectorKind
+    name: ConnectorActionName
+    method: Literal["GET", "POST"]
+    endpoint: HttpUrl
+    auth_kind: ConnectorAuthKind
+    required_access: tuple[str, ...] = Field(min_length=1, max_length=8)
+    input_schema: ToolInputSchema
+    item_kind: Literal["file", "repository", "channel", "page", "message"]
+    docs_url: HttpUrl
+
+
+class ConnectorDefinition(WireModel):
+    connector: ConnectorKind
+    name: str = Field(min_length=1, max_length=120)
+    auth_kinds: tuple[ConnectorAuthKind, ...] = Field(min_length=1, max_length=2)
+    actions: tuple[ConnectorAction, ...] = Field(min_length=1, max_length=8)
+    docs_url: HttpUrl
+
+
+class ConnectorCatalog(WireModel):
+    version: Literal["v1"] = "v1"
+    connectors: tuple[ConnectorDefinition, ...] = Field(min_length=1, max_length=8)
+
+
+class ConnectorCheckRequest(WireModel):
+    connector: ConnectorKind
+    connection: ConnectionResourceRef | None = None
+
+
+class ConnectorCheck(WireModel):
+    connector: ConnectorKind
+    connection: ConnectionResourceRef | None = None
+    status: Literal["ready", "unconfigured", "unauthorized", "rate_limited", "unavailable"]
+    auth_kind: ConnectorAuthKind
+    required_access: tuple[str, ...] = Field(min_length=1, max_length=8)
+    credential_expires_at: datetime | None = None
+
+
+class ConnectorBrowseRequest(WireModel):
+    action: ConnectorBrowseActionName
+    connection: ConnectionResourceRef | None = None
+    query: str | None = Field(default=None, max_length=512)
+    cursor: str | None = Field(default=None, min_length=1, max_length=2048)
+    limit: int = Field(default=25, ge=1, le=50)
+
+
+class ConnectorLeaf(WireModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    type: Literal["text", "number", "boolean", "url", "null"]
+    value: str | float | bool | None
+
+    @model_validator(mode="after")
+    def matching_value(self) -> Self:
+        valid = (
+            self.value is None if self.type == "null" else
+            isinstance(self.value, str) if self.type in {"text", "url"} else
+            isinstance(self.value, (int, float)) and not isinstance(self.value, bool) if self.type == "number" else
+            isinstance(self.value, bool)
+        )
+        if not valid:
+            raise ValueError("connector leaf value does not match its type")
+        return self
+
+
+class ConnectorItem(WireModel):
+    id: str = Field(min_length=1, max_length=512)
+    title: str = Field(min_length=1, max_length=512)
+    kind: Literal["file", "repository", "channel", "page", "message"]
+    url: HttpUrl | None = None
+    fields: tuple[ConnectorLeaf, ...] = Field(default=(), max_length=32)
+
+
+class ConnectorBrowse(WireModel):
+    connector: ConnectorKind
+    action: ConnectorActionName
+    status: Literal["ready"] = "ready"
+    items: tuple[ConnectorItem, ...] = Field(max_length=50)
+    next_cursor: str | None = Field(default=None, max_length=2048)
+
+
 class HttpAgentTool(WireModel):
     kind: Literal["http"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
@@ -419,7 +509,17 @@ class GmailAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool, Field(discriminator="kind")]
+class ConnectorAgentTool(WireModel):
+    kind: Literal["connector"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    connector: ConnectorKind
+    action: ConnectorBrowseActionName
+    connection: ConnectionResourceRef | None = None
+    input_schema: ToolInputSchema
+
+
+AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool, Field(discriminator="kind")]
 
 
 class AgentRevision(WireModel):
@@ -428,6 +528,7 @@ class AgentRevision(WireModel):
     parent_revision: UUID | None = None
     name: str = Field(min_length=1, max_length=120)
     prompt: PromptExecutionRef
+    paradigms: tuple[PromptExecutionRef, ...] = Field(default=(), max_length=16)
     model: ConfiguredModelRef | None = None
     criteria: str | None = Field(default=None, min_length=1, max_length=2048)
     criteria_weights: str = Field(default="", max_length=2048)
@@ -448,6 +549,11 @@ class AgentRevision(WireModel):
         resources = set(self.resources)
         if any(isinstance(capability, HttpAgentTool) and capability.connection not in resources for capability in self.capabilities):
             raise ValueError("HTTP agent tools must use an explicitly connected resource")
+        if any(isinstance(capability, ConnectorAgentTool) and capability.connection is not None and capability.connection not in resources for capability in self.capabilities):
+            raise ValueError("connector agent tools must use an explicitly connected resource")
+        references = (self.prompt, *self.paradigms)
+        if len(set(references)) != len(references):
+            raise ValueError("agent prompt and paradigms must be unique")
         return self
 
 
@@ -544,6 +650,7 @@ class ModelProperty(WireModel):
     source: str = Field(max_length=160)
     kind: Literal["flag", "number"]
     weightable: bool
+    rankable: bool = False
     percentile: bool
 
 
@@ -592,6 +699,7 @@ class ModelEligibility(WireModel):
     model: ConfiguredModelRef
     criteria: str = Field(min_length=1, max_length=2048)
     outcome: Literal["eligible", "ineligible", "unknown"]
+    rank: int | None = Field(default=None, ge=1)
     evidence: tuple[ModelEligibilityEvidence, ...] = Field(min_length=1, max_length=64)
 
     @model_validator(mode="after")
@@ -622,14 +730,15 @@ class WorkflowRevision(WireModel):
 class ConnectionResource(WireModel):
     id: UUID
     revision: UUID
-    kind: Literal["workspace_storage", "http_server", "provider_api"]
+    kind: Literal["workspace_storage", "http_server", "provider_api", "service_connector"]
     name: str = Field(min_length=1, max_length=120)
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "google_drive", "github", "slack", "notion", "gmail"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
     capabilities: tuple[Literal["read", "write", "list", "http"], ...]
+    credential_expires_at: datetime | None = None
 
     @model_validator(mode="after")
     def kind_fields(self) -> Self:
@@ -637,10 +746,18 @@ class ConnectionResource(WireModel):
             raise ValueError("workspace storage requires only a root")
         if self.kind in {"http_server", "provider_api"} and (self.endpoint is None or self.root is not None):
             raise ValueError("server connection requires only an endpoint")
+        if self.kind == "service_connector" and (self.endpoint is not None or self.root is not None or self.provider is None or self.credential is None or "list" not in self.capabilities or "write" in self.capabilities):
+            raise ValueError("service connector requires a credential, provider, and list capability only")
         if self.kind == "provider_api" and self.credential is None:
             raise ValueError("provider connection requires a credential reference")
-        if (self.kind == "provider_api") != (self.provider is not None):
-            raise ValueError("provider kind is required only for provider connections")
+        if self.kind not in {"provider_api", "service_connector"} and self.provider is not None:
+            raise ValueError("provider kind is required only for provider and service connections")
+        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini"}:
+            raise ValueError("provider API kind requires a model provider")
+        if self.kind != "service_connector" and self.credential_expires_at is not None:
+            raise ValueError("credential expiry belongs only to service connectors")
+        if self.kind == "service_connector" and self.provider not in {"google_drive", "github", "slack", "notion", "gmail"}:
+            raise ValueError("service connector provider is unsupported")
         if self.kind != "provider_api" and self.models:
             raise ValueError("only provider connections declare models")
         if len(set(self.models)) != len(self.models) or any(not model or len(model) > 160 for model in self.models):

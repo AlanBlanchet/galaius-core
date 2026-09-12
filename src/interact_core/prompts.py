@@ -32,6 +32,7 @@ class PromptRevision(WireModel):
     """Immutable prompt content and its verifiable publication provenance."""
 
     key: PromptKey
+    name: str | None = Field(default=None, min_length=1, max_length=120)
     revision: UUID
     parent_digest: str | None = None
     digest: str

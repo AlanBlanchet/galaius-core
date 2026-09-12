@@ -221,6 +221,20 @@
         "key": {
           "$ref": "#/$defs/PromptKey"
         },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
         "parent_digest": {
           "anyOf": [
             {
