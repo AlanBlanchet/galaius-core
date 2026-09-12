@@ -535,13 +535,30 @@ class WorkflowBlockAvailability(WireModel):
         return self
 
 
+ModelComparator = Literal[">", ">=", "<", "<=", "=", "=="]
+
+
+class ModelProperty(WireModel):
+    name: str = Field(min_length=1, max_length=160)
+    description: str = Field(min_length=1, max_length=400)
+    source: str = Field(max_length=160)
+    kind: Literal["flag", "number"]
+    weightable: bool
+    percentile: bool
+
+
+class ModelCriteriaCatalog(WireModel):
+    properties: tuple[ModelProperty, ...]
+    comparators: tuple[ModelComparator, ...]
+
+
 class ModelEligibilityEvidence(WireModel):
     criterion: str = Field(min_length=1, max_length=2048)
     kind: Literal["benchmark", "capability", "availability"]
     outcome: Literal["satisfied", "unsatisfied", "unknown"]
     actual: FiniteFloat | bool | None = None
     expected: FiniteFloat | bool
-    comparator: Literal[">", ">=", "<", "<=", "=", "=="] | None = None
+    comparator: ModelComparator | None = None
     metric: str | None = Field(default=None, max_length=160)
     unit: str | None = Field(default=None, max_length=80)
     score_range: tuple[FiniteFloat, FiniteFloat] | None = None

@@ -1123,6 +1123,39 @@
       "title": "ManualTrigger",
       "type": "object"
     },
+    "ModelCriteriaCatalog": {
+      "additionalProperties": false,
+      "properties": {
+        "comparators": {
+          "items": {
+            "enum": [
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "=",
+              "=="
+            ],
+            "type": "string"
+          },
+          "title": "Comparators",
+          "type": "array"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/ModelProperty"
+          },
+          "title": "Properties",
+          "type": "array"
+        }
+      },
+      "required": [
+        "properties",
+        "comparators"
+      ],
+      "title": "ModelCriteriaCatalog",
+      "type": "object"
+    },
     "ModelEligibility": {
       "additionalProperties": false,
       "properties": {
@@ -1379,6 +1412,54 @@
         "reason"
       ],
       "title": "ModelEligibilityEvidence",
+      "type": "object"
+    },
+    "ModelProperty": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "flag",
+            "number"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "percentile": {
+          "title": "Percentile",
+          "type": "boolean"
+        },
+        "source": {
+          "maxLength": 160,
+          "title": "Source",
+          "type": "string"
+        },
+        "weightable": {
+          "title": "Weightable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "source",
+        "kind",
+        "weightable",
+        "percentile"
+      ],
+      "title": "ModelProperty",
       "type": "object"
     },
     "PortAddress": {
@@ -3173,6 +3254,9 @@
     }
   },
   "anyOf": [
+    {
+      "$ref": "#/$defs/ModelCriteriaCatalog"
+    },
     {
       "$ref": "#/$defs/ModelEligibility"
     },

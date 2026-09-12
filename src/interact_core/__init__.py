@@ -52,7 +52,7 @@ from .prompts import (
 )
 from .external_connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart
 from .workflows import (
-    ModelEligibility, ModelEligibilityEvidence, WorkflowBlockAvailability,
+    ModelCriteriaCatalog, ModelProperty, ModelEligibility, ModelEligibilityEvidence, WorkflowBlockAvailability,
     AdminWorkspaceSummary, AgentCapability, AgentRevision, AgentRevisionRef, AgentTaskNode, ArtifactRef, BudgetPolicy, CompositeNode, ConfiguredModelRef, DelegatedAgentTool,
     Conversation, ConversationActivity, ConversationCreateRequest, ConversationMessage,
     ConnectionResource, ConnectionResourceRef, ConnectionSecretUpdate, CredentialRef,
@@ -63,7 +63,7 @@ from .workflows import (
 )
 
 __all__ = [
-    "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
+    "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
     "BudgetDecision", "OperatorAuditEvent", "OperatorAuthority", "OperatorRunFailure", "OperatorServiceSummary", "OperatorWorkspaceSummary",
     "SubscriptionLimit", "SubscriptionPlanDefinition", "SubscriptionPlanRef", "UsageProvenanceSummary", "UsageRecord", "UsageSourceRef", "UsageTotals", "WorkspaceSubscription", "WorkspaceSubscriptionUpdate",
     "Account", "AccountUpdate", "Bootstrap", "LoginRequest", "PasswordResetRequest", "RecoveryRequest",
