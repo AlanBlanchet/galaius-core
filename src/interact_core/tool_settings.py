@@ -1,10 +1,14 @@
 """Portable personal tool preferences; machine paths, credentials and grants excluded."""
 
-from typing import Annotated, Literal, Self
+from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
 from .wire import WireModel
+
+VLM_MIN_DIM_DEFAULT = 768
+VLM_MAX_DIM_DEFAULT = 1280
+MediaSessionProviderName = Literal["claude"]
 
 
 class PortableToolSettingsValues(WireModel):
@@ -20,7 +24,7 @@ class PortableToolSettingsValues(WireModel):
     tier_sovereign_model: str | None = Field(default=None, max_length=4096)
     media_criteria: str | None = Field(default=None, max_length=4096)
     media_criteria_weights: str | None = Field(default=None, max_length=4096)
-    media_provider_order: tuple[Annotated[str, Field(max_length=4096)], ...] | None = Field(default=None, max_length=32)
+    media_provider_order: tuple[MediaSessionProviderName, ...] | None = Field(default=None, max_length=32)
     media_timeout: int | None = Field(default=None, gt=0)
     media_max_items: int | None = Field(default=None, gt=0)
     media_max_total_bytes: int | None = Field(default=None, gt=0)
@@ -38,7 +42,9 @@ class PortableToolSettingsValues(WireModel):
 
     @model_validator(mode="after")
     def validate_portable_values(self) -> Self:
-        if self.vlm_min_dim is not None and self.vlm_max_dim is not None and self.vlm_min_dim > self.vlm_max_dim:
+        minimum = VLM_MIN_DIM_DEFAULT if self.vlm_min_dim is None else self.vlm_min_dim
+        maximum = VLM_MAX_DIM_DEFAULT if self.vlm_max_dim is None else self.vlm_max_dim
+        if minimum > maximum:
             raise ValueError("minimum image dimension cannot exceed maximum")
         order = self.media_provider_order
         if order is not None and (not order or len(set(order)) != len(order) or any(not name.strip() or name != name.strip() for name in order)):

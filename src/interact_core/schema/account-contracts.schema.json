@@ -862,7 +862,7 @@
           "anyOf": [
             {
               "items": {
-                "maxLength": 4096,
+                "const": "claude",
                 "type": "string"
               },
               "maxItems": 32,

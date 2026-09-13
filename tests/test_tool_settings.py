@@ -16,7 +16,13 @@ def test_sparse_settings_roundtrip_and_explicit_clear():
     {"media_provider_order": []}, {"media_provider_order": ["same", "same"]},
     {"media_provider_order": [" padded "]}, {"vlm_min_dim": 2000, "vlm_max_dim": 1000},
     {"video_duration": float("inf")}, {"viewport_width": 0}, {"image_model": "x" * 4097},
+    {"vlm_min_dim": 1500}, {"vlm_max_dim": 500}, {"media_provider_order": ["unsupported"]},
 ])
 def test_settings_reject_nonportable_and_invalid_values(values):
     with pytest.raises(ValidationError):
         PortableToolSettingsValues.model_validate(values)
+
+
+def test_sparse_dimensions_use_shared_defaults():
+    assert PortableToolSettingsValues(vlm_max_dim=1500).vlm_min_dim is None
+    assert PortableToolSettingsValues(vlm_min_dim=1500, vlm_max_dim=2000).vlm_max_dim == 2000
