@@ -1,5 +1,6 @@
 """Provider-independent prompt distribution contracts."""
 
+from .tool_settings import PortableToolSettings, PortableToolSettingsUpdate, PortableToolSettingsValues
 from .releases import ChangelogEntry, ReleaseInfo
 from .accounts import (
     Account,
@@ -70,6 +71,7 @@ from .workflows import (
 )
 
 __all__ = [
+    "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "DirectTool", "ToolTaskNode",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",

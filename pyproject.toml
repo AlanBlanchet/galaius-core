@@ -1,6 +1,6 @@
 [project]
 name = "interact-core"
-version = "0.42.0"
+version = "0.43.0"
 description = "Provider-independent wire contracts for Interact clients and services"
 readme = "README.md"
 license = "MIT"
