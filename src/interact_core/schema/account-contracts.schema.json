@@ -118,6 +118,440 @@
       "title": "Bootstrap",
       "type": "object"
     },
+    "ChangelogEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "changes": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 24,
+          "minItems": 1,
+          "title": "Changes",
+          "type": "array"
+        },
+        "released_on": {
+          "format": "date",
+          "title": "Released On",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "released_on",
+        "changes"
+      ],
+      "title": "ChangelogEntry",
+      "type": "object"
+    },
+    "CompanyDetails": {
+      "additionalProperties": false,
+      "description": "Optional legal identity for an existing workspace, never a membership grant.",
+      "properties": {
+        "activity_code": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Code"
+        },
+        "address": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Address"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        },
+        "country_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country Code"
+        },
+        "legal_name": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legal Name"
+        },
+        "postal_code": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Postal Code"
+        },
+        "siret": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{14}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Siret"
+        }
+      },
+      "title": "CompanyDetails",
+      "type": "object"
+    },
+    "CompanyLogoUpload": {
+      "additionalProperties": false,
+      "properties": {
+        "data_base64": {
+          "maxLength": 1400000,
+          "minLength": 1,
+          "title": "Data Base64",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ],
+          "title": "Media Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "media_type",
+        "data_base64"
+      ],
+      "title": "CompanyLogoUpload",
+      "type": "object"
+    },
+    "CompanyLookupResult": {
+      "additionalProperties": false,
+      "properties": {
+        "company": {
+          "$ref": "#/$defs/CompanyDetails"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "source_url": {
+          "const": "https://recherche-entreprises.api.gouv.fr",
+          "default": "https://recherche-entreprises.api.gouv.fr",
+          "title": "Source Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "company",
+        "retrieved_at"
+      ],
+      "title": "CompanyLookupResult",
+      "type": "object"
+    },
+    "CompanyProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "activity_code": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Code"
+        },
+        "address": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Address"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        },
+        "country_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country Code"
+        },
+        "legal_name": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legal Name"
+        },
+        "logo_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logo Digest"
+        },
+        "postal_code": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Postal Code"
+        },
+        "revision": {
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "siret": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{14}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Siret"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "revision"
+      ],
+      "title": "CompanyProfile",
+      "type": "object"
+    },
+    "CompanyProfileUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "activity_code": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Code"
+        },
+        "address": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Address"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        },
+        "country_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country Code"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "legal_name": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legal Name"
+        },
+        "postal_code": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Postal Code"
+        },
+        "siret": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{14}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Siret"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "CompanyProfileUpdate",
+      "type": "object"
+    },
     "LoginRequest": {
       "additionalProperties": false,
       "properties": {
@@ -209,6 +643,51 @@
         "email"
       ],
       "title": "RecoveryRequest",
+      "type": "object"
+    },
+    "ReleaseInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "build_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Build Id"
+        },
+        "changelog": {
+          "items": {
+            "$ref": "#/$defs/ChangelogEntry"
+          },
+          "maxItems": 100,
+          "title": "Changelog",
+          "type": "array"
+        },
+        "core_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Core Version",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "core_version",
+        "changelog"
+      ],
+      "title": "ReleaseInfo",
       "type": "object"
     },
     "SignupRequest": {
@@ -480,6 +959,21 @@
     }
   },
   "anyOf": [
+    {
+      "$ref": "#/$defs/CompanyProfile"
+    },
+    {
+      "$ref": "#/$defs/CompanyProfileUpdate"
+    },
+    {
+      "$ref": "#/$defs/CompanyLogoUpload"
+    },
+    {
+      "$ref": "#/$defs/CompanyLookupResult"
+    },
+    {
+      "$ref": "#/$defs/ReleaseInfo"
+    },
     {
       "$ref": "#/$defs/Account"
     },

@@ -72,6 +72,40 @@ class WorkspaceUpdate(WireModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+class CompanyDetails(WireModel):
+    """Optional legal identity for an existing workspace, never a membership grant."""
+
+    legal_name: str | None = Field(default=None, min_length=1, max_length=240)
+    siret: str | None = Field(default=None, pattern=r"^[0-9]{14}$")
+    address: str | None = Field(default=None, min_length=1, max_length=500)
+    postal_code: str | None = Field(default=None, min_length=1, max_length=32)
+    city: str | None = Field(default=None, min_length=1, max_length=120)
+    country_code: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
+    activity_code: str | None = Field(default=None, min_length=1, max_length=32)
+
+
+class CompanyProfile(CompanyDetails):
+    workspace_id: UUID
+    revision: int = Field(ge=0)
+    logo_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class CompanyProfileUpdate(CompanyDetails):
+    expected_revision: int = Field(ge=0)
+
+
+class CompanyLogoUpload(WireModel):
+    expected_revision: int = Field(ge=0)
+    media_type: Literal["image/png", "image/jpeg", "image/webp"]
+    data_base64: str = Field(min_length=1, max_length=1400000)
+
+
+class CompanyLookupResult(WireModel):
+    company: CompanyDetails
+    retrieved_at: datetime
+    source_url: Literal["https://recherche-entreprises.api.gouv.fr"] = "https://recherche-entreprises.api.gouv.fr"
+
+
 class WorkspaceMember(WireModel):
     account: Account
     role: WorkspaceRole

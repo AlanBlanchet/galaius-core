@@ -543,7 +543,7 @@ class AgentRevision(WireModel):
     criteria: str | None = Field(default=None, min_length=1, max_length=2048)
     criteria_weights: str = Field(default="", max_length=2048)
     resources: tuple[ConnectionResourceRef, ...] = Field(max_length=32)
-    capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=32)
+    capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=1000)
     created_at: datetime
 
     @property
@@ -571,34 +571,92 @@ class AgentRevision(WireModel):
         return self
 
 
+class AgentGraph(WireModel):
+    """The current workspace agent heads and the selected assistant root."""
+
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    root_agent: AgentRevisionRef | None = None
+    agents: tuple[AgentRevision, ...] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def valid_root(self) -> Self:
+        heads = {agent.id: agent for agent in self.agents}
+        if len(heads) != len(self.agents):
+            raise ValueError("agent graph contains duplicate identities")
+        if self.root_agent is not None:
+            root = heads.get(self.root_agent.id)
+            if root is None or root.revision != self.root_agent.revision:
+                raise ValueError("agent graph root revision is unavailable")
+            if root.reports_to is not None:
+                raise ValueError("agent graph root must not report to another agent")
+        return self
+
+
+class AgentGraphUpdate(WireModel):
+    """Atomic graph edit. ``agents`` contains changed immutable revisions only."""
+
+    expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    root_agent: UUID | None = None
+    agents: tuple[AgentRevision, ...] = Field(default=(), max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_agents(self) -> Self:
+        if len({agent.id for agent in self.agents}) != len(self.agents):
+            raise ValueError("agent graph update contains duplicate identities")
+        return self
+
+
 class AgentCatalogSnapshot(WireModel):
     """Complete server records and pinned instruction content for rebuildable clients."""
 
     agents: tuple[AgentRevision, ...]
     paradigms: tuple[PromptRevision, ...]
+    root_agent: AgentRevisionRef | None = None
+    prompt_heads: tuple[PromptExecutionRef, ...] = ()
     cursor: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @classmethod
-    def create(cls, agents: tuple[AgentRevision, ...], paradigms: tuple[PromptRevision, ...]):
+    def create(cls, agents: tuple[AgentRevision, ...], paradigms: tuple[PromptRevision, ...],
+               root_agent: AgentRevisionRef | None = None,
+               prompt_heads: tuple[PromptExecutionRef, ...] = ()):
         agents = tuple(sorted(agents, key=lambda item: str(item.id)))
         paradigms = tuple(sorted(paradigms, key=lambda item: (item.key.namespace, item.key.slug, item.digest)))
         payload = {"agents": [item.model_dump(mode="json") for item in agents], "paradigms": [item.model_dump(mode="json") for item in paradigms]}
+        if root_agent is not None:
+            payload["root_agent"] = root_agent.model_dump(mode="json")
+        prompt_heads = tuple(sorted(prompt_heads, key=lambda item: (item.key.namespace, item.key.slug)))
+        if prompt_heads:
+            payload["prompt_heads"] = [item.model_dump(mode="json") for item in prompt_heads]
         cursor = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-        return cls(agents=agents, paradigms=paradigms, cursor=cursor)
+        return cls(agents=agents, paradigms=paradigms, root_agent=root_agent,
+                   prompt_heads=prompt_heads, cursor=cursor)
 
     @model_validator(mode="after")
     def coherent_snapshot(self) -> Self:
         payload = self.model_dump(mode="json", exclude={"cursor"})
+        if self.root_agent is None:
+            payload.pop("root_agent")
+        if not self.prompt_heads:
+            payload.pop("prompt_heads")
         digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
         if digest != self.cursor:
             raise ValueError("agent catalog cursor does not match its content")
         agents = {agent.id: agent for agent in self.agents}
+        if self.root_agent is not None:
+            root = agents.get(self.root_agent.id)
+            if root is None or root.revision != self.root_agent.revision or root.reports_to is not None:
+                raise ValueError("agent catalog root revision is unavailable or has a parent")
         roles = [agent.role_key for agent in self.agents if agent.role_key is not None]
         if len(agents) != len(self.agents) or len(roles) != len(set(roles)):
             raise ValueError("agent catalog contains duplicate identities")
         prompts = {(item.key.namespace, item.key.slug, item.digest, item.revision) for item in self.paradigms}
         if len(prompts) != len(self.paradigms):
             raise ValueError("agent catalog contains duplicate instruction revisions")
+        if len({head.key for head in self.prompt_heads}) != len(self.prompt_heads):
+            raise ValueError("agent catalog contains duplicate prompt heads")
+        if any((ref.key.namespace, ref.key.slug, ref.digest, ref.revision) not in prompts
+               for ref in self.prompt_heads):
+            raise ValueError("agent catalog prompt head is unavailable")
         for agent in self.agents:
             for ref in (agent.prompt, *agent.paradigms, *agent.skill_paradigms):
                 if (ref.key.namespace, ref.key.slug, ref.digest, ref.revision) not in prompts:
@@ -659,14 +717,26 @@ class AgentTaskNode(WorkflowNode):
     parameters: dict[str, WorkflowValue] = Field(default_factory=dict)
 
 
-Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode, Field(discriminator="kind")]
+DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool, Field(discriminator="kind")]
+
+
+class ToolTaskNode(WorkflowNode):
+    """A configured connector or API operation, executable without a model call."""
+
+    kind: Literal["tool_task"]
+    tool: DirectTool
+    arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
+
+
+Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ToolTaskNode, Field(discriminator="kind")]
 
 
 class WorkflowBlockAvailability(WireModel):
-    kind: Literal["input", "processing", "result", "composite", "agent_task"]
+    kind: Literal["input", "processing", "result", "composite", "agent_task", "tool_task"]
     operation: Literal["uppercase", "lowercase", "identity", "http_get"] | None = None
     workflow: WorkflowRevisionRef | None = None
     agent: AgentRevisionRef | None = None
+    tool: DirectTool | None = None
     name: str = Field(min_length=1, max_length=120)
     ports: tuple[PortSpec, ...] = Field(max_length=64)
     readiness: Literal["executable", "config_required", "unavailable"]
@@ -677,6 +747,8 @@ class WorkflowBlockAvailability(WireModel):
     def builtins(cls):
         entries = []
         for node_type in get_args(get_args(Node)[0]):
+            if node_type is ToolTaskNode:
+                continue  # Tool blocks come from configured workspace connections.
             kind = get_args(node_type.model_fields["kind"].annotation)[0]
             operations = get_args(node_type.model_fields["operation"].annotation) if node_type is ProcessingNode else (None,)
             for operation in operations:
@@ -692,6 +764,8 @@ class WorkflowBlockAvailability(WireModel):
             raise ValueError("processing catalog entries require an operation")
         if self.workflow is not None and self.kind != "composite" or self.agent is not None and self.kind != "agent_task":
             raise ValueError("catalog references must match their node kind")
+        if (self.kind == "tool_task") != (self.tool is not None):
+            raise ValueError("tool catalog entries require a configured tool")
         if len({port.name for port in self.ports}) != len(self.ports):
             raise ValueError("catalog ports must have unique names")
         return self
@@ -871,7 +945,7 @@ class WorkflowCapabilityActivity(WireModel):
     id: UUID
     type: Literal["tool", "delegation"]
     node_id: UUID
-    parent_activity_id: UUID
+    parent_activity_id: UUID | None = None
     call_id: str = Field(min_length=1, max_length=256)
     capability: str = Field(min_length=1, max_length=80)
     status: Literal["succeeded", "failed"]
@@ -920,6 +994,7 @@ class ConversationCreateRequest(WireModel):
 
 class Conversation(WireModel):
     id: UUID
+    revision: int = Field(default=0, ge=0)
     model: ConfiguredModelRef
     agent: AgentRevisionRef | None = None
     prompt: PromptExecutionRef | None = None
@@ -928,6 +1003,29 @@ class Conversation(WireModel):
     created_at: datetime
     updated_at: datetime
     error: str | None = Field(default=None, max_length=400)
+
+
+class ConversationAppendRequest(WireModel):
+    expected_revision: int = Field(ge=0)
+    input: str = Field(min_length=1, max_length=1 << 20)
+    idempotency_key: str = Field(min_length=1, max_length=160)
+    max_output_tokens: int = Field(default=2048, ge=1, le=32768)
+
+
+class ConversationSummary(WireModel):
+    id: UUID
+    revision: int = Field(ge=0)
+    title: str = Field(max_length=120)
+    preview: str = Field(max_length=240)
+    status: Literal["queued", "running", "succeeded", "failed", "cancelled", "unknown_outcome"]
+    agent: AgentRevisionRef | None = None
+    model: ConfiguredModelRef
+    updated_at: datetime
+
+
+class ConversationPage(WireModel):
+    items: tuple[ConversationSummary, ...] = Field(max_length=100)
+    next_cursor: str | None = Field(default=None, max_length=256)
 
 
 class ConversationActivity(WireModel):

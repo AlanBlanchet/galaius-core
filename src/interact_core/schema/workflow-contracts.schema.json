@@ -67,6 +67,25 @@
           },
           "title": "Paradigms",
           "type": "array"
+        },
+        "prompt_heads": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PromptExecutionRef"
+          },
+          "title": "Prompt Heads",
+          "type": "array"
+        },
+        "root_agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -75,6 +94,80 @@
         "cursor"
       ],
       "title": "AgentCatalogSnapshot",
+      "type": "object"
+    },
+    "AgentGraph": {
+      "additionalProperties": false,
+      "description": "The current workspace agent heads and the selected assistant root.",
+      "properties": {
+        "agents": {
+          "items": {
+            "$ref": "#/$defs/AgentRevision"
+          },
+          "maxItems": 1000,
+          "title": "Agents",
+          "type": "array"
+        },
+        "revision": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "root_agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "revision",
+        "agents"
+      ],
+      "title": "AgentGraph",
+      "type": "object"
+    },
+    "AgentGraphUpdate": {
+      "additionalProperties": false,
+      "description": "Atomic graph edit. ``agents`` contains changed immutable revisions only.",
+      "properties": {
+        "agents": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentRevision"
+          },
+          "maxItems": 1000,
+          "title": "Agents",
+          "type": "array"
+        },
+        "expected_revision": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Revision",
+          "type": "string"
+        },
+        "root_agent": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Root Agent"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "AgentGraphUpdate",
       "type": "object"
     },
     "AgentRevision": {
@@ -107,7 +200,7 @@
               }
             ]
           },
-          "maxItems": 32,
+          "maxItems": 1000,
           "title": "Capabilities",
           "type": "array"
         },
@@ -863,6 +956,12 @@
           ],
           "default": null
         },
+        "revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
         "status": {
           "enum": [
             "queued",
@@ -974,6 +1073,42 @@
         "timestamp"
       ],
       "title": "ConversationActivity",
+      "type": "object"
+    },
+    "ConversationAppendRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "input": {
+          "maxLength": 1048576,
+          "minLength": 1,
+          "title": "Input",
+          "type": "string"
+        },
+        "max_output_tokens": {
+          "default": 2048,
+          "maximum": 32768,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "input",
+        "idempotency_key"
+      ],
+      "title": "ConversationAppendRequest",
       "type": "object"
     },
     "ConversationCreateRequest": {
@@ -1098,6 +1233,104 @@
         "created_at"
       ],
       "title": "ConversationMessage",
+      "type": "object"
+    },
+    "ConversationPage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ConversationSummary"
+          },
+          "maxItems": 100,
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "ConversationPage",
+      "type": "object"
+    },
+    "ConversationSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentRevisionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/ConfiguredModelRef"
+        },
+        "preview": {
+          "maxLength": 240,
+          "title": "Preview",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "unknown_outcome"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "title",
+        "preview",
+        "status",
+        "model",
+        "updated_at"
+      ],
+      "title": "ConversationSummary",
       "type": "object"
     },
     "CredentialRef": {
@@ -2273,6 +2506,98 @@
       "title": "ToolInputSchema",
       "type": "object"
     },
+    "ToolTaskNode": {
+      "additionalProperties": false,
+      "description": "A configured connector or API operation, executable without a model call.",
+      "properties": {
+        "arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "maxProperties": 32,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "tool_task",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "tool": {
+          "discriminator": {
+            "mapping": {
+              "connector": "#/$defs/ConnectorAgentTool",
+              "gmail": "#/$defs/GmailAgentTool",
+              "http": "#/$defs/HttpAgentTool"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/HttpAgentTool"
+            },
+            {
+              "$ref": "#/$defs/GmailAgentTool"
+            },
+            {
+              "$ref": "#/$defs/ConnectorAgentTool"
+            }
+          ],
+          "title": "Tool"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "tool"
+      ],
+      "title": "ToolTaskNode",
+      "type": "object"
+    },
     "TriggerCreate": {
       "additionalProperties": false,
       "properties": {
@@ -2880,7 +3205,8 @@
             "processing",
             "result",
             "composite",
-            "agent_task"
+            "agent_task",
+            "tool_task"
           ],
           "title": "Kind",
           "type": "string"
@@ -2940,6 +3266,36 @@
           "maxItems": 32,
           "title": "Required Config Fields",
           "type": "array"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "connector": "#/$defs/ConnectorAgentTool",
+                  "gmail": "#/$defs/GmailAgentTool",
+                  "http": "#/$defs/HttpAgentTool"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/HttpAgentTool"
+                },
+                {
+                  "$ref": "#/$defs/GmailAgentTool"
+                },
+                {
+                  "$ref": "#/$defs/ConnectorAgentTool"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
         },
         "workflow": {
           "anyOf": [
@@ -3053,9 +3409,17 @@
           "default": null
         },
         "parent_activity_id": {
-          "format": "uuid",
-          "title": "Parent Activity Id",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Activity Id"
         },
         "status": {
           "enum": [
@@ -3078,7 +3442,6 @@
         "id",
         "type",
         "node_id",
-        "parent_activity_id",
         "call_id",
         "capability",
         "status"
@@ -3240,7 +3603,8 @@
                 "composite": "#/$defs/CompositeNode",
                 "input": "#/$defs/InputNode",
                 "processing": "#/$defs/ProcessingNode",
-                "result": "#/$defs/ResultNode"
+                "result": "#/$defs/ResultNode",
+                "tool_task": "#/$defs/ToolTaskNode"
               },
               "propertyName": "kind"
             },
@@ -3259,6 +3623,9 @@
               },
               {
                 "$ref": "#/$defs/AgentTaskNode"
+              },
+              {
+                "$ref": "#/$defs/ToolTaskNode"
               }
             ]
           },
@@ -3636,10 +4003,22 @@
       "$ref": "#/$defs/AgentCatalogSnapshot"
     },
     {
+      "$ref": "#/$defs/AgentGraph"
+    },
+    {
+      "$ref": "#/$defs/AgentGraphUpdate"
+    },
+    {
       "$ref": "#/$defs/AgentRevision"
     },
     {
       "$ref": "#/$defs/ConversationCreateRequest"
+    },
+    {
+      "$ref": "#/$defs/ConversationAppendRequest"
+    },
+    {
+      "$ref": "#/$defs/ConversationPage"
     },
     {
       "$ref": "#/$defs/Conversation"

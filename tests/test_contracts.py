@@ -20,6 +20,9 @@ from interact_core import (
     SubscriptionPlanRef,
     AgentRevision,
     AgentCatalogSnapshot,
+    AgentGraph,
+    AgentGraphUpdate,
+    AgentRevisionRef,
     ConnectorLeaf,
     ConfiguredModelRef,
     ConnectionResourceRef,
@@ -81,6 +84,24 @@ def test_agent_catalog_is_complete_verifiable_and_rejects_broken_reporting() -> 
     snapshot = AgentCatalogSnapshot.create((child, lead), (prompt,))
     assert AgentCatalogSnapshot.model_validate_json(snapshot.model_dump_json()) == snapshot
     assert AgentCatalogSnapshot.create((lead, child), (prompt,)).cursor == snapshot.cursor
+    # Existing caches remain readable; new roots and authoritative heads enter the digest.
+    legacy = snapshot.model_dump(mode="json", exclude={"root_agent", "prompt_heads"})
+    assert AgentCatalogSnapshot.model_validate(legacy) == snapshot
+    rooted = AgentCatalogSnapshot.create((lead, child), (prompt,),
+        AgentRevisionRef(id=lead.id, revision=lead.revision), (reference,))
+    assert rooted.cursor != snapshot.cursor
+    assert AgentCatalogSnapshot.model_validate_json(rooted.model_dump_json()) == rooted
+    with pytest.raises(ValidationError, match="root revision"):
+        AgentCatalogSnapshot.create((lead, child), (prompt,), AgentRevisionRef(id=child.id, revision=child.revision))
+    with pytest.raises(ValidationError, match="duplicate prompt heads"):
+        AgentCatalogSnapshot.create((lead, child), (prompt,), prompt_heads=(reference, reference))
+    with pytest.raises(ValidationError, match="prompt head is unavailable"):
+        AgentCatalogSnapshot.create((lead, child), (prompt,),
+            prompt_heads=(reference.model_copy(update={"revision": uuid4()}),))
+    graph = AgentGraph(revision=rooted.cursor, root_agent=rooted.root_agent, agents=rooted.agents)
+    assert graph.root_agent.id == lead.id
+    assert "root_agent" not in AgentGraphUpdate(expected_revision=graph.revision).model_fields_set
+    assert "root_agent" in AgentGraphUpdate(expected_revision=graph.revision, root_agent=None).model_fields_set
     damaged = snapshot.model_dump(mode="json")
     damaged["agents"][0]["name"] = "Tampered"
     with pytest.raises(ValidationError, match="cursor"):
