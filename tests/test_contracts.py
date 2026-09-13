@@ -1,5 +1,6 @@
 """Contract behavior and package-resource acceptance tests."""
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from importlib.resources import files
@@ -18,6 +19,7 @@ from interact_core import (
     WorkspaceSubscription,
     SubscriptionPlanRef,
     AgentRevision,
+    AgentCatalogSnapshot,
     ConnectorLeaf,
     ConfiguredModelRef,
     ConnectionResourceRef,
@@ -64,6 +66,31 @@ def test_prompt_revision_rejects_content_digest_mismatch() -> None:
             source_commit="a" * 40,
             created_at=datetime.now(UTC),
         )
+
+
+def test_agent_catalog_is_complete_verifiable_and_rejects_broken_reporting() -> None:
+    content = "Verify conclusions against evidence."
+    prompt = PromptRevision(key=PromptKey(namespace="paradigms", slug="evidence"), revision=uuid4(),
+                            content=content, digest=hashlib.sha256(content.encode()).hexdigest(),
+                            source_commit="a" * 40, created_at=datetime.now(UTC))
+    reference = PromptExecutionRef(key=prompt.key, revision=prompt.revision, digest=prompt.digest, channel="draft")
+    lead = AgentRevision(id=uuid4(), revision=uuid4(), name="Lead", role_key="lead", prompt=reference,
+                         resources=(), created_at=datetime.now(UTC))
+    child = AgentRevision(id=uuid4(), revision=uuid4(), name="Reviewer", role_key="reviewer", prompt=reference,
+                          resources=(), reports_to=lead.id, created_at=datetime.now(UTC))
+    snapshot = AgentCatalogSnapshot.create((child, lead), (prompt,))
+    assert AgentCatalogSnapshot.model_validate_json(snapshot.model_dump_json()) == snapshot
+    assert AgentCatalogSnapshot.create((lead, child), (prompt,)).cursor == snapshot.cursor
+    damaged = snapshot.model_dump(mode="json")
+    damaged["agents"][0]["name"] = "Tampered"
+    with pytest.raises(ValidationError, match="cursor"):
+        AgentCatalogSnapshot.model_validate(damaged)
+    with pytest.raises(ValidationError, match="missing a pinned"):
+        AgentCatalogSnapshot.create((lead, child), ())
+    with pytest.raises(ValidationError, match="reporting hierarchy"):
+        AgentCatalogSnapshot.create((child,), (prompt,))
+    with pytest.raises(ValidationError, match="reporting hierarchy"):
+        AgentCatalogSnapshot.create((lead.model_copy(update={"reports_to": child.id}), child), (prompt,))
 
 
 def test_contracts_are_immutable_and_reject_unknown_fields() -> None:

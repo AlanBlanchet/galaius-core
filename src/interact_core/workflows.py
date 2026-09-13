@@ -1,5 +1,7 @@
 """Provider-independent immutable workflow and execution wire contracts."""
 
+import hashlib
+import json
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
 from typing import Annotated, Literal, Self, get_args
@@ -8,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, field_validator, model_validator
 
-from .prompts import PromptExecutionRef
+from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
 
@@ -527,8 +529,16 @@ class AgentRevision(WireModel):
     revision: UUID
     parent_revision: UUID | None = None
     name: str = Field(min_length=1, max_length=120)
+    role_key: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
+    description: str = Field(default="", max_length=8192)
+    scope: str = Field(default="core", pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
+    department: str | None = Field(default=None, min_length=1, max_length=120)
+    reports_to: UUID | None = None
+    reasoning: Literal["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] = "high"
+    harness_tools: tuple[str, ...] = Field(default=(), max_length=256)
     prompt: PromptExecutionRef
     paradigms: tuple[PromptExecutionRef, ...] = Field(default=(), max_length=16)
+    skill_paradigms: tuple[PromptExecutionRef, ...] = Field(default=(), max_length=64)
     model: ConfiguredModelRef | None = None
     criteria: str | None = Field(default=None, min_length=1, max_length=2048)
     criteria_weights: str = Field(default="", max_length=2048)
@@ -551,9 +561,55 @@ class AgentRevision(WireModel):
             raise ValueError("HTTP agent tools must use an explicitly connected resource")
         if any(isinstance(capability, ConnectorAgentTool) and capability.connection is not None and capability.connection not in resources for capability in self.capabilities):
             raise ValueError("connector agent tools must use an explicitly connected resource")
-        references = (self.prompt, *self.paradigms)
+        if self.reports_to == self.id:
+            raise ValueError("an agent cannot report to itself")
+        if len(set(self.harness_tools)) != len(self.harness_tools) or any(not tool or len(tool) > 200 or any(char in tool for char in "\n\r\x00") for tool in self.harness_tools):
+            raise ValueError("harness tool names must be unique nonempty single-line names")
+        references = (self.prompt, *self.paradigms, *self.skill_paradigms)
         if len(set(references)) != len(references):
             raise ValueError("agent prompt and paradigms must be unique")
+        return self
+
+
+class AgentCatalogSnapshot(WireModel):
+    """Complete server records and pinned instruction content for rebuildable clients."""
+
+    agents: tuple[AgentRevision, ...]
+    paradigms: tuple[PromptRevision, ...]
+    cursor: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @classmethod
+    def create(cls, agents: tuple[AgentRevision, ...], paradigms: tuple[PromptRevision, ...]):
+        agents = tuple(sorted(agents, key=lambda item: str(item.id)))
+        paradigms = tuple(sorted(paradigms, key=lambda item: (item.key.namespace, item.key.slug, item.digest)))
+        payload = {"agents": [item.model_dump(mode="json") for item in agents], "paradigms": [item.model_dump(mode="json") for item in paradigms]}
+        cursor = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        return cls(agents=agents, paradigms=paradigms, cursor=cursor)
+
+    @model_validator(mode="after")
+    def coherent_snapshot(self) -> Self:
+        payload = self.model_dump(mode="json", exclude={"cursor"})
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        if digest != self.cursor:
+            raise ValueError("agent catalog cursor does not match its content")
+        agents = {agent.id: agent for agent in self.agents}
+        roles = [agent.role_key for agent in self.agents if agent.role_key is not None]
+        if len(agents) != len(self.agents) or len(roles) != len(set(roles)):
+            raise ValueError("agent catalog contains duplicate identities")
+        prompts = {(item.key.namespace, item.key.slug, item.digest, item.revision) for item in self.paradigms}
+        if len(prompts) != len(self.paradigms):
+            raise ValueError("agent catalog contains duplicate instruction revisions")
+        for agent in self.agents:
+            for ref in (agent.prompt, *agent.paradigms, *agent.skill_paradigms):
+                if (ref.key.namespace, ref.key.slug, ref.digest, ref.revision) not in prompts:
+                    raise ValueError("agent catalog is missing a pinned instruction revision")
+            seen = {agent.id}
+            parent = agent.reports_to
+            while parent is not None:
+                if parent not in agents or parent in seen:
+                    raise ValueError("agent catalog has an invalid reporting hierarchy")
+                seen.add(parent)
+                parent = agents[parent].reports_to
         return self
 
 

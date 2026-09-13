@@ -45,6 +45,38 @@
       "title": "AdminWorkspaceSummary",
       "type": "object"
     },
+    "AgentCatalogSnapshot": {
+      "additionalProperties": false,
+      "description": "Complete server records and pinned instruction content for rebuildable clients.",
+      "properties": {
+        "agents": {
+          "items": {
+            "$ref": "#/$defs/AgentRevision"
+          },
+          "title": "Agents",
+          "type": "array"
+        },
+        "cursor": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Cursor",
+          "type": "string"
+        },
+        "paradigms": {
+          "items": {
+            "$ref": "#/$defs/PromptRevision"
+          },
+          "title": "Paradigms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "agents",
+        "paradigms",
+        "cursor"
+      ],
+      "title": "AgentCatalogSnapshot",
+      "type": "object"
+    },
     "AgentRevision": {
       "additionalProperties": false,
       "properties": {
@@ -104,6 +136,35 @@
           "title": "Criteria Weights",
           "type": "string"
         },
+        "department": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Department"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 8192,
+          "title": "Description",
+          "type": "string"
+        },
+        "harness_tools": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Harness Tools",
+          "type": "array"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
@@ -151,6 +212,33 @@
         "prompt": {
           "$ref": "#/$defs/PromptExecutionRef"
         },
+        "reasoning": {
+          "default": "high",
+          "enum": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "title": "Reasoning",
+          "type": "string"
+        },
+        "reports_to": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reports To"
+        },
         "resources": {
           "items": {
             "$ref": "#/$defs/ConnectionResourceRef"
@@ -163,6 +251,36 @@
           "format": "uuid",
           "title": "Revision",
           "type": "string"
+        },
+        "role_key": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role Key"
+        },
+        "scope": {
+          "default": "core",
+          "maxLength": 120,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Scope",
+          "type": "string"
+        },
+        "skill_paradigms": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PromptExecutionRef"
+          },
+          "maxItems": 64,
+          "title": "Skill Paradigms",
+          "type": "array"
         }
       },
       "required": [
@@ -1798,6 +1916,73 @@
         "slug"
       ],
       "title": "PromptKey",
+      "type": "object"
+    },
+    "PromptRevision": {
+      "additionalProperties": false,
+      "description": "Immutable prompt content and its verifiable publication provenance.",
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "digest": {
+          "title": "Digest",
+          "type": "string"
+        },
+        "key": {
+          "$ref": "#/$defs/PromptKey"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "parent_digest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Digest"
+        },
+        "revision": {
+          "format": "uuid",
+          "title": "Revision",
+          "type": "string"
+        },
+        "source_commit": {
+          "title": "Source Commit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "revision",
+        "digest",
+        "content",
+        "source_commit",
+        "created_at"
+      ],
+      "title": "PromptRevision",
       "type": "object"
     },
     "ProviderUsage": {
@@ -3446,6 +3631,9 @@
     },
     {
       "$ref": "#/$defs/ConnectionSecretUpdate"
+    },
+    {
+      "$ref": "#/$defs/AgentCatalogSnapshot"
     },
     {
       "$ref": "#/$defs/AgentRevision"
