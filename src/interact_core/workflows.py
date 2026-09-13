@@ -199,7 +199,7 @@ class WebhookCredentialCreated(WireModel):
     secret: SecretStr = Field(min_length=32, max_length=256)
 
 
-class _TriggerBinding(WireModel):
+class TriggerBinding(WireModel):
     workflow: WorkflowRevisionRef
     configuration: TriggerConfiguration
     input_mapping: tuple[TriggerInputMapping, ...] = Field(default=(), max_length=32)
@@ -216,11 +216,24 @@ class _TriggerBinding(WireModel):
         return self
 
 
-class TriggerCreate(_TriggerBinding):
+class TriggerConfigurationUpdate(WireModel):
+    """Compare the displayed configuration before replacing it; runtime state is separate."""
+
+    expected: TriggerBinding
+    replacement: TriggerBinding
+
+    @model_validator(mode="after")
+    def keep_trigger_kind(self) -> Self:
+        if self.expected.configuration.kind != self.replacement.configuration.kind:
+            raise ValueError("add a new trigger block to change its kind")
+        return self
+
+
+class TriggerCreate(TriggerBinding):
     enabled: Literal[False] = False
 
 
-class TriggerDefinition(_TriggerBinding):
+class TriggerDefinition(TriggerBinding):
     id: UUID
     enabled: bool
     created_at: datetime

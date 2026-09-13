@@ -64,7 +64,7 @@ from .workflows import (
     Conversation, ConversationActivity, ConversationAppendRequest, ConversationCreateRequest, ConversationMessage, ConversationPage, ConversationSummary,
     ConnectionResource, ConnectionResourceRef, ConnectionSecretUpdate, CredentialRef,
     GmailAgentTool, HttpAgentTool, InputNode, ManualTrigger, PortAddress, PortExposure, PortSpec, ProcessingNode, ResultNode, ScheduleTrigger,
-    SubscriptionConfiguration, ToolInputProperty, ToolInputSchema, TriggerCreate, TriggerDefinition, TriggerDispatch, TriggerEnableUpdate, TriggerInputMapping, TriggerInvocation, TriggerScheduleState, UsageSummary, VariableSpec, WebhookCredentialCreated, WebhookCredentialSummary, WebhookTrigger,
+    SubscriptionConfiguration, ToolInputProperty, ToolInputSchema, TriggerBinding, TriggerConfigurationUpdate, TriggerCreate, TriggerDefinition, TriggerDispatch, TriggerEnableUpdate, TriggerInputMapping, TriggerInvocation, TriggerScheduleState, UsageSummary, VariableSpec, WebhookCredentialCreated, WebhookCredentialSummary, WebhookTrigger,
     WorkflowAgentActivity, WorkflowCapabilityActivity, WorkflowEdge, WorkflowEvent, WorkflowInterface, WorkflowKey, WorkflowRevision, WorkflowValueSummary, WorkspaceApiKeyCreate,
     WorkspaceApiKeyCreated, WorkspaceApiKeySummary, ProviderUsage, WorkflowRevisionRef, WorkflowRun,
 )
@@ -84,7 +84,7 @@ __all__ = [
     "AdminWorkspaceSummary", "AgentCapability", "AgentCatalogSnapshot", "AgentGraph", "AgentGraphUpdate", "AgentRevision", "AgentRevisionRef", "AgentTaskNode", "ArtifactRef", "BudgetPolicy", "CompositeNode", "ConfiguredModelRef", "ConnectorAction", "ConnectorActionName", "ConnectorAgentTool", "ConnectorAuthKind", "ConnectorBrowse", "ConnectorBrowseActionName", "ConnectorBrowseRequest", "ConnectorCatalog", "ConnectorCheck", "ConnectorCheckRequest", "ConnectorDefinition", "ConnectorItem", "ConnectorKind", "ConnectorLeaf", "DelegatedAgentTool",
     "Conversation", "ConversationActivity", "ConversationAppendRequest", "ConversationCreateRequest", "ConversationMessage", "ConversationPage", "ConversationSummary",
     "ConnectionResource", "ConnectionResourceRef", "ConnectionSecretUpdate", "CredentialRef", "InputNode", "PortAddress", "PortExposure", "PortSpec", "ProcessingNode",
-    "HttpAgentTool", "ManualTrigger", "ResultNode", "ScheduleTrigger", "SubscriptionConfiguration", "ToolInputProperty", "ToolInputSchema", "TriggerCreate", "TriggerDefinition", "TriggerDispatch", "TriggerEnableUpdate", "TriggerInputMapping", "TriggerInvocation", "TriggerScheduleState", "VariableSpec", "WebhookCredentialCreated", "WebhookCredentialSummary", "WebhookTrigger",
+    "HttpAgentTool", "ManualTrigger", "ResultNode", "ScheduleTrigger", "SubscriptionConfiguration", "ToolInputProperty", "ToolInputSchema", "TriggerBinding", "TriggerConfigurationUpdate", "TriggerCreate", "TriggerDefinition", "TriggerDispatch", "TriggerEnableUpdate", "TriggerInputMapping", "TriggerInvocation", "TriggerScheduleState", "VariableSpec", "WebhookCredentialCreated", "WebhookCredentialSummary", "WebhookTrigger",
     "WorkflowAgentActivity", "WorkflowCapabilityActivity", "WorkflowEdge", "WorkflowEvent", "WorkflowInterface", "ProviderUsage", "UsageSummary", "WorkflowKey", "WorkflowRevision", "WorkflowRevisionRef", "WorkflowRun", "WorkflowValueSummary",
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
 ]

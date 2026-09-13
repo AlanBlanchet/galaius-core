@@ -2598,6 +2598,69 @@
       "title": "ToolTaskNode",
       "type": "object"
     },
+    "TriggerBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "configuration": {
+          "discriminator": {
+            "mapping": {
+              "manual": "#/$defs/ManualTrigger",
+              "schedule": "#/$defs/ScheduleTrigger",
+              "webhook": "#/$defs/WebhookTrigger"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ManualTrigger"
+            },
+            {
+              "$ref": "#/$defs/ScheduleTrigger"
+            },
+            {
+              "$ref": "#/$defs/WebhookTrigger"
+            }
+          ],
+          "title": "Configuration"
+        },
+        "input_mapping": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TriggerInputMapping"
+          },
+          "maxItems": 32,
+          "title": "Input Mapping",
+          "type": "array"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        }
+      },
+      "required": [
+        "workflow",
+        "configuration"
+      ],
+      "title": "TriggerBinding",
+      "type": "object"
+    },
+    "TriggerConfigurationUpdate": {
+      "additionalProperties": false,
+      "description": "Compare the displayed configuration before replacing it; runtime state is separate.",
+      "properties": {
+        "expected": {
+          "$ref": "#/$defs/TriggerBinding"
+        },
+        "replacement": {
+          "$ref": "#/$defs/TriggerBinding"
+        }
+      },
+      "required": [
+        "expected",
+        "replacement"
+      ],
+      "title": "TriggerConfigurationUpdate",
+      "type": "object"
+    },
     "TriggerCreate": {
       "additionalProperties": false,
       "properties": {
@@ -3941,6 +4004,12 @@
     },
     {
       "$ref": "#/$defs/WorkspaceApiKeySummary"
+    },
+    {
+      "$ref": "#/$defs/TriggerBinding"
+    },
+    {
+      "$ref": "#/$defs/TriggerConfigurationUpdate"
     },
     {
       "$ref": "#/$defs/TriggerCreate"

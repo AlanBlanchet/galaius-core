@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.42.0 — 2026-09-13
+
+- Shared trigger configuration snapshots and compare-before-save updates for schedule and webhook block editors.
+
 ## 0.41.0 — 2026-09-13
 
 - Editable agent graphs with an explicit Assistant root and revision conflict checks.
