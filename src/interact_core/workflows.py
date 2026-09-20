@@ -161,6 +161,20 @@ class TriggerInputMapping(WireModel):
     target: str = Field(min_length=1, max_length=80)
 
 
+class TriggerConstant(WireModel):
+    """A value the BINDING carries, not the request.
+
+    A schedule has no payload, so a scheduled trigger could only start a workflow whose inputs
+    were all optional — "connect it to activate stuff" stopped at the first required input. A
+    constant supplies that input from the binding itself, and is the only way a schedule reaches
+    a workflow that needs values.
+    """
+
+    target_kind: Literal["input", "variable"]
+    target: str = Field(min_length=1, max_length=80)
+    value: WorkflowValue
+
+
 class TriggerInvocation(WireModel):
     values: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
 
@@ -203,11 +217,17 @@ class TriggerBinding(WireModel):
     workflow: WorkflowRevisionRef
     configuration: TriggerConfiguration
     input_mapping: tuple[TriggerInputMapping, ...] = Field(default=(), max_length=32)
+    constants: tuple[TriggerConstant, ...] = Field(default=(), max_length=32)
 
     @model_validator(mode="after")
     def coherent_mapping(self) -> Self:
         if isinstance(self.configuration, ScheduleTrigger) and self.input_mapping:
             raise ValueError("schedule triggers cannot map request values")
+        constant_targets = {(value.target_kind, value.target) for value in self.constants}
+        if len(constant_targets) != len(self.constants):
+            raise ValueError("trigger constant targets must be unique")
+        if constant_targets & {(value.target_kind, value.target) for value in self.input_mapping}:
+            raise ValueError("a target takes its value from the request or from a constant, never both")
         if len({value.source for value in self.input_mapping}) != len(self.input_mapping):
             raise ValueError("trigger input mapping sources must be unique")
         targets = {(value.target_kind, value.target) for value in self.input_mapping}
