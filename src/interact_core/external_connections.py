@@ -9,7 +9,11 @@ from .wire import WireModel
 
 
 class GoogleConnectionStatus(WireModel):
-    provider: Literal["google"] = "google"
+    """Despite the name (kept to avoid a blast-radius rename across every existing Google caller),
+    this shape is provider-agnostic OAuth-connection status: `provider` now also carries
+    Microsoft's workspace connector (SharePoint/OneDrive), which reuses it as-is."""
+
+    provider: Literal["google", "microsoft"] = "google"
     configured: bool
     connected: bool
     account_label: str | None = Field(default=None, max_length=320)
@@ -19,9 +23,9 @@ class GoogleConnectionStatus(WireModel):
     @model_validator(mode="after")
     def consistent_state(self) -> Self:
         if not self.connected and (self.account_label is not None or self.scopes or self.expires_at is not None):
-            raise ValueError("disconnected Google status cannot expose credential metadata")
+            raise ValueError("disconnected OAuth connection status cannot expose credential metadata")
         if self.connected and (not self.configured or self.account_label is None):
-            raise ValueError("connected Google status requires configured account metadata")
+            raise ValueError("connected OAuth connection status requires configured account metadata")
         return self
 
 
@@ -43,6 +47,16 @@ class GoogleOAuthStart(WireModel):
     def unique_capabilities(self) -> Self:
         if len(set(self.gmail)) != len(self.gmail):
             raise ValueError("Gmail capabilities must be unique")
+        return self
+
+
+class MicrosoftOAuthStart(WireModel):
+    access: tuple[Literal["files_read", "sites_read"], ...] = Field(default=("files_read", "sites_read"), min_length=1, max_length=2)
+
+    @model_validator(mode="after")
+    def unique_access(self) -> Self:
+        if len(set(self.access)) != len(self.access):
+            raise ValueError("Microsoft Graph access selections must be unique")
         return self
 
 

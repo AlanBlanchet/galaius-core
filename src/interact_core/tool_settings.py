@@ -1,4 +1,12 @@
-"""Portable personal tool preferences; machine paths, credentials and grants excluded."""
+"""Portable personal tool preferences; machine paths, credentials and grants excluded.
+
+A role field never names a model. It carries a CRITERION — a requirement string the resolver
+reads against whatever the calling project actually has reachable (a saved provider key, or a
+logged-in CLI session) — never a pinned id that silently stops being the right choice, or a right
+choice nobody's key can reach. The resolver lives where the ranker and the availability facts
+both are (`interact.criteria.Criteria`, called from the server that also knows the project's
+connections); this module only carries the requirement text and its bounds.
+"""
 
 from typing import Literal, Self
 
@@ -9,21 +17,23 @@ from .wire import WireModel
 VLM_MIN_DIM_DEFAULT = 768
 VLM_MAX_DIM_DEFAULT = 1280
 MediaSessionProviderName = Literal["claude"]
+#: One requirement per role interact resolves a model for. A fallback CHAIN is no longer a
+#: separate field: `Criteria.qualifying` already returns every clearing model in rank order, so
+#: the second-ranked entry the resolver already computed IS the fallback — a second pinned list
+#: would just be a second, driftable copy of the same ranking.
+_CRITERIA_MAX_LENGTH = 2048
 
 
 class PortableToolSettingsValues(WireModel):
-    image_model: str | None = Field(default=None, max_length=4096)
-    video_model: str | None = Field(default=None, max_length=4096)
-    component_model: str | None = Field(default=None, max_length=4096)
-    audio_model: str | None = Field(default=None, max_length=4096)
-    claude_media_model: str | None = Field(default=None, max_length=4096)
-    image_fallbacks: str | None = Field(default=None, max_length=4096)
-    video_fallbacks: str | None = Field(default=None, max_length=4096)
-    component_fallbacks: str | None = Field(default=None, max_length=4096)
-    audio_fallbacks: str | None = Field(default=None, max_length=4096)
-    tier_sovereign_model: str | None = Field(default=None, max_length=4096)
-    media_criteria: str | None = Field(default=None, max_length=4096)
-    media_criteria_weights: str | None = Field(default=None, max_length=4096)
+    image_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
+    video_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
+    audio_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
+    component_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
+    claude_media_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
+    tier_sovereign_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
+    #: Shared across every role above: a weight names a benchmark variable (`aa.intelligence=1`),
+    #: not a role, so one role-specific copy per role would only ever hold the same text.
+    criteria_weights: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
     media_provider_order: tuple[MediaSessionProviderName, ...] | None = Field(default=None, max_length=32)
     media_timeout: int | None = Field(default=None, gt=0)
     media_max_items: int | None = Field(default=None, gt=0)

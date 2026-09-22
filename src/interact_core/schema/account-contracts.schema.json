@@ -613,6 +613,7 @@
             "csrf_failed",
             "invalid_origin",
             "invalid_request",
+            "link_expired",
             "not_found",
             "rate_limited",
             "verification_failed",
@@ -676,10 +677,10 @@
     "PortableToolSettingsValues": {
       "additionalProperties": false,
       "properties": {
-        "audio_fallbacks": {
+        "audio_criteria": {
           "anyOf": [
             {
-              "maxLength": 4096,
+              "maxLength": 2048,
               "type": "string"
             },
             {
@@ -687,12 +688,12 @@
             }
           ],
           "default": null,
-          "title": "Audio Fallbacks"
+          "title": "Audio Criteria"
         },
-        "audio_model": {
+        "claude_media_criteria": {
           "anyOf": [
             {
-              "maxLength": 4096,
+              "maxLength": 2048,
               "type": "string"
             },
             {
@@ -700,12 +701,12 @@
             }
           ],
           "default": null,
-          "title": "Audio Model"
+          "title": "Claude Media Criteria"
         },
-        "claude_media_model": {
+        "component_criteria": {
           "anyOf": [
             {
-              "maxLength": 4096,
+              "maxLength": 2048,
               "type": "string"
             },
             {
@@ -713,12 +714,12 @@
             }
           ],
           "default": null,
-          "title": "Claude Media Model"
+          "title": "Component Criteria"
         },
-        "component_fallbacks": {
+        "criteria_weights": {
           "anyOf": [
             {
-              "maxLength": 4096,
+              "maxLength": 2048,
               "type": "string"
             },
             {
@@ -726,20 +727,7 @@
             }
           ],
           "default": null,
-          "title": "Component Fallbacks"
-        },
-        "component_model": {
-          "anyOf": [
-            {
-              "maxLength": 4096,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Component Model"
+          "title": "Criteria Weights"
         },
         "detection_max_retries": {
           "anyOf": [
@@ -754,10 +742,10 @@
           "default": null,
           "title": "Detection Max Retries"
         },
-        "image_fallbacks": {
+        "image_criteria": {
           "anyOf": [
             {
-              "maxLength": 4096,
+              "maxLength": 2048,
               "type": "string"
             },
             {
@@ -765,20 +753,7 @@
             }
           ],
           "default": null,
-          "title": "Image Fallbacks"
-        },
-        "image_model": {
-          "anyOf": [
-            {
-              "maxLength": 4096,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Image Model"
+          "title": "Image Criteria"
         },
         "max_tokens": {
           "anyOf": [
@@ -792,32 +767,6 @@
           ],
           "default": null,
           "title": "Max Tokens"
-        },
-        "media_criteria": {
-          "anyOf": [
-            {
-              "maxLength": 4096,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Media Criteria"
-        },
-        "media_criteria_weights": {
-          "anyOf": [
-            {
-              "maxLength": 4096,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Media Criteria Weights"
         },
         "media_max_context_chars": {
           "anyOf": [
@@ -888,10 +837,10 @@
           "default": null,
           "title": "Media Timeout"
         },
-        "tier_sovereign_model": {
+        "tier_sovereign_criteria": {
           "anyOf": [
             {
-              "maxLength": 4096,
+              "maxLength": 2048,
               "type": "string"
             },
             {
@@ -899,7 +848,20 @@
             }
           ],
           "default": null,
-          "title": "Tier Sovereign Model"
+          "title": "Tier Sovereign Criteria"
+        },
+        "video_criteria": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Video Criteria"
         },
         "video_duration": {
           "anyOf": [
@@ -913,19 +875,6 @@
           ],
           "default": null,
           "title": "Video Duration"
-        },
-        "video_fallbacks": {
-          "anyOf": [
-            {
-              "maxLength": 4096,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Video Fallbacks"
         },
         "video_fps": {
           "anyOf": [
@@ -952,19 +901,6 @@
           ],
           "default": null,
           "title": "Video Max Frames"
-        },
-        "video_model": {
-          "anyOf": [
-            {
-              "maxLength": 4096,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Video Model"
         },
         "viewport_height": {
           "anyOf": [

@@ -134,8 +134,18 @@ class WorkspaceMemberRoleUpdate(WireModel):
     role: WorkspaceRole
 
 
+PlatformErrorCode = Literal[
+    "authentication_failed", "csrf_failed", "invalid_origin", "invalid_request",
+    "link_expired", "not_found", "rate_limited", "verification_failed", "recovery_failed",
+    "unavailable",
+]
+"""The wire's complete failure vocabulary, and the single source the server's own raisable set
+binds to (`server.errors.ErrorCode`) — a code can never reach a client without being
+in the contract that client's types are generated from. `link_expired`: a one-time link the
+caller presented is gone (expired, already consumed, or never issued), which no retry of the
+same link can fix — distinct from `authentication_failed`, where the CREDENTIAL was wrong and
+retrying is exactly the right move."""
+
+
 class PlatformError(WireModel):
-    code: Literal[
-        "authentication_failed", "csrf_failed", "invalid_origin", "invalid_request",
-        "not_found", "rate_limited", "verification_failed", "recovery_failed", "unavailable",
-    ]
+    code: PlatformErrorCode

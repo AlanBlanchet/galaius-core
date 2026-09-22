@@ -416,13 +416,18 @@ class ToolInputSchema(WireModel):
         return arguments
 
 
-ConnectorKind = Literal["google_drive", "github", "slack", "notion", "gmail"]
+ConnectorKind = Literal["google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"]
 ConnectorActionName = Literal[
-    "list_files", "list_repositories", "list_channels", "search_pages",
+    "list_files", "list_repositories", "list_channels", "search_pages", "list_sites",
     "search_metadata", "read_message", "send_message",
 ]
-ConnectorBrowseActionName = Literal["list_files", "list_repositories", "list_channels", "search_pages"]
-ConnectorAuthKind = Literal["google_oauth", "access_token"]
+ConnectorBrowseActionName = Literal["list_files", "list_repositories", "list_channels", "search_pages", "list_sites"]
+ConnectorAuthKind = Literal["google_oauth", "microsoft_oauth", "access_token"]
+#: How a workflow node's compute is actually reached, right now — never a label. "vendor_api" and
+#: "vendor_cli_session" are the two existing `ModelRoute` routes to a vendor-hosted model,
+#: generalized onto a node; "self_hosted" is the owner's own machine (a `provider_api` connection
+#: whose `provider == "self_hosted"`) — the third pole the owner named and nothing vendor sees.
+Sovereignty = Literal["vendor_api", "vendor_cli_session", "self_hosted"]
 
 
 class ConnectorAction(WireModel):
@@ -433,7 +438,7 @@ class ConnectorAction(WireModel):
     auth_kind: ConnectorAuthKind
     required_access: tuple[str, ...] = Field(min_length=1, max_length=8)
     input_schema: ToolInputSchema
-    item_kind: Literal["file", "repository", "channel", "page", "message"]
+    item_kind: Literal["file", "repository", "channel", "page", "message", "site"]
     docs_url: HttpUrl
 
 
@@ -493,7 +498,7 @@ class ConnectorLeaf(WireModel):
 class ConnectorItem(WireModel):
     id: str = Field(min_length=1, max_length=512)
     title: str = Field(min_length=1, max_length=512)
-    kind: Literal["file", "repository", "channel", "page", "message"]
+    kind: Literal["file", "repository", "channel", "page", "message", "site"]
     url: HttpUrl | None = None
     fields: tuple[ConnectorLeaf, ...] = Field(default=(), max_length=32)
 
@@ -536,6 +541,18 @@ class DelegatedAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
+class WorkflowFunctionTool(WireModel):
+    """A 'function' as a tool: a block already in the graph, reused. Not bespoke code — a pinned,
+    ALREADY-SAVED workflow (deterministic transform nodes only, enforced at save time) exposed as
+    a callable with named inputs and one scalar result. Opens no code-execution boundary."""
+
+    kind: Literal["function"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    workflow: WorkflowRevisionRef
+    input_schema: ToolInputSchema
+
+
 class GmailAgentTool(WireModel):
     kind: Literal["gmail"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
@@ -554,7 +571,7 @@ class ConnectorAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool, Field(discriminator="kind")]
+AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | WorkflowFunctionTool, Field(discriminator="kind")]
 
 
 class AgentRevision(WireModel):
@@ -775,6 +792,9 @@ class WorkflowBlockAvailability(WireModel):
     readiness: Literal["executable", "config_required", "unavailable"]
     required_config_fields: tuple[str, ...] = Field(default=(), max_length=32)
     reason: str = Field(min_length=1, max_length=400)
+    #: Set only for `agent_task` blocks whose agent has a directly configured model (never for a
+    #: criteria-routed agent, whose route is resolved per run — that stays `None`, not guessed).
+    sovereignty: Sovereignty | None = None
 
     @classmethod
     def builtins(cls):
@@ -799,6 +819,8 @@ class WorkflowBlockAvailability(WireModel):
             raise ValueError("catalog references must match their node kind")
         if (self.kind == "tool_task") != (self.tool is not None):
             raise ValueError("tool catalog entries require a configured tool")
+        if self.sovereignty is not None and self.kind != "agent_task":
+            raise ValueError("sovereignty applies only to agent blocks")
         if len({port.name for port in self.ports}) != len(self.ports):
             raise ValueError("catalog ports must have unique names")
         return self
@@ -898,7 +920,7 @@ class ConnectionResource(WireModel):
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini", "google_drive", "github", "slack", "notion", "gmail"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
     capabilities: tuple[Literal["read", "write", "list", "http"], ...]
     credential_expires_at: datetime | None = None
@@ -911,15 +933,18 @@ class ConnectionResource(WireModel):
             raise ValueError("server connection requires only an endpoint")
         if self.kind == "service_connector" and (self.endpoint is not None or self.root is not None or self.provider is None or self.credential is None or "list" not in self.capabilities or "write" in self.capabilities):
             raise ValueError("service connector requires a credential, provider, and list capability only")
-        if self.kind == "provider_api" and self.credential is None:
+        # A self-hosted endpoint is the owner's own machine, typically on a trusted/private
+        # network with no vendor credential to hold — unlike openai/anthropic/gemini, which
+        # always require one.
+        if self.kind == "provider_api" and self.provider != "self_hosted" and self.credential is None:
             raise ValueError("provider connection requires a credential reference")
         if self.kind not in {"provider_api", "service_connector"} and self.provider is not None:
             raise ValueError("provider kind is required only for provider and service connections")
-        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini"}:
+        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "self_hosted"}:
             raise ValueError("provider API kind requires a model provider")
         if self.kind != "service_connector" and self.credential_expires_at is not None:
             raise ValueError("credential expiry belongs only to service connectors")
-        if self.kind == "service_connector" and self.provider not in {"google_drive", "github", "slack", "notion", "gmail"}:
+        if self.kind == "service_connector" and self.provider not in {"google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"}:
             raise ValueError("service connector provider is unsupported")
         if self.kind != "provider_api" and self.models:
             raise ValueError("only provider connections declare models")

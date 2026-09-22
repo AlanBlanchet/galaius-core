@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from importlib.resources import files
+from typing import get_args
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,8 @@ from pydantic import ValidationError
 from interact_core import (
     Account,
     AccountUpdate,
+    PlatformError,
+    PlatformErrorCode,
     PromptCreateRequest,
     PromptKey,
     PromptRevision,
@@ -23,12 +26,19 @@ from interact_core import (
     AgentGraph,
     AgentGraphUpdate,
     AgentRevisionRef,
+    ConnectorAction,
+    ConnectorCatalog,
     ConnectorLeaf,
     ConfiguredModelRef,
+    ConnectionResource,
     ConnectionResourceRef,
+    CredentialRef,
     ModelEligibility,
     ModelProperty,
     PromptExecutionRef,
+    ToolInputSchema,
+    WorkflowFunctionTool,
+    WorkflowRevisionRef,
 )
 
 
@@ -149,6 +159,18 @@ def test_standalone_package_exports_contracts_and_bundles_all_schemas() -> None:
             assert "$defs" in json.loads(path.read_text())
 
 
+def test_a_dead_link_is_its_own_wire_failure_never_a_credential_failure() -> None:
+    """A one-time link that is gone (expired / consumed / never issued) and a WRONG CREDENTIAL
+    are different things to the person reading the screen: retyping the password can fix one
+    and can never fix the other. The wire vocabulary therefore names them separately."""
+    codes = set(get_args(PlatformErrorCode))
+    assert {"link_expired", "authentication_failed"} <= codes
+    assert PlatformError(code="link_expired").code == "link_expired"
+    with pytest.raises(ValidationError):
+        PlatformError(code="link_gone")
+    assert set(get_args(PlatformError.model_fields["code"].annotation)) == codes
+
+
 def test_agent_paradigms_are_ordered_and_unique() -> None:
     prompt = PromptExecutionRef(
         key=PromptKey(namespace="test", slug="main"),
@@ -189,3 +211,74 @@ def test_model_eligibility_rank_is_optional_positive_selection_order() -> None:
     assert ModelEligibility(model=model, criteria="cap.vlm", outcome="eligible", rank=1, evidence=evidence).rank == 1
     with pytest.raises(ValidationError):
         ModelEligibility(model=model, criteria="cap.vlm", outcome="eligible", rank=0, evidence=evidence)
+
+
+def test_connector_catalog_carries_sharepoint_and_onedrive_with_microsoft_oauth() -> None:
+    """The owner named SharePoint and OneDrive; the catalog must accept them, distinct from the
+    existing Google-OAuth-backed connectors, on their own auth kind."""
+    search = ToolInputSchema(properties={}, required=())
+    sharepoint = ConnectorCatalog(connectors=(
+        {
+            "connector": "sharepoint", "name": "SharePoint", "auth_kinds": ("microsoft_oauth",),
+            "docs_url": "https://learn.microsoft.com/en-us/graph/api/site-search",
+            "actions": ({
+                "connector": "sharepoint", "name": "list_files", "method": "GET",
+                "endpoint": "https://graph.microsoft.com/v1.0/sites", "auth_kind": "microsoft_oauth",
+                "required_access": ("Sites.Read.All",), "input_schema": search.model_dump(mode="json"),
+                "item_kind": "file", "docs_url": "https://learn.microsoft.com/en-us/graph/api/site-search",
+            },),
+        },
+    ))
+    assert sharepoint.connectors[0].connector == "sharepoint"
+    onedrive = ConnectorCatalog(connectors=(
+        {
+            "connector": "onedrive", "name": "OneDrive", "auth_kinds": ("microsoft_oauth",),
+            "docs_url": "https://learn.microsoft.com/en-us/graph/api/driveitem-list-children",
+            "actions": ({
+                "connector": "onedrive", "name": "list_files", "method": "GET",
+                "endpoint": "https://graph.microsoft.com/v1.0/me/drive/root/children", "auth_kind": "microsoft_oauth",
+                "required_access": ("Files.Read",), "input_schema": search.model_dump(mode="json"),
+                "item_kind": "file", "docs_url": "https://learn.microsoft.com/en-us/graph/api/driveitem-list-children",
+            },),
+        },
+    ))
+    assert onedrive.connectors[0].connector == "onedrive"
+    with pytest.raises(ValidationError, match="auth_kind"):
+        ConnectorAction(
+            connector="sharepoint", name="list_files", method="GET",
+            endpoint="https://graph.microsoft.com/v1.0/sites", auth_kind="not_a_real_auth_kind",
+            required_access=("Sites.Read.All",), input_schema=search, item_kind="file",
+            docs_url="https://learn.microsoft.com/en-us/graph/api/site-search",
+        )
+
+
+def test_self_hosted_provider_connection_needs_no_credential() -> None:
+    """Sovereignty's third route: a model the owner runs on his own machine. Same
+    `provider_api` shape vendor connections already use, but a self-hosted endpoint on a
+    trusted/private network carries no vendor credential — unlike openai/anthropic/gemini,
+    which still require one."""
+    resource = ConnectionResource(
+        id=uuid4(), revision=uuid4(), kind="provider_api", provider="self_hosted",
+        name="Home GPU box", endpoint="http://192.168.1.50:11434", models=("llama3.1:8b",),
+        capabilities=("http",),
+    )
+    assert resource.credential is None
+    with pytest.raises(ValidationError, match="requires a credential"):
+        ConnectionResource(id=uuid4(), revision=uuid4(), kind="provider_api", provider="openai",
+                            name="Vendor", endpoint="https://api.openai.com", capabilities=("http",))
+
+
+def test_workflow_function_tool_is_a_named_agent_capability() -> None:
+    """A function-as-tool is a pinned WORKFLOW exposed as a callable, named + described +
+    schema'd exactly like every other agent capability — never bespoke code."""
+    tool = WorkflowFunctionTool(
+        kind="function", name="shout", description="Uppercase the given text.",
+        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+        input_schema=ToolInputSchema(properties={"value": {"type": "string"}}, required=("value",)),
+    )
+    assert tool.kind == "function"
+    assert AgentRevision(
+        id=uuid4(), revision=uuid4(), name="Caller",
+        prompt=PromptExecutionRef(key=PromptKey(namespace="test", slug="caller"), channel="stable", digest="1" * 64, revision=uuid4()),
+        resources=(), capabilities=(tool,), created_at=datetime.now(UTC),
+    ).capabilities == (tool,)

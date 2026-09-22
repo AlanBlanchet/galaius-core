@@ -2623,6 +2623,15 @@
           ],
           "title": "Configuration"
         },
+        "constants": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TriggerConstant"
+          },
+          "maxItems": 32,
+          "title": "Constants",
+          "type": "array"
+        },
         "input_mapping": {
           "default": [],
           "items": {
@@ -2661,6 +2670,55 @@
       "title": "TriggerConfigurationUpdate",
       "type": "object"
     },
+    "TriggerConstant": {
+      "additionalProperties": false,
+      "description": "A value the BINDING carries, not the request.\n\nA schedule has no payload, so a scheduled trigger could only start a workflow whose inputs\nwere all optional \u2014 \"connect it to activate stuff\" stopped at the first required input. A\nconstant supplies that input from the binding itself, and is the only way a schedule reaches\na workflow that needs values.",
+      "properties": {
+        "target": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "target_kind": {
+          "enum": [
+            "input",
+            "variable"
+          ],
+          "title": "Target Kind",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "items": {},
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "target_kind",
+        "target",
+        "value"
+      ],
+      "title": "TriggerConstant",
+      "type": "object"
+    },
     "TriggerCreate": {
       "additionalProperties": false,
       "properties": {
@@ -2685,6 +2743,15 @@
             }
           ],
           "title": "Configuration"
+        },
+        "constants": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TriggerConstant"
+          },
+          "maxItems": 32,
+          "title": "Constants",
+          "type": "array"
         },
         "enabled": {
           "const": false,
@@ -2736,6 +2803,15 @@
             }
           ],
           "title": "Configuration"
+        },
+        "constants": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TriggerConstant"
+          },
+          "maxItems": 32,
+          "title": "Constants",
+          "type": "array"
         },
         "created_at": {
           "format": "date-time",

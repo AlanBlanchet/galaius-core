@@ -1,6 +1,16 @@
 """Provider-independent prompt distribution contracts."""
 
 from .tool_settings import PortableToolSettings, PortableToolSettingsUpdate, PortableToolSettingsValues
+from .tool_usage import (
+    ToolTokenUsage,
+    ToolUsageIngestRecord,
+    ToolUsageIngestRequest,
+    ToolUsageRecord,
+    ToolUsageRoute,
+    ToolUsageSummary,
+    ToolUsageSummaryEntry,
+    ToolUsageTotals,
+)
 from .releases import ChangelogEntry, ReleaseInfo
 from .accounts import (
     Account,
@@ -14,6 +24,7 @@ from .accounts import (
     LoginRequest,
     PasswordResetRequest,
     PlatformError,
+    PlatformErrorCode,
     RecoveryRequest,
     SignupRequest,
     TokenRequest,
@@ -57,9 +68,9 @@ from .prompts import (
     PromptSelection,
     PromptSyncStatus,
 )
-from .external_connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart
+from .external_connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart, MicrosoftOAuthStart
 from .workflows import (
-    DirectTool, ToolTaskNode,
+    DirectTool, ToolTaskNode, Sovereignty, WorkflowFunctionTool,
     ModelCriteriaCatalog, ModelProperty, ModelEligibility, ModelEligibilityEvidence, WorkflowBlockAvailability,
     AdminWorkspaceSummary, AgentCapability, AgentCatalogSnapshot, AgentGraph, AgentGraphUpdate, AgentRevision, AgentRevisionRef, AgentTaskNode, ArtifactRef, BudgetPolicy, CompositeNode, ConfiguredModelRef, ConnectorAction, ConnectorActionName, ConnectorAgentTool, ConnectorAuthKind, ConnectorBrowse, ConnectorBrowseActionName, ConnectorBrowseRequest, ConnectorCatalog, ConnectorCheck, ConnectorCheckRequest, ConnectorDefinition, ConnectorItem, ConnectorKind, ConnectorLeaf, DelegatedAgentTool,
     Conversation, ConversationActivity, ConversationAppendRequest, ConversationCreateRequest, ConversationMessage, ConversationPage, ConversationSummary,
@@ -73,6 +84,8 @@ from .workflows import (
 
 __all__ = [
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
+    "ToolTokenUsage", "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
+    "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
     "DirectTool", "ToolTaskNode",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",
@@ -80,10 +93,10 @@ __all__ = [
     "BudgetDecision", "OperatorAuditEvent", "OperatorAuthority", "OperatorRunFailure", "OperatorServiceSummary", "OperatorWorkspaceSummary",
     "SubscriptionLimit", "SubscriptionPlanDefinition", "SubscriptionPlanRef", "UsageProvenanceSummary", "UsageRecord", "UsageSourceRef", "UsageTotals", "WorkspaceSubscription", "WorkspaceSubscriptionUpdate",
     "Account", "AccountUpdate", "Bootstrap", "LoginRequest", "PasswordResetRequest", "RecoveryRequest",
-    "PlatformError", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceMemberRoleUpdate", "WorkspaceRole", "WorkspaceUpdate",
+    "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceMemberRoleUpdate", "WorkspaceRole", "WorkspaceUpdate",
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
-    "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart",
+    "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "WorkflowFunctionTool",
     "AdminWorkspaceSummary", "AgentCapability", "AgentCatalogSnapshot", "AgentGraph", "AgentGraphUpdate", "AgentRevision", "AgentRevisionRef", "AgentTaskNode", "ArtifactRef", "BudgetPolicy", "CompositeNode", "ConfiguredModelRef", "ConnectorAction", "ConnectorActionName", "ConnectorAgentTool", "ConnectorAuthKind", "ConnectorBrowse", "ConnectorBrowseActionName", "ConnectorBrowseRequest", "ConnectorCatalog", "ConnectorCheck", "ConnectorCheckRequest", "ConnectorDefinition", "ConnectorItem", "ConnectorKind", "ConnectorLeaf", "DelegatedAgentTool",
     "Conversation", "ConversationActivity", "ConversationAppendRequest", "ConversationCreateRequest", "ConversationMessage", "ConversationPage", "ConversationSummary",
     "ConnectionResource", "ConnectionResourceRef", "ConnectionSecretUpdate", "CredentialRef", "InputNode", "PortAddress", "PortExposure", "PortSpec", "ProcessingNode",
