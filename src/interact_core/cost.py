@@ -50,6 +50,10 @@ class NodeCostModel(WireModel):
     known: bool
     prices: tuple[UnitPrice, ...] = ()
     source: PriceSource | None = None
+    #: The platform's fee rate on TOP of the provider cost above (0 for a bring-your-own-key-only
+    #: provider, a local machine run, or a free builtin — there is no provider charge to mark up).
+    #: See `PLATFORM_PRICING` for where the live rate comes from.
+    fee_rate: float = Field(default=0.0, ge=0, le=1)
     #: Why the price is unknown ("no research-table entry for gemini/veo-3 yet"), or a caveat on
     #: a known price ("estimate assumes one agent turn").
     reason: str | None = Field(default=None, max_length=240)
@@ -58,8 +62,8 @@ class NodeCostModel(WireModel):
     def coherent(self) -> Self:
         if self.known and (not self.prices or self.source is None):
             raise ValueError("a known node price names its unit prices and their source")
-        if not self.known and self.prices:
-            raise ValueError("an unknown node price carries no unit prices")
+        if not self.known and (self.prices or self.fee_rate):
+            raise ValueError("an unknown node price carries no unit prices and no fee rate")
         return self
 
 
@@ -105,29 +109,36 @@ def priced_cost(prices: tuple[UnitPrice, ...], usage: NodeUsage) -> float:
 
 
 class NodeCostActual(WireModel):
-    """What one node's run actually cost, after it ran."""
+    """What one node's run actually cost, after it ran — the provider's own charge (`cost_usd`)
+    and the platform's fee on top of it (`fee_usd`), the two lines a metered call always shows."""
 
     node_id: UUID
     usage: NodeUsage
     known: bool
     cost_usd: float | None = Field(default=None, ge=0)
+    fee_usd: float | None = Field(default=None, ge=0)
     source: PriceSource | None = None
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
         if self.known != (self.cost_usd is not None):
             raise ValueError("a known node cost carries its figure, an unknown one carries none")
+        if self.known != (self.fee_usd is not None):
+            raise ValueError("a known node cost carries its fee figure, an unknown one carries none")
         return self
 
 
 class NodeCostEstimate(WireModel):
     """What one node's run is expected to cost, before it runs — a RANGE, never a point figure
-    (an agent's turn count, an upstream-dependent prompt length, are bounded, not fixed)."""
+    (an agent's turn count, an upstream-dependent prompt length, are bounded, not fixed). The fee
+    range mirrors the cost range exactly (same rate applied to both bounds)."""
 
     node_id: UUID
     known: bool
     low_usd: float | None = Field(default=None, ge=0)
     high_usd: float | None = Field(default=None, ge=0)
+    fee_low_usd: float | None = Field(default=None, ge=0)
+    fee_high_usd: float | None = Field(default=None, ge=0)
     reason: str | None = Field(default=None, max_length=240)
 
     @model_validator(mode="after")
@@ -136,6 +147,10 @@ class NodeCostEstimate(WireModel):
             raise ValueError("a known node estimate names an increasing low/high range")
         if not self.known and (self.low_usd is not None or self.high_usd is not None):
             raise ValueError("an unknown node estimate carries no range")
+        if self.known != (self.fee_low_usd is not None and self.fee_high_usd is not None):
+            raise ValueError("a known node estimate carries its fee range, an unknown one carries none")
+        if self.fee_low_usd is not None and self.fee_high_usd is not None and self.fee_low_usd > self.fee_high_usd:
+            raise ValueError("a known node estimate names an increasing fee range")
         return self
 
 
@@ -143,12 +158,16 @@ class RunCostEstimate(WireModel):
     nodes: tuple[NodeCostEstimate, ...] = Field(max_length=500)
     low_usd: float = Field(ge=0)
     high_usd: float = Field(ge=0)
+    fee_low_usd: float = Field(default=0.0, ge=0)
+    fee_high_usd: float = Field(default=0.0, ge=0)
     unknown_node_count: int = Field(ge=0)
 
     @model_validator(mode="after")
     def coherent_total(self) -> Self:
         if self.low_usd > self.high_usd:
             raise ValueError("a run estimate range must be increasing")
+        if self.fee_low_usd > self.fee_high_usd:
+            raise ValueError("a run estimate fee range must be increasing")
         if self.unknown_node_count != sum(1 for node in self.nodes if not node.known):
             raise ValueError("a run estimate's unknown count must match its unknown nodes")
         return self
@@ -157,6 +176,7 @@ class RunCostEstimate(WireModel):
 class RunCostActual(WireModel):
     nodes: tuple[NodeCostActual, ...] = Field(max_length=500)
     total_usd: float = Field(ge=0)
+    fee_usd: float = Field(default=0.0, ge=0)
     unknown_node_count: int = Field(ge=0)
 
     @model_validator(mode="after")
@@ -164,6 +184,24 @@ class RunCostActual(WireModel):
         if self.unknown_node_count != sum(1 for node in self.nodes if not node.known):
             raise ValueError("a run cost's unknown count must match its unknown nodes")
         return self
+
+
+class PlatformPricing(WireModel):
+    """The workspace subscription plan — the ONE typed place these two numbers live; nothing
+    hand-typed elsewhere. Alan's pick, 2026-09-24 ("Cost + 5%, $15/mo (Recommended)",
+    `.github/memory/decisions.md`): a flat monthly subscription plus a fee on top of every
+    metered vendor call the platform fronts. No payment collection is wired to this yet — every
+    reader of `PLATFORM_PRICING` only ever DISPLAYS these figures, never charges them."""
+
+    monthly_subscription_usd: float = Field(ge=0)
+    #: 0.05 = 5%. Applied to a node's provider cost to get its `fee_usd`/`fee_low_usd..fee_high_usd`
+    #: — 0 for a bring-your-own-key-only provider, a local machine run, or a free builtin.
+    fee_rate: float = Field(ge=0, le=1)
+
+
+#: The live rate — read this everywhere a fee or the subscription price is shown or computed,
+#: never a bare "0.05" or "15" typed again.
+PLATFORM_PRICING = PlatformPricing(monthly_subscription_usd=15.0, fee_rate=0.05)
 
 
 class BudgetOverrun(WireModel):
