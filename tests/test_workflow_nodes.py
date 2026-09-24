@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from interact_core import (
     MACHINE_MODELS, VALUE_TYPES, VISION_MODEL_TASKS, MachineCommand, MachineFunctionSummary, NodeLibraryDefinition, WorkflowBlockAvailability,
-    WorkflowNode, model_task_ports, value_type_accepts,
+    WorkflowNode, model_task_ports, value_type_accepts, provider_sovereignty, workflow_sovereignty,
 )
 from interact_core.workflows import ValueType
 
@@ -89,8 +89,26 @@ def test_a_palette_block_is_the_node_it_places() -> None:
     block = WorkflowBlockAvailability.model_validate({"impl": impl, "name": "Double", "ports": ports, "placement": ON_MACHINE, "readiness": "executable", "reason": "Runs on this PC."})
     placed = WorkflowNode.model_validate({"id": str(uuid4()), "label": block.name, "x": 0, "y": 0, **block.model_dump(include={"impl", "ports", "config", "placement"})})
     assert placed.impl == block.impl and placed.placement == block.placement
+    # A function block CAN carry a computed sovereignty (it runs somewhere, on a named machine);
+    # only a pure server transform (builtin) or a collapsed subgraph cannot.
+    WorkflowBlockAvailability.model_validate({**block.model_dump(), "sovereignty": "self_hosted"})
+    builtin, builtin_ports, _config, _placement, _effects = NODES["input"]
     with pytest.raises(ValidationError, match="sovereignty"):
-        WorkflowBlockAvailability.model_validate({**block.model_dump(), "sovereignty": "vendor_api"})
+        WorkflowBlockAvailability.model_validate({"impl": builtin, "name": "Input", "ports": builtin_ports, "readiness": "executable", "reason": "Holds a constant.", "sovereignty": "vendor_api"})
+
+
+def test_provider_sovereignty_is_unknown_until_a_sourced_registry_entry_lands() -> None:
+    assert provider_sovereignty(None) is None  # no vendor reached (builtin, bare connector)
+    assert provider_sovereignty("self_hosted") is None  # the owner's own endpoint, resolved elsewhere
+    assert provider_sovereignty("gemini") == "unknown"  # a real vendor, not yet in PROVIDER_SOVEREIGNTY
+
+
+def test_workflow_sovereignty_is_the_weakest_node_never_assumed_sovereign() -> None:
+    assert workflow_sovereignty([]) == "self_hosted"  # nothing external at all
+    assert workflow_sovereignty(["self_hosted", "self_hosted"]) == "self_hosted"
+    assert workflow_sovereignty(["self_hosted", "vendor_api"]) == "vendor_api"
+    assert workflow_sovereignty(["vendor_api", None]) == "unknown"  # an undecidable node outranks a known vendor
+    assert workflow_sovereignty(["vendor_api", "unknown"]) == "unknown"
 
 
 def command(impl: dict, **fields) -> dict:
