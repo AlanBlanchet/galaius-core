@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
 from typing import Annotated, Literal, Self, get_args
@@ -19,6 +20,32 @@ ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "m
 FILE_VALUE_TYPES = frozenset({"artifact", "image", "mask", "mesh"})
 WorkflowValue = str | float | bool | dict[str, object] | list[object]
 WorkspaceApiKeyScope = Literal["read", "write", "execute"]
+
+
+class PortSpec(WireModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    direction: Literal["input", "output"]
+    value_type: ValueType
+    required: bool = True
+    multiple: bool = False
+
+    def accepts(self, value: object):
+        values = value if self.multiple and isinstance(value, list) else [value]
+        if self.multiple and not isinstance(value, list):
+            return False
+        return all(
+            isinstance(item, str) if self.value_type == "text" else
+            isinstance(item, bool) if self.value_type == "boolean" else
+            isinstance(item, (int, float)) and not isinstance(item, bool) if self.value_type == "number" else
+            isinstance(item, ArtifactRef) if self.value_type in FILE_VALUE_TYPES else
+            isinstance(item, (dict, list))
+            for item in values
+        )
+
+
+class PortAddress(WireModel):
+    node: UUID
+    port: str = Field(min_length=1, max_length=80)
 
 
 class WorkflowKey(WireModel):
@@ -53,13 +80,43 @@ class MachineAccelerator(WireModel):
     memory_mb: int = Field(ge=0, le=1 << 20)
 
 
+class MachineFunctionSummary(WireModel):
+    """One `@interact.function`-decorated Python callable or registered shell command a machine
+    advertises on connect/heartbeat — typed exactly like a workflow node's own ports, so a
+    `MachineFunctionTaskNode` copies `ports` verbatim when it is placed. `version` is a content
+    hash (name + description + ports) the runner recomputes locally on every call: a node keeps
+    running the version it was wired against, and a machine whose function changed shape since
+    then refuses the call instead of silently coercing mismatched arguments."""
+
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    version: str = Field(pattern=r"^[0-9a-f]{64}$")
+    permission: Literal["read_only", "full_access"]
+    ports: tuple[PortSpec, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def coherent_ports(self) -> Self:
+        if len({port.name for port in self.ports}) != len(self.ports):
+            raise ValueError("machine function ports must have unique names")
+        if sum(1 for port in self.ports if port.direction == "output") != 1:
+            raise ValueError("machine function must declare exactly one output port")
+        return self
+
+
 class MachineSummary(WireModel):
     id: UUID
     name: str = Field(min_length=1, max_length=120)
     state: Literal["online", "offline", "revoked"]
     runtimes: tuple[MachineRuntime, ...] = Field(default=(), max_length=16)
     accelerators: tuple[MachineAccelerator, ...] = Field(default=(), max_length=16)
+    functions: tuple[MachineFunctionSummary, ...] = Field(default=(), max_length=64)
     last_seen_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def unique_functions(self) -> Self:
+        if len({function.name for function in self.functions}) != len(self.functions):
+            raise ValueError("machine function names must be unique")
+        return self
 
 
 class MachineCreateRequest(WireModel):
@@ -351,32 +408,6 @@ class AdminWorkspaceSummary(WireModel):
     updated_at: datetime
 
 
-class PortSpec(WireModel):
-    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    direction: Literal["input", "output"]
-    value_type: ValueType
-    required: bool = True
-    multiple: bool = False
-
-    def accepts(self, value: object):
-        values = value if self.multiple and isinstance(value, list) else [value]
-        if self.multiple and not isinstance(value, list):
-            return False
-        return all(
-            isinstance(item, str) if self.value_type == "text" else
-            isinstance(item, bool) if self.value_type == "boolean" else
-            isinstance(item, (int, float)) and not isinstance(item, bool) if self.value_type == "number" else
-            isinstance(item, ArtifactRef) if self.value_type in FILE_VALUE_TYPES else
-            isinstance(item, (dict, list))
-            for item in values
-        )
-
-
-class PortAddress(WireModel):
-    node: UUID
-    port: str = Field(min_length=1, max_length=80)
-
-
 class WorkflowEdge(WireModel):
     source: PortAddress
     target: PortAddress
@@ -434,21 +465,28 @@ class MachineCommand(WireModel):
     run_id: UUID
     workflow: WorkflowRevisionRef
     node_id: UUID
-    action: Literal["agent", "model"] = "agent"
+    action: Literal["agent", "model", "function"] = "agent"
     agent: AgentRevisionRef | None = None
     model: VisionModel | None = None
     image_paths: tuple[str, ...] = Field(default=(), max_length=16)
     score_threshold: FiniteFloat = Field(default=0.5, ge=0, le=1)
+    function: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=80)
+    function_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    function_arguments: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
     expires_at: datetime
     task: str | None = Field(default=None, min_length=1, max_length=1 << 16)
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def coherent_action(self) -> Self:
-        if self.action == "agent" and (self.agent is None or self.task is None or self.model is not None or self.image_paths):
+        if self.action == "agent" and (self.agent is None or self.task is None or self.model is not None or self.image_paths or self.function is not None):
             raise ValueError("agent commands require an agent and task only")
-        if self.action == "model" and (self.model is None or not self.image_paths or self.agent is not None or self.task is not None):
+        if self.action == "model" and (self.model is None or not self.image_paths or self.agent is not None or self.task is not None or self.function is not None):
             raise ValueError("model commands require a model and image paths only")
+        if self.action == "function" and (self.function is None or self.function_version is None or self.agent is not None or self.task is not None or self.model is not None or self.image_paths):
+            raise ValueError("function commands require a function name and version only")
+        if self.action != "function" and (self.function is not None or self.function_version is not None or self.function_arguments):
+            raise ValueError("function name, version and arguments belong only to function commands")
         return self
 
 
@@ -921,15 +959,119 @@ class ToolTaskNode(WorkflowNode):
     arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
 
 
-Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode, Field(discriminator="kind")]
+class MachineFunctionTaskNode(WorkflowNode):
+    """Runs one function an enrolled machine itself declared — a `@interact.function`-decorated
+    Python callable or a registered shell command — typed by that machine's own advertised
+    signature (`MachineFunctionSummary`). `ports` is copied verbatim from the summary at node
+    placement time; `function_version` pins the exact signature the node was wired against, so a
+    later change to the function on the machine re-arms the block as `config_required` instead
+    of silently running under a different shape. `arguments` carries constant bindings for ports
+    with no incoming edge, exactly like `ToolTaskNode.arguments`."""
+
+    kind: Literal["machine_function"]
+    machine: MachineRef
+    function: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    function_version: str = Field(pattern=r"^[0-9a-f]{64}$")
+    arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
+
+
+class NodeLibraryRef(WireModel):
+    id: UUID
+
+
+class LibraryNode(WorkflowNode):
+    """A reusable node dropped BY REFERENCE: its definition lives in the workspace's node library
+    and is expanded at run time, so editing the definition updates every workflow using it. Its
+    `ports` mirror the definition's boundary (`NodeLibraryDefinition.boundary`) at the time it was
+    placed; the server re-derives them from the definition when the workflow is saved and run."""
+
+    kind: Literal["library"]
+    library: NodeLibraryRef
+
+
+#: What a library definition may hold: any configured node but another reference (one level).
+LibraryContent = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode, Field(discriminator="kind")]
+
+Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode | LibraryNode, Field(discriminator="kind")]
+
+
+def _port_slug(label: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "node"
+    return slug if slug[0].isalpha() else f"n_{slug}"
+
+
+class NodeLibraryDefinition(WireModel):
+    """One reusable node: a configured node, or a selection of nodes with the wires between them.
+    Its BOUNDARY — inner input ports no inner edge feeds, inner output ports no inner edge reads —
+    is the port list every `LibraryNode` referencing it carries. Positions are relative to the
+    reference node's own position."""
+
+    id: UUID
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=400)
+    nodes: tuple[LibraryContent, ...] = Field(min_length=1, max_length=50)
+    edges: tuple[WorkflowEdge, ...] = Field(default=(), max_length=150)
+    created_at: datetime
+    updated_at: datetime
+
+    @model_validator(mode="after")
+    def wired_inside(self) -> Self:
+        ids = {node.id for node in self.nodes}
+        if len(ids) != len(self.nodes):
+            raise ValueError("library node identifiers must be unique")
+        if any(edge.source.node not in ids or edge.target.node not in ids for edge in self.edges):
+            raise ValueError("library edges must stay inside the definition")
+        return self
+
+    def boundary(self) -> tuple[tuple[PortSpec, PortAddress], ...]:
+        """Every boundary port, named uniquely across the definition (the inner port's name, then
+        `<node slug>_<name>`, then a counter), beside the inner address it stands for."""
+        fed = {edge.target for edge in self.edges}
+        read = {edge.source for edge in self.edges}
+        taken: set[str] = set()
+        result: list[tuple[PortSpec, PortAddress]] = []
+        for node in self.nodes:
+            for port in node.ports:
+                address = PortAddress(node=node.id, port=port.name)
+                if (port.direction == "input" and address in fed) or (port.direction == "output" and address in read):
+                    continue
+                candidates = [port.name, f"{_port_slug(node.label)}_{port.name}"]
+                name = next((candidate for candidate in candidates if candidate not in taken), None)
+                if name is None:
+                    counter = 2
+                    while f"{candidates[1]}_{counter}" in taken:
+                        counter += 1
+                    name = f"{candidates[1]}_{counter}"
+                taken.add(name)
+                result.append((port.model_copy(update={"name": name[:80]}), address))
+        return tuple(result)
+
+    def ports(self) -> tuple[PortSpec, ...]:
+        return tuple(port for port, _address in self.boundary())
+
+
+class NodeLibraryUse(WireModel):
+    workflow: WorkflowKey
+    name: str = Field(min_length=1, max_length=120)
+
+
+class NodeLibraryEntry(WireModel):
+    definition: NodeLibraryDefinition
+    used_in: tuple[NodeLibraryUse, ...] = ()
 
 
 class WorkflowBlockAvailability(WireModel):
-    kind: Literal["input", "processing", "result", "composite", "agent_task", "model", "tool_task"]
+    kind: Literal["input", "processing", "result", "composite", "agent_task", "model", "tool_task", "library", "machine_function"]
     operation: Literal["uppercase", "lowercase", "identity", "http_get"] | None = None
     workflow: WorkflowRevisionRef | None = None
     agent: AgentRevisionRef | None = None
     tool: DirectTool | None = None
+    #: Set only for `machine_function` blocks — one per function an ONLINE machine advertised;
+    #: never a `builtins()` entry, exactly like `tool_task` (both need live external data no
+    #: static catalog can guess: which machines are online, which connectors are configured).
+    machine: MachineRef | None = None
+    function: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=80)
+    function_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     name: str = Field(min_length=1, max_length=120)
     ports: tuple[PortSpec, ...] = Field(max_length=64)
     readiness: Literal["executable", "config_required", "unavailable"]
@@ -943,8 +1085,8 @@ class WorkflowBlockAvailability(WireModel):
     def builtins(cls):
         entries = []
         for node_type in get_args(get_args(Node)[0]):
-            if node_type is ToolTaskNode:
-                continue  # Tool blocks come from configured workspace connections.
+            if node_type in (ToolTaskNode, MachineFunctionTaskNode):
+                continue  # Tool and machine-function blocks come from live workspace/machine state.
             kind = get_args(node_type.model_fields["kind"].annotation)[0]
             operations = get_args(node_type.model_fields["operation"].annotation) if node_type is ProcessingNode else (None,)
             for operation in operations:
@@ -966,6 +1108,8 @@ class WorkflowBlockAvailability(WireModel):
             raise ValueError("catalog references must match their node kind")
         if (self.kind == "tool_task") != (self.tool is not None):
             raise ValueError("tool catalog entries require a configured tool")
+        if (self.kind == "machine_function") != (self.machine is not None and self.function is not None and self.function_version is not None):
+            raise ValueError("machine function catalog entries require a machine, function and version")
         if self.sovereignty is not None and self.kind != "agent_task":
             raise ValueError("sovereignty applies only to agent blocks")
         if len({port.name for port in self.ports}) != len(self.ports):

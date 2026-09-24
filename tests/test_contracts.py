@@ -46,6 +46,8 @@ from interact_core import (
     MachineRuntime,
     MachineSummary,
     MachineEvent,
+    MachineFunctionSummary,
+    MachineFunctionTaskNode,
     ModelTaskNode,
     PortSpec,
     WorkflowBlockAvailability,
@@ -222,6 +224,42 @@ def test_model_node_and_machine_command_bind_local_vision_execution() -> None:
     assert command.image_paths == ("photo.jpg",)
     assert model_block.readiness == "config_required"
     assert model_block.required_config_fields == ("machine", "model")
+
+
+def test_machine_function_node_pins_version_and_dispatches_typed_ports() -> None:
+    """A machine advertises a typed function (ports + a version hash); a workflow node pins
+    that exact version, so a signature change on the PC re-arms `config_required` instead of
+    silently running the old shape. The command carries the same pinned name/version + typed
+    arguments the machine will re-check against its own current registry."""
+    machine = MachineRef(id=uuid4())
+    function = MachineFunctionSummary(
+        name="hostname", description="This machine's hostname.", version="a" * 64,
+        permission="read_only",
+        ports=(PortSpec(name="result", direction="output", value_type="text"),),
+    )
+    assert function.ports[0].value_type == "text"
+    with pytest.raises(ValidationError):
+        MachineFunctionSummary(name="Bad Name", description="x", version="a" * 64, permission="read_only", ports=())
+
+    node = MachineFunctionTaskNode(
+        kind="machine_function", id=uuid4(), label="Hostname", x=0, y=0,
+        machine=machine, function=function.name, function_version=function.version,
+        ports=function.ports,
+    )
+    command = MachineCommand(
+        id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
+        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+        node_id=node.id, action="function", function=node.function, function_version=node.function_version,
+        function_arguments={"arg": "value"}, expires_at=datetime.now(UTC), signature="a" * 64,
+    )
+    assert command.function == "hostname"
+    assert command.function_arguments == {"arg": "value"}
+    with pytest.raises(ValidationError, match="function"):
+        MachineCommand(
+            id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
+            workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+            node_id=node.id, action="function", expires_at=datetime.now(UTC), signature="a" * 64,
+        )
 
 
 def test_a_dead_link_is_its_own_wire_failure_never_a_credential_failure() -> None:

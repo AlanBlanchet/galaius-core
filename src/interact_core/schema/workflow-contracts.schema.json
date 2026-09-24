@@ -1635,6 +1635,145 @@
       "title": "InputNode",
       "type": "object"
     },
+    "LibraryNode": {
+      "additionalProperties": false,
+      "description": "A reusable node dropped BY REFERENCE: its definition lives in the workspace's node library\nand is expanded at run time, so editing the definition updates every workflow using it. Its\n`ports` mirror the definition's boundary (`NodeLibraryDefinition.boundary`) at the time it was\nplaced; the server re-derives them from the definition when the workflow is saved and run.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "library",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "library": {
+          "$ref": "#/$defs/NodeLibraryRef"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "library"
+      ],
+      "title": "LibraryNode",
+      "type": "object"
+    },
+    "MachineFunctionTaskNode": {
+      "additionalProperties": false,
+      "description": "Runs one function an enrolled machine itself declared \u2014 a `@interact.function`-decorated\nPython callable or a registered shell command \u2014 typed by that machine's own advertised\nsignature (`MachineFunctionSummary`). `ports` is copied verbatim from the summary at node\nplacement time; `function_version` pins the exact signature the node was wired against, so a\nlater change to the function on the machine re-arms the block as `config_required` instead\nof silently running under a different shape. `arguments` carries constant bindings for ports\nwith no incoming edge, exactly like `ToolTaskNode.arguments`.",
+      "properties": {
+        "arguments": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "maxProperties": 32,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "function": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Function",
+          "type": "string"
+        },
+        "function_version": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Function Version",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "machine_function",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "machine": {
+          "$ref": "#/$defs/MachineRef"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "machine",
+        "function",
+        "function_version"
+      ],
+      "title": "MachineFunctionTaskNode",
+      "type": "object"
+    },
     "MachineRef": {
       "additionalProperties": false,
       "properties": {
@@ -2088,6 +2227,160 @@
         "machine"
       ],
       "title": "ModelTaskNode",
+      "type": "object"
+    },
+    "NodeLibraryDefinition": {
+      "additionalProperties": false,
+      "description": "One reusable node: a configured node, or a selection of nodes with the wires between them.\nIts BOUNDARY \u2014 inner input ports no inner edge feeds, inner output ports no inner edge reads \u2014\nis the port list every `LibraryNode` referencing it carries. Positions are relative to the\nreference node's own position.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 400,
+          "title": "Description",
+          "type": "string"
+        },
+        "edges": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/WorkflowEdge"
+          },
+          "maxItems": 150,
+          "title": "Edges",
+          "type": "array"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "agent_task": "#/$defs/AgentTaskNode",
+                "composite": "#/$defs/CompositeNode",
+                "input": "#/$defs/InputNode",
+                "machine_function": "#/$defs/MachineFunctionTaskNode",
+                "model": "#/$defs/ModelTaskNode",
+                "processing": "#/$defs/ProcessingNode",
+                "result": "#/$defs/ResultNode",
+                "tool_task": "#/$defs/ToolTaskNode"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/InputNode"
+              },
+              {
+                "$ref": "#/$defs/ProcessingNode"
+              },
+              {
+                "$ref": "#/$defs/ResultNode"
+              },
+              {
+                "$ref": "#/$defs/CompositeNode"
+              },
+              {
+                "$ref": "#/$defs/AgentTaskNode"
+              },
+              {
+                "$ref": "#/$defs/ModelTaskNode"
+              },
+              {
+                "$ref": "#/$defs/ToolTaskNode"
+              },
+              {
+                "$ref": "#/$defs/MachineFunctionTaskNode"
+              }
+            ]
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "nodes",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "NodeLibraryDefinition",
+      "type": "object"
+    },
+    "NodeLibraryEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "definition": {
+          "$ref": "#/$defs/NodeLibraryDefinition"
+        },
+        "used_in": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NodeLibraryUse"
+          },
+          "title": "Used In",
+          "type": "array"
+        }
+      },
+      "required": [
+        "definition"
+      ],
+      "title": "NodeLibraryEntry",
+      "type": "object"
+    },
+    "NodeLibraryRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "NodeLibraryRef",
+      "type": "object"
+    },
+    "NodeLibraryUse": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowKey"
+        }
+      },
+      "required": [
+        "workflow",
+        "name"
+      ],
+      "title": "NodeLibraryUse",
       "type": "object"
     },
     "ObjectStorageAgentTool": {
@@ -3619,6 +3912,33 @@
           ],
           "default": null
         },
+        "function": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Function"
+        },
+        "function_version": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Function Version"
+        },
         "kind": {
           "enum": [
             "input",
@@ -3627,10 +3947,23 @@
             "composite",
             "agent_task",
             "model",
-            "tool_task"
+            "tool_task",
+            "library",
+            "machine_function"
           ],
           "title": "Kind",
           "type": "string"
+        },
+        "machine": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MachineRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "name": {
           "maxLength": 120,
@@ -4087,6 +4420,8 @@
                 "agent_task": "#/$defs/AgentTaskNode",
                 "composite": "#/$defs/CompositeNode",
                 "input": "#/$defs/InputNode",
+                "library": "#/$defs/LibraryNode",
+                "machine_function": "#/$defs/MachineFunctionTaskNode",
                 "model": "#/$defs/ModelTaskNode",
                 "processing": "#/$defs/ProcessingNode",
                 "result": "#/$defs/ResultNode",
@@ -4115,6 +4450,12 @@
               },
               {
                 "$ref": "#/$defs/ToolTaskNode"
+              },
+              {
+                "$ref": "#/$defs/MachineFunctionTaskNode"
+              },
+              {
+                "$ref": "#/$defs/LibraryNode"
               }
             ]
           },
@@ -4532,6 +4873,12 @@
     },
     {
       "$ref": "#/$defs/WorkflowEvent"
+    },
+    {
+      "$ref": "#/$defs/NodeLibraryDefinition"
+    },
+    {
+      "$ref": "#/$defs/NodeLibraryEntry"
     }
   ]
 }

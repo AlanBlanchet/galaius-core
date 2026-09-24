@@ -70,7 +70,9 @@ from .prompts import (
 )
 from .external_connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart, MicrosoftOAuthStart
 from .workflows import (
+    ValueType,
     DirectTool, ModelTaskNode, ToolTaskNode, VisionModel, Sovereignty, WorkflowFunctionTool,
+    LibraryNode, LibraryContent, NodeLibraryRef, NodeLibraryDefinition, NodeLibraryEntry, NodeLibraryUse,
     SshAgentTool, SshOperationName, ObjectStorageAgentTool, ObjectStorageOperationName,
     ModelCriteriaCatalog, ModelProperty, ModelEligibility, ModelEligibilityEvidence, WorkflowBlockAvailability,
     AdminWorkspaceSummary, AgentCapability, AgentCatalogSnapshot, AgentGraph, AgentGraphUpdate, AgentRevision, AgentRevisionRef, AgentTaskNode, ArtifactRef, BudgetPolicy, CompositeNode, ConfiguredModelRef, ConnectorAction, ConnectorActionName, ConnectorAgentTool, ConnectorAuthKind, ConnectorBrowse, ConnectorBrowseActionName, ConnectorBrowseRequest, ConnectorCatalog, ConnectorCheck, ConnectorCheckRequest, ConnectorDefinition, ConnectorItem, ConnectorKind, ConnectorLeaf, DelegatedAgentTool, ModelTaskNode, VisionModel,
@@ -80,7 +82,7 @@ from .workflows import (
     SubscriptionConfiguration, ToolInputProperty, ToolInputSchema, TriggerBinding, TriggerConfigurationUpdate, TriggerCreate, TriggerDefinition, TriggerDispatch, TriggerEnableUpdate, TriggerConstant,
     TriggerInputMapping, TriggerInvocation, TriggerScheduleState, UsageSummary, VariableSpec, WebhookCredentialCreated, WebhookCredentialSummary, WebhookTrigger,
     WorkflowAgentActivity, WorkflowCapabilityActivity, WorkflowEdge, WorkflowEvent, WorkflowInterface, WorkflowKey, WorkflowRevision, WorkflowValueSummary, WorkspaceApiKeyCreate,
-    MachineRef, MachineRuntime, MachineAccelerator, MachineSummary, MachineCreateRequest, MachineCreated, MachineCommand, MachineCommandResult, MachineEvent,
+    MachineRef, MachineRuntime, MachineAccelerator, MachineFunctionSummary, MachineFunctionTaskNode, MachineSummary, MachineCreateRequest, MachineCreated, MachineCommand, MachineCommandResult, MachineEvent,
     WorkspaceApiKeyCreated, WorkspaceApiKeySummary, ProviderUsage, WorkflowRevisionRef, WorkflowRun,
 )
 
@@ -88,7 +90,8 @@ __all__ = [
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "ToolTokenUsage", "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
-    "DirectTool", "ToolTaskNode", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
+    "ValueType",
+    "DirectTool", "ToolTaskNode", "LibraryNode", "LibraryContent", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",
     "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
@@ -104,6 +107,6 @@ __all__ = [
     "ConnectionResource", "ConnectionResourceRef", "ConnectionSecretUpdate", "CredentialRef", "InputNode", "PortAddress", "PortExposure", "PortSpec", "ProcessingNode",
     "HttpAgentTool", "ManualTrigger", "ResultNode", "ScheduleTrigger", "SubscriptionConfiguration", "ToolInputProperty", "ToolInputSchema", "TriggerBinding", "TriggerConfigurationUpdate", "TriggerCreate", "TriggerDefinition", "TriggerDispatch", "TriggerEnableUpdate", "TriggerInputMapping", "TriggerInvocation", "TriggerScheduleState", "VariableSpec", "WebhookCredentialCreated", "WebhookCredentialSummary", "WebhookTrigger",
     "WorkflowAgentActivity", "WorkflowCapabilityActivity", "WorkflowEdge", "WorkflowEvent", "WorkflowInterface", "ProviderUsage", "UsageSummary", "WorkflowKey", "WorkflowRevision", "WorkflowRevisionRef", "WorkflowRun", "WorkflowValueSummary",
-    "MachineRef", "MachineRuntime", "MachineAccelerator", "MachineSummary", "MachineCreateRequest", "MachineCreated", "MachineCommand", "MachineCommandResult", "MachineEvent",
+    "MachineRef", "MachineRuntime", "MachineAccelerator", "MachineFunctionSummary", "MachineFunctionTaskNode", "MachineSummary", "MachineCreateRequest", "MachineCreated", "MachineCommand", "MachineCommandResult", "MachineEvent",
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
 ]
