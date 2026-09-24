@@ -15,7 +15,10 @@ from uuid import UUID
 from pydantic import Field
 
 from .wire import WireModel
-from .workflows import AcceleratorKind, DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources
+from .workflows import (
+    AcceleratorKind, DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources,
+    NodeSovereigntyRecord, Sovereignty, SovereigntyRequired, meets_requirement,
+)
 
 CloudProviderKind = Literal["scaleway"]
 CloudMachineState = Literal["provisioning", "running", "stopping", "stopped", "failed"]
@@ -169,14 +172,48 @@ class PlacementDecision(WireModel):
     reason: str = Field(min_length=1, max_length=200)
 
 
-def choose_placement(requirement: ResourceRequirement, candidates: tuple[tuple[MachineRef, MachineResources | None, tuple[MachineAccelerator, ...]], ...]) -> PlacementDecision:
-    """Pick the first connected machine (in `candidates` order) fitting `requirement`. `candidates`
-    are already filtered to ONLINE, non-revoked machines by the caller — this function knows
-    nothing about connection state. No fit -> the caller provisions a cloud machine."""
-    fitting = next((item for item in candidates if resources_fit(requirement, item[1], item[2])), None)
-    if fitting is None:
-        return PlacementDecision(needs_cloud_launch=True, reason="no connected machine meets the resource requirement")
-    return PlacementDecision(machine=fitting[0], reason="fits on a connected machine")
+def choose_placement(
+    requirement: ResourceRequirement,
+    candidates: tuple[tuple[MachineRef, MachineResources | None, tuple[MachineAccelerator, ...]], ...],
+    sovereignty_by_machine: dict[UUID, Sovereignty] | None = None,
+    require_sovereign: SovereigntyRequired | None = None,
+) -> PlacementDecision:
+    """Pick the first connected machine (in `candidates` order) fitting `requirement` AND, when
+    `require_sovereign` is set, meeting its floor (threat-model mitigation #6 — a HARD
+    constraint, never a soft preference: refuses rather than silently placing on an unmet
+    candidate). `candidates` are already filtered to ONLINE, non-revoked machines by the caller —
+    this function knows nothing about connection state. `sovereignty_by_machine` is the caller's
+    OWN resolution (from `MachineSovereignty`/`CloudMachine`) per machine id; a machine absent
+    from it reads `"unknown"`, never guessed `"self_hosted"` just for being enrolled — mirrors
+    `server.workflows.repository`'s `revision_sovereignty` fix of the same bug. No fit
+    -> the caller provisions a cloud machine (itself sovereignty-constrained via
+    `cheapest_fit`'s `min_tier`, a separate call)."""
+    graded = sovereignty_by_machine or {}
+    fitting = [item for item in candidates if resources_fit(requirement, item[1], item[2])]
+    if require_sovereign is not None:
+        fitting = [item for item in fitting if meets_requirement(graded.get(item[0].id, "unknown"), require_sovereign)]
+    if not fitting:
+        reason = "no connected machine meets the resource requirement" if require_sovereign is None else "no connected machine meets both the resource requirement and the sovereignty floor"
+        return PlacementDecision(needs_cloud_launch=True, reason=reason)
+    return PlacementDecision(machine=fitting[0][0], reason="fits on a connected machine")
+
+
+def node_sovereignty_record(node_id: UUID, machine: MachineRef, cloud_machine: "CloudMachine | None" = None, machine_sovereignty: "MachineSovereignty | None" = None) -> NodeSovereigntyRecord:
+    """The ACTUAL sovereignty of one executed machine-placed node (threat-model mitigation #6):
+    sourced from what really ran, never the requested/predicted placement. A cloud-launched
+    machine's OWN `CloudMachine` record wins when present — it reflects where the instance
+    ACTUALLY landed, resolved post-provisioning against the provider's real response, never the
+    zone that was merely requested. Otherwise the owner's own `MachineSovereignty` declaration.
+    Otherwise `"unknown"` — never a guessed `"self_hosted"` just because the node reached SOME
+    enrolled machine (the exact bug `server.workflows.repository.revision_sovereignty`
+    used to have). `source_id` always cites a real, findable record: the `CloudMachine`'s own id,
+    the graded `MachineSovereignty`'s machine id, or — ungraded — the placement's own machine id,
+    so an auditor can always locate WHY a run was graded the way it was."""
+    if cloud_machine is not None:
+        return NodeSovereigntyRecord(node_id=node_id, sovereignty="self_hosted", jurisdiction=cloud_machine.jurisdiction, source="cloud_machine", source_id=cloud_machine.id)
+    if machine_sovereignty is not None:
+        return NodeSovereigntyRecord(node_id=node_id, sovereignty="self_hosted", jurisdiction=machine_sovereignty.jurisdiction, source="machine_sovereignty", source_id=machine_sovereignty.machine.id)
+    return NodeSovereigntyRecord(node_id=node_id, sovereignty="unknown", jurisdiction=None, source="machine_sovereignty", source_id=machine.id)
 
 
 class MachineSovereignty(WireModel):

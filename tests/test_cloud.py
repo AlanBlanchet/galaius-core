@@ -5,19 +5,24 @@ server-side CSV-bound registry supplies it), the sovereignty-tier floor (threat-
 constraint), and the pure scheduler decision (`choose_placement`) that picks a connected machine
 or signals a cloud launch is needed."""
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
 from interact_core import (
     CloudInstanceType,
+    CloudMachine,
     MachineAccelerator,
     MachineRef,
     MachineResources,
+    MachineSovereignty,
     ResourceRequirement,
+    SovereigntyRequired,
     cheapest_fit,
     choose_placement,
     meets_tier,
+    node_sovereignty_record,
     resources_fit,
 )
 
@@ -119,3 +124,70 @@ def test_choose_placement_rejects_a_machine_with_no_gpu_at_all_when_one_is_requi
     candidates = ((no_gpu, MachineResources(cpu_count=8, ram_mb=16384, disk_free_gb=200), ()),)
     decision = choose_placement(ResourceRequirement(gpu_kind="cuda"), candidates)
     assert decision.needs_cloud_launch is True
+
+
+def test_choose_placement_refuses_an_ungraded_machine_when_sovereignty_is_required() -> None:
+    """Threat-model mitigation #6 on the routing axis: a machine with no sourced
+    MachineSovereignty/CloudMachine grading reads 'unknown', never silently 'self_hosted' just
+    because it is an enrolled machine — 'sovereign required' must refuse it, not guess it's fine."""
+    ungraded = _machine()
+    candidates = ((ungraded, MachineResources(cpu_count=8, ram_mb=16384, disk_free_gb=200), ()),)
+    decision = choose_placement(ResourceRequirement(cpu_count=2), candidates, require_sovereign=SovereigntyRequired(min_sovereignty="self_hosted"))
+    assert decision.needs_cloud_launch is True
+
+
+def test_choose_placement_accepts_a_graded_machine_when_sovereignty_is_required() -> None:
+    graded = _machine()
+    candidates = ((graded, MachineResources(cpu_count=8, ram_mb=16384, disk_free_gb=200), ()),)
+    decision = choose_placement(
+        ResourceRequirement(cpu_count=2), candidates,
+        sovereignty_by_machine={graded.id: "self_hosted"},
+        require_sovereign=SovereigntyRequired(min_sovereignty="self_hosted"),
+    )
+    assert decision.needs_cloud_launch is False
+    assert decision.machine == graded
+
+
+def test_choose_placement_ignores_sovereignty_when_no_requirement_is_declared() -> None:
+    """Unconstrained is unconstrained: today's behaviour (no `require_sovereign`) never demands a
+    grading that was never asked for."""
+    ungraded = _machine()
+    candidates = ((ungraded, MachineResources(cpu_count=8, ram_mb=16384, disk_free_gb=200), ()),)
+    decision = choose_placement(ResourceRequirement(cpu_count=2), candidates)
+    assert decision.needs_cloud_launch is False
+    assert decision.machine == ungraded
+
+
+def test_node_sovereignty_record_from_a_cloud_machine_cites_the_actual_landed_record() -> None:
+    machine = MachineRef(id=uuid4())
+    node_id = uuid4()
+    cloud_machine = CloudMachine(
+        id=uuid4(), provider="scaleway", region="fr-par-2", instance_type="L4-1-24G", jurisdiction="FR",
+        sovereignty="eu_sovereign", state="running", usd_per_hour=0.85, machine=machine, created_at=datetime.now(UTC),
+    )
+    record = node_sovereignty_record(node_id, machine, cloud_machine=cloud_machine, machine_sovereignty=None)
+    assert record.node_id == node_id
+    assert record.sovereignty == "self_hosted"
+    assert record.jurisdiction == "FR"
+    assert record.source == "cloud_machine"
+    assert record.source_id == cloud_machine.id
+
+
+def test_node_sovereignty_record_from_an_owner_declared_self_hosted_machine() -> None:
+    machine = MachineRef(id=uuid4())
+    node_id = uuid4()
+    declared = MachineSovereignty(machine=machine, jurisdiction="FR", sovereignty="eu_sovereign")
+    record = node_sovereignty_record(node_id, machine, cloud_machine=None, machine_sovereignty=declared)
+    assert record.sovereignty == "self_hosted"
+    assert record.jurisdiction == "FR"
+    assert record.source == "machine_sovereignty"
+    assert record.source_id == machine.id
+
+
+def test_node_sovereignty_record_with_no_grading_at_all_reads_unknown_never_a_guess() -> None:
+    machine = MachineRef(id=uuid4())
+    record = node_sovereignty_record(uuid4(), machine, cloud_machine=None, machine_sovereignty=None)
+    assert record.sovereignty == "unknown"
+    assert record.jurisdiction is None
+    assert record.source == "machine_sovereignty"
+    assert record.source_id == machine.id
