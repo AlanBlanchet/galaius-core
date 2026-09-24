@@ -45,6 +45,9 @@ from interact_core import (
     MachineRuntime,
     MachineSummary,
     MachineEvent,
+    ModelTaskNode,
+    PortSpec,
+    WorkflowBlockAvailability,
 )
 
 
@@ -187,6 +190,30 @@ def test_machine_wire_contract_binds_commands_and_results() -> None:
     assert MachineEvent(command_id=command.id, sequence=1, kind="started", timestamp=now)
     with pytest.raises(ValidationError, match="requires an error"):
         MachineCommandResult(command_id=command.id, nonce=command.nonce, status="failed")
+
+
+def test_model_node_and_machine_command_bind_local_vision_execution() -> None:
+    machine = MachineRef(id=uuid4())
+    node = ModelTaskNode(
+        kind="model", id=uuid4(), label="Detect", x=0, y=0,
+        model="facebook/detr-resnet-50", machine=machine,
+        ports=(
+            PortSpec(name="images", direction="input", value_type="text", multiple=True),
+            PortSpec(name="result", direction="output", value_type="json"),
+        ),
+    )
+    command = MachineCommand(
+        id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
+        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+        node_id=node.id, action="model", model=node.model, image_paths=("photo.jpg",),
+        expires_at=datetime.now(UTC), signature="a" * 64,
+    )
+    model_block = next(block for block in WorkflowBlockAvailability.builtins() if block.kind == "model")
+
+    assert command.action == "model"
+    assert command.image_paths == ("photo.jpg",)
+    assert model_block.readiness == "config_required"
+    assert model_block.required_config_fields == ("machine", "model")
 
 
 def test_a_dead_link_is_its_own_wire_failure_never_a_credential_failure() -> None:

@@ -32,6 +32,9 @@ class MachineRef(WireModel):
     id: UUID
 
 
+VisionModel = Literal["facebook/detr-resnet-50", "facebook/detr-resnet-50-panoptic"]
+
+
 class MachineRuntime(WireModel):
     provider: Literal["claude", "codex"]
     version: str | None = Field(default=None, max_length=80)
@@ -386,7 +389,7 @@ class WorkflowInterface(WireModel):
 class ConnectionResourceRef(WireModel):
     id: UUID
     revision: UUID
-    capability: Literal["read", "write", "list", "http"]
+    capability: Literal["read", "write", "list", "http", "command"]
 
 
 class ConfiguredModelRef(WireModel):
@@ -417,10 +420,22 @@ class MachineCommand(WireModel):
     run_id: UUID
     workflow: WorkflowRevisionRef
     node_id: UUID
-    agent: AgentRevisionRef
+    action: Literal["agent", "model"] = "agent"
+    agent: AgentRevisionRef | None = None
+    model: VisionModel | None = None
+    image_paths: tuple[str, ...] = Field(default=(), max_length=16)
+    score_threshold: FiniteFloat = Field(default=0.5, ge=0, le=1)
     expires_at: datetime
-    task: str = Field(min_length=1, max_length=1 << 16)
+    task: str | None = Field(default=None, min_length=1, max_length=1 << 16)
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def coherent_action(self) -> Self:
+        if self.action == "agent" and (self.agent is None or self.task is None or self.model is not None or self.image_paths):
+            raise ValueError("agent commands require an agent and task only")
+        if self.action == "model" and (self.model is None or not self.image_paths or self.agent is not None or self.task is not None):
+            raise ValueError("model commands require a model and image paths only")
+        return self
 
 
 class MachineCommandResult(WireModel):
@@ -635,7 +650,47 @@ class ConnectorAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | WorkflowFunctionTool, Field(discriminator="kind")]
+#: Capability an SSH operation needs granted on its `ConnectionResource` — reuses the same
+#: read/write/list vocabulary SFTP shares with workspace storage; "command" is the one SSH-only
+#: grant, since running an arbitrary remote command is a distinct risk from reading one file.
+SshOperationName = Literal["run_command", "list_directory", "read_file", "write_file"]
+
+
+class SshAgentTool(WireModel):
+    """One SSH/SFTP operation bound to a pinned `ssh_server` connection. Running a command and
+    writing a file are effects on someone else's machine — the server gates both behind the same
+    owner-approval-by-default ledger `GmailAgentTool.send_message` uses, switchable per
+    (agent, connection) grant; listing and reading run immediately, like Gmail's reads."""
+
+    kind: Literal["ssh"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    connection: ConnectionResourceRef
+    operation: SshOperationName
+    input_schema: ToolInputSchema
+
+
+#: Capability an object-storage operation needs granted on its `ConnectionResource`; "write"
+#: (`put_object`) is owner-approval-gated by the same generalized ledger as SSH writes.
+ObjectStorageOperationName = Literal["list_objects", "get_object", "put_object"]
+
+
+class ObjectStorageAgentTool(WireModel):
+    """One S3-compatible or Azure Blob operation against a named bucket/container, bound to a
+    pinned `object_storage` connection. The connection is provider-agnostic (AWS S3, Scaleway,
+    OVH, MinIO, Cloudflare R2, Azure Blob all reach this same tool shape); `bucket` is pinned per
+    tool the way `HttpAgentTool.path` is pinned per tool, never left to agent-chosen free text."""
+
+    kind: Literal["object_storage"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    connection: ConnectionResourceRef
+    operation: ObjectStorageOperationName
+    bucket: str = Field(min_length=1, max_length=255)
+    input_schema: ToolInputSchema
+
+
+AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | WorkflowFunctionTool, Field(discriminator="kind")]
 
 
 class AgentRevision(WireModel):
@@ -832,7 +887,16 @@ class AgentTaskNode(WorkflowNode):
     machine: MachineRef | None = None
 
 
-DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool, Field(discriminator="kind")]
+class ModelTaskNode(WorkflowNode):
+    """Run a cached vision model on one enrolled machine over local image paths."""
+
+    kind: Literal["model"]
+    model: VisionModel
+    machine: MachineRef
+    score_threshold: FiniteFloat = Field(default=0.5, ge=0, le=1)
+
+
+DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool, Field(discriminator="kind")]
 
 
 class ToolTaskNode(WorkflowNode):
@@ -843,11 +907,11 @@ class ToolTaskNode(WorkflowNode):
     arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
 
 
-Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ToolTaskNode, Field(discriminator="kind")]
+Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode, Field(discriminator="kind")]
 
 
 class WorkflowBlockAvailability(WireModel):
-    kind: Literal["input", "processing", "result", "composite", "agent_task", "tool_task"]
+    kind: Literal["input", "processing", "result", "composite", "agent_task", "model", "tool_task"]
     operation: Literal["uppercase", "lowercase", "identity", "http_get"] | None = None
     workflow: WorkflowRevisionRef | None = None
     agent: AgentRevisionRef | None = None
@@ -870,8 +934,12 @@ class WorkflowBlockAvailability(WireModel):
             kind = get_args(node_type.model_fields["kind"].annotation)[0]
             operations = get_args(node_type.model_fields["operation"].annotation) if node_type is ProcessingNode else (None,)
             for operation in operations:
-                required = ("connection",) if operation == "http_get" else ("workflow",) if node_type is CompositeNode else ("agent",) if node_type is AgentTaskNode else ()
-                ports = (() if node_type is InputNode else (PortSpec(name="value", direction="input", value_type="text"),)) + (PortSpec(name="result", direction="output", value_type="text"),)
+                required = ("connection",) if operation == "http_get" else ("workflow",) if node_type is CompositeNode else ("agent",) if node_type is AgentTaskNode else ("machine", "model") if node_type is ModelTaskNode else ()
+                ports = (
+                    (PortSpec(name="images", direction="input", value_type="text", multiple=True), PortSpec(name="result", direction="output", value_type="json"))
+                    if node_type is ModelTaskNode else
+                    (() if node_type is InputNode else (PortSpec(name="value", direction="input", value_type="text"),)) + (PortSpec(name="result", direction="output", value_type="text"),)
+                )
                 entries.append(cls(kind=kind, operation=operation, name=operation.replace("_", " ").title() if operation else kind.replace("_", " ").title(), ports=ports, readiness="config_required" if required else "executable", required_config_fields=required, reason="Select the required configuration before execution." if required else "Runs locally without a model provider."))
         entries.append(cls(kind="result", name="Write artifact", ports=(PortSpec(name="value", direction="input", value_type="text"), PortSpec(name="result", direction="output", value_type="artifact")), readiness="config_required", required_config_fields=("connection", "artifact_path"), reason="Select writable workspace storage and a relative artifact path."))
         return tuple(entries)
@@ -980,15 +1048,25 @@ class WorkflowRevision(WireModel):
 class ConnectionResource(WireModel):
     id: UUID
     revision: UUID
-    kind: Literal["workspace_storage", "http_server", "provider_api", "service_connector"]
+    kind: Literal["workspace_storage", "http_server", "provider_api", "service_connector", "ssh_server", "object_storage"]
     name: str = Field(min_length=1, max_length=120)
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
-    capabilities: tuple[Literal["read", "write", "list", "http"], ...]
+    capabilities: tuple[Literal["read", "write", "list", "http", "command"], ...]
     credential_expires_at: datetime | None = None
+    #: SSH login name, or the object-storage access-key-id / storage-account name — the one
+    #: identity string every non-OAuth remote credential needs alongside its secret.
+    username: str | None = Field(default=None, min_length=1, max_length=256)
+    #: SHA256 OpenSSH host-key fingerprint pinned on the connection's first successful `ssh_server`
+    #: test (trust-on-first-use), shown to the owner then; every later connect refuses a host that
+    #: no longer presents this exact key — never silently re-trusted.
+    host_key_fingerprint: str | None = Field(default=None, pattern=r"^SHA256:[A-Za-z0-9+/]{43}$")
+    #: Object-storage region (SigV4 signing scope). Optional: most S3-compatible vendors accept a
+    #: default; AWS S3 buckets outside it reject the signature, so a real bucket names its own.
+    region: str | None = Field(default=None, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def kind_fields(self) -> Self:
@@ -1003,18 +1081,28 @@ class ConnectionResource(WireModel):
         # always require one.
         if self.kind == "provider_api" and self.provider != "self_hosted" and self.credential is None:
             raise ValueError("provider connection requires a credential reference")
-        if self.kind not in {"provider_api", "service_connector"} and self.provider is not None:
-            raise ValueError("provider kind is required only for provider and service connections")
+        if self.kind not in {"provider_api", "service_connector", "object_storage"} and self.provider is not None:
+            raise ValueError("provider kind is required only for provider, service and object-storage connections")
         if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "self_hosted"}:
             raise ValueError("provider API kind requires a model provider")
-        if self.kind != "service_connector" and self.credential_expires_at is not None:
-            raise ValueError("credential expiry belongs only to service connectors")
+        if self.kind not in {"service_connector", "ssh_server", "object_storage"} and self.credential_expires_at is not None:
+            raise ValueError("credential expiry belongs only to connections with vendor-issued expiry")
         if self.kind == "service_connector" and self.provider not in {"google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"}:
             raise ValueError("service connector provider is unsupported")
         if self.kind != "provider_api" and self.models:
             raise ValueError("only provider connections declare models")
         if len(set(self.models)) != len(self.models) or any(not model or len(model) > 160 for model in self.models):
             raise ValueError("provider models must be unique bounded identifiers")
+        if self.kind == "ssh_server" and (self.endpoint is None or not self.endpoint.startswith("ssh://") or self.root is not None or self.credential is None or self.username is None or not self.capabilities or set(self.capabilities) - {"command", "read", "write", "list"}):
+            raise ValueError("SSH connection requires an ssh:// endpoint, credential, username and at least one of command/read/write/list")
+        if self.kind == "object_storage" and (self.endpoint is None or self.root is not None or self.provider not in {"s3_compatible", "azure_blob"} or self.credential is None or self.username is None or not self.capabilities or set(self.capabilities) - {"read", "write", "list"}):
+            raise ValueError("object storage connection requires an endpoint, s3_compatible or azure_blob provider, credential, username and at least one of read/write/list")
+        if self.kind != "ssh_server" and self.host_key_fingerprint is not None:
+            raise ValueError("host key pinning belongs only to SSH connections")
+        if self.kind != "object_storage" and self.region is not None:
+            raise ValueError("region belongs only to object storage connections")
+        if self.kind not in {"ssh_server", "object_storage"} and self.username is not None:
+            raise ValueError("username belongs only to SSH and object storage connections")
         return self
 
 

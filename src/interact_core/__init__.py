@@ -70,9 +70,10 @@ from .prompts import (
 )
 from .external_connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart, MicrosoftOAuthStart
 from .workflows import (
-    DirectTool, ToolTaskNode, Sovereignty, WorkflowFunctionTool,
+    DirectTool, ModelTaskNode, ToolTaskNode, VisionModel, Sovereignty, WorkflowFunctionTool,
+    SshAgentTool, SshOperationName, ObjectStorageAgentTool, ObjectStorageOperationName,
     ModelCriteriaCatalog, ModelProperty, ModelEligibility, ModelEligibilityEvidence, WorkflowBlockAvailability,
-    AdminWorkspaceSummary, AgentCapability, AgentCatalogSnapshot, AgentGraph, AgentGraphUpdate, AgentRevision, AgentRevisionRef, AgentTaskNode, ArtifactRef, BudgetPolicy, CompositeNode, ConfiguredModelRef, ConnectorAction, ConnectorActionName, ConnectorAgentTool, ConnectorAuthKind, ConnectorBrowse, ConnectorBrowseActionName, ConnectorBrowseRequest, ConnectorCatalog, ConnectorCheck, ConnectorCheckRequest, ConnectorDefinition, ConnectorItem, ConnectorKind, ConnectorLeaf, DelegatedAgentTool,
+    AdminWorkspaceSummary, AgentCapability, AgentCatalogSnapshot, AgentGraph, AgentGraphUpdate, AgentRevision, AgentRevisionRef, AgentTaskNode, ArtifactRef, BudgetPolicy, CompositeNode, ConfiguredModelRef, ConnectorAction, ConnectorActionName, ConnectorAgentTool, ConnectorAuthKind, ConnectorBrowse, ConnectorBrowseActionName, ConnectorBrowseRequest, ConnectorCatalog, ConnectorCheck, ConnectorCheckRequest, ConnectorDefinition, ConnectorItem, ConnectorKind, ConnectorLeaf, DelegatedAgentTool, ModelTaskNode, VisionModel,
     Conversation, ConversationActivity, ConversationAppendRequest, ConversationCreateRequest, ConversationMessage, ConversationPage, ConversationSummary,
     ConnectionResource, ConnectionResourceRef, ConnectionSecretUpdate, CredentialRef,
     GmailAgentTool, HttpAgentTool, InputNode, ManualTrigger, PortAddress, PortExposure, PortSpec, ProcessingNode, ResultNode, ScheduleTrigger,
@@ -87,7 +88,7 @@ __all__ = [
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "ToolTokenUsage", "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
-    "DirectTool", "ToolTaskNode",
+    "DirectTool", "ToolTaskNode", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",
     "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
@@ -98,7 +99,7 @@ __all__ = [
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
     "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "WorkflowFunctionTool",
-    "AdminWorkspaceSummary", "AgentCapability", "AgentCatalogSnapshot", "AgentGraph", "AgentGraphUpdate", "AgentRevision", "AgentRevisionRef", "AgentTaskNode", "ArtifactRef", "BudgetPolicy", "CompositeNode", "ConfiguredModelRef", "ConnectorAction", "ConnectorActionName", "ConnectorAgentTool", "ConnectorAuthKind", "ConnectorBrowse", "ConnectorBrowseActionName", "ConnectorBrowseRequest", "ConnectorCatalog", "ConnectorCheck", "ConnectorCheckRequest", "ConnectorDefinition", "ConnectorItem", "ConnectorKind", "ConnectorLeaf", "DelegatedAgentTool",
+    "AdminWorkspaceSummary", "AgentCapability", "AgentCatalogSnapshot", "AgentGraph", "AgentGraphUpdate", "AgentRevision", "AgentRevisionRef", "AgentTaskNode", "ArtifactRef", "BudgetPolicy", "CompositeNode", "ConfiguredModelRef", "ConnectorAction", "ConnectorActionName", "ConnectorAgentTool", "ConnectorAuthKind", "ConnectorBrowse", "ConnectorBrowseActionName", "ConnectorBrowseRequest", "ConnectorCatalog", "ConnectorCheck", "ConnectorCheckRequest", "ConnectorDefinition", "ConnectorItem", "ConnectorKind", "ConnectorLeaf", "DelegatedAgentTool", "ModelTaskNode", "VisionModel",
     "Conversation", "ConversationActivity", "ConversationAppendRequest", "ConversationCreateRequest", "ConversationMessage", "ConversationPage", "ConversationSummary",
     "ConnectionResource", "ConnectionResourceRef", "ConnectionSecretUpdate", "CredentialRef", "InputNode", "PortAddress", "PortExposure", "PortSpec", "ProcessingNode",
     "HttpAgentTool", "ManualTrigger", "ResultNode", "ScheduleTrigger", "SubscriptionConfiguration", "ToolInputProperty", "ToolInputSchema", "TriggerBinding", "TriggerConfigurationUpdate", "TriggerCreate", "TriggerDefinition", "TriggerDispatch", "TriggerEnableUpdate", "TriggerInputMapping", "TriggerInvocation", "TriggerScheduleState", "VariableSpec", "WebhookCredentialCreated", "WebhookCredentialSummary", "WebhookTrigger",
