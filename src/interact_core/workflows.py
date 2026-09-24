@@ -820,6 +820,40 @@ def meets_requirement(observed: Sovereignty, requirement: SovereigntyRequired | 
     return requirement is None or _SOVEREIGNTY_RANK[observed] <= _SOVEREIGNTY_RANK[requirement.min_sovereignty]
 
 
+class NodeSovereigntyEntry(WireModel):
+    """One node's PREDICTED figure, for the workflow canvas's per-node badge — `sovereignty` is
+    `None` only where genuinely undecidable ahead of a run (a criteria-routed agent); a builtin
+    carries `None` too (it never participates in the workflow-wide reduction,
+    `WorkflowSovereigntySummary.sovereignty` below). `tier`/`jurisdiction` are the SAME finer
+    jurisdiction figures a Models-area entry carries (visual-critic 2026-09-25 round 1: the node
+    badge read "Unknown" while the Models page correctly said "Non-EU (US)" for the identical
+    provider, because this entry carried only the routing figure — never the tier — leaving the
+    badge with nothing but the fallback branch)."""
+
+    node_id: UUID
+    sovereignty: Sovereignty | None
+    tier: DataSovereigntyTier | None = None
+    jurisdiction: str | None = None
+
+
+class WorkflowSovereigntySummary(WireModel):
+    """The workflow header's PREDICTED figures, read fresh on every open (never cached — a
+    referenced agent's model connection, a machine's declared sovereignty, or a provider's sourced
+    jurisdiction can all change without the workflow itself changing). `data_tier` is `None` when
+    at least one data-receiving node's jurisdiction is not yet resolved (`workflow_data_tier`) —
+    today's coverage is model nodes (CSV-bound per actual endpoint) and machine placement; an
+    agent or connector node makes this `None` until their own tier resolution is built.
+    `jurisdiction` names the WEAKEST node's own country (visual-critic 2026-09-25 round 1: the
+    header's tooltip dropped the country the Models page shows for the same model) — `None` when
+    `data_tier` itself is `None`, or the weakest node is a machine (no vendor jurisdiction)."""
+
+    sovereignty: Sovereignty
+    data_tier: DataSovereigntyTier | None
+    jurisdiction: str | None
+    require_sovereign: SovereigntyRequired | None
+    nodes: tuple[NodeSovereigntyEntry, ...]
+
+
 class ConnectorAction(WireModel):
     connector: ConnectorKind
     name: ConnectorActionName
