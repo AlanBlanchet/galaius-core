@@ -1544,6 +1544,30 @@ class WorkflowEvent(WireModel):
     payload: dict[str, object] = Field(default_factory=dict)
 
 
+#: Bounds a machine-built thumbnail: the runner (an enrolled machine reading or producing an
+#: image/mask/video file that never leaves it) and the server (re-serving it on a step event)
+#: both hold to these — the runner encodes to fit them, the server never re-encodes.
+VALUE_PREVIEW_MAX_PIXELS = 256
+VALUE_PREVIEW_MAX_BYTES = 64 * 1024
+
+
+class ValuePreview(WireModel):
+    """One step event's `preview` payload: a small, JSON-safe glimpse of a node's result or of
+    one input it read — never the full value (a file's bytes stay on the machine that holds it,
+    or behind the run's own activity content store). The ONE shape a machine runner's result and
+    the server's step executor both hold to for an image/mask/video thumbnail, so neither drifts
+    from the other's field names or size bounds."""
+
+    kind: Literal["text", "number", "boolean", "json", "list", "artifact", "image", "empty"]
+    text: str = Field(max_length=400)
+    items: int | None = None
+    media_type: str | None = None
+    path: str | None = Field(default=None, max_length=512)
+    #: Base64 bytes of a thumbnail at most VALUE_PREVIEW_MAX_PIXELS px and VALUE_PREVIEW_MAX_BYTES
+    #: bytes — set only for `kind == "image"`.
+    image: str | None = Field(default=None, max_length=(VALUE_PREVIEW_MAX_BYTES * 4 // 3) + 64)
+
+
 class ProviderUsage(WireModel):
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
