@@ -83,20 +83,28 @@ class CloudInstanceType(WireModel):
         return True
 
 
-#: Scaleway Instances API commercial types, fr-par-2 (the zone carrying every current GPU type).
-#: Source: ~/.github/research/scaleway-instances-api-2026-09-24.md (Scaleway pricing docs). CPU
-#: types cover the common small/medium shapes; GPU types cover the current H100/L40S/L4/RENDER
-#: line. Extend this tuple when a region or type is added — never hand-roll a second catalog.
+#: Scaleway Instances API commercial types, fr-par-2 (the zone carrying every current GPU type;
+#: FR jurisdiction — the fr-par-* zones are the only ones physically in France, per
+#: ~/.github/research/scaleway-instances-api-2026-09-24.md §4). Every cpu/ram/disk/price cell is
+#: copied verbatim from that file's §2 pricing tables (Scaleway's own docs, fetched 2026-09-24) —
+#: never invented. `sovereign=False` on every row: SecNumCloud (ANSSI) is NOT qualified for any
+#: Scaleway zone yet (same source §4) — EU/French data residency is real, the certified-sovereign
+#: bar is not met, so this never silently reads as sovereign. GPU rows with no local disk in the
+#: catalog ("none (Block)") get a 125 GB placeholder — Scaleway's own documented GPU-OS root
+#: volume minimum (§1.6) — standing for the Block Storage volume this scheduler would attach.
+#: §6 of the source file: the LIVE catalog is `GET .../products/servers`, paginated — this static
+#: tuple is a snapshot for placement math, refreshed by re-running the provider's research, never
+#: hand-edited from a launch failure.
 CLOUD_INSTANCE_CATALOG: tuple[CloudInstanceType, ...] = (
-    CloudInstanceType(provider="scaleway", name="DEV1-S", region="fr-par-2", cpu_count=2, ram_mb=2 * 1024, disk_gb=20, usd_per_hour=0.011, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="DEV1-M", region="fr-par-2", cpu_count=3, ram_mb=4 * 1024, disk_gb=40, usd_per_hour=0.021, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="DEV1-L", region="fr-par-2", cpu_count=4, ram_mb=8 * 1024, disk_gb=80, usd_per_hour=0.043, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="GP1-S", region="fr-par-2", cpu_count=4, ram_mb=16 * 1024, disk_gb=150, usd_per_hour=0.089, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="GP1-M", region="fr-par-2", cpu_count=8, ram_mb=32 * 1024, disk_gb=300, usd_per_hour=0.179, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="RENDER-S", region="fr-par-2", cpu_count=10, ram_mb=45 * 1024, disk_gb=400, gpu_kind="cuda", gpu_count=1, vram_mb=16 * 1024, usd_per_hour=1.36, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="L4-1-24G", region="fr-par-2", cpu_count=8, ram_mb=32 * 1024, disk_gb=400, gpu_kind="cuda", gpu_count=1, vram_mb=24 * 1024, usd_per_hour=0.75, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="L40S-1-48G", region="fr-par-2", cpu_count=16, ram_mb=90 * 1024, disk_gb=400, gpu_kind="cuda", gpu_count=1, vram_mb=48 * 1024, usd_per_hour=1.71, jurisdiction="FR", sovereign=True),
-    CloudInstanceType(provider="scaleway", name="H100-1-80G", region="fr-par-2", cpu_count=24, ram_mb=120 * 1024, disk_gb=400, gpu_kind="cuda", gpu_count=1, vram_mb=80 * 1024, usd_per_hour=2.90, jurisdiction="FR", sovereign=True),
+    CloudInstanceType(provider="scaleway", name="DEV1-S", region="fr-par-2", cpu_count=2, ram_mb=2 * 1024, disk_gb=20, usd_per_hour=0.008976, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="DEV1-M", region="fr-par-2", cpu_count=3, ram_mb=4 * 1024, disk_gb=40, usd_per_hour=0.020196, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="DEV1-L", region="fr-par-2", cpu_count=4, ram_mb=8 * 1024, disk_gb=80, usd_per_hour=0.04284, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="POP2-2C-8G", region="fr-par-2", cpu_count=2, ram_mb=8 * 1024, disk_gb=125, usd_per_hour=0.0735, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="POP2-8C-32G", region="fr-par-2", cpu_count=8, ram_mb=32 * 1024, disk_gb=125, usd_per_hour=0.29, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="RENDER-S", region="fr-par-2", cpu_count=10, ram_mb=42 * 1024, disk_gb=400, gpu_kind="cuda", gpu_count=1, vram_mb=16 * 1024, usd_per_hour=1.221, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="L4-1-24G", region="fr-par-2", cpu_count=8, ram_mb=48 * 1024, disk_gb=125, gpu_kind="cuda", gpu_count=1, vram_mb=24 * 1024, usd_per_hour=0.7875, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="L40S-1-48G", region="fr-par-2", cpu_count=8, ram_mb=96 * 1024, disk_gb=1600, gpu_kind="cuda", gpu_count=1, vram_mb=48 * 1024, usd_per_hour=1.469916, jurisdiction="FR", sovereign=False),
+    CloudInstanceType(provider="scaleway", name="H100-1-80G", region="fr-par-2", cpu_count=24, ram_mb=240 * 1024, disk_gb=3000, gpu_kind="cuda", gpu_count=1, vram_mb=80 * 1024, usd_per_hour=2.8665, jurisdiction="FR", sovereign=False),
 )
 
 
