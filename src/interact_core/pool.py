@@ -7,18 +7,19 @@ type here is the wire shape a pooled run's safeguard needs; the enforcement itse
 per-run container, a real firewall, a real GPU scrub) lives in the runtime that reads these
 (`interact.sandbox`, `interact.gpu_scrub`) — this module carries no side effect.
 
-Workspace-private placement (today's default, `decisions.md` 2026-09-24) never constructs any of
-these; a pooled run does. `POOL_SHARING_ENABLED` gates the feature end to end: flipped only once
-every one of the six adversarial tests this module's docstring enumerates passes AND a real
-dispatch exists to read it."""
+Workspace-private placement (`decisions.md` 2026-09-24) never constructs any of these; a pooled run
+does. `POOL_SHARING_ENABLED` gates the feature end to end — see its own docstring below for the
+six adversarial tests and the real dispatch that earned it flipping to `True` on 2026-09-25."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
+from .cloud import ResourceRequirement, resources_fit
 from .wire import WireModel
+from .workflows import MachineAccelerator, MachineRef, MachineResources
 
 #: gVisor (`runsc`) is the only tier this codebase currently proves closes the container-escape
 #: surface for untrusted code (verified 2026-09-24: `docker run --runtime=runsc` on this dev
@@ -123,8 +124,85 @@ class UnsafeModelWeightsError(Exception):
     pickle stream (possibly under a misleading extension) detected by its own magic bytes."""
 
 
-#: Flipped to True only once every one of the six threat-model safeguards has a passing adversarial
-#: test recorded (isolation, egress, GPU scrub, budget, sovereignty, safetensors) AND a real pooled
-#: dispatch exists to read it. False keeps every machine workspace-private, today's shipped
-#: behaviour, unchanged.
-POOL_SHARING_ENABLED = False
+#: Flipped 2026-09-25 once every one of the six threat-model safeguards had a passing adversarial
+#: test AND a real pooled dispatch existed to read it:
+#:   1 isolation  — interact/tests/test_pool_isolation.py (4 tests, real gVisor containers)
+#:   2 egress     — interact/tests/test_pool_egress.py (5 tests, real nft ruleset + listener)
+#:   3 GPU scrub  — interact/tests/test_gpu_scrub.py (3 tests, real CUDA) +
+#:                  server/tests/server tests.py (freshness gate, real dispatch)
+#:   4 budget     — server/tests/server tests.py
+#:                  (test_dispatch_pooled_refuses_a_run_that_would_cross_the_workspace_ceiling)
+#:   5 sovereignty — server/tests/server tests.py
+#:                  (test_dispatch_pooled_with_sovereignty_required_skips_a_non_sovereign_owner)
+#:   6 safetensors — interact/tests/test_model_safety.py (5 tests, real pickle RCE payload refused)
+#: The real dispatch: `server.machines.channel.MachineChannel.dispatch_pooled`, runner
+#: routing in `interact.machines.MachineRunner._execute`/`_run_script_pooled`. Scope note: pooled
+#: dispatch today only offers SCRIPT nodes to the pool (the safetensors gate applies to model
+#: weight loading, not yet reachable from this specific dispatch path — MODEL/FUNCTION pooled
+#: dispatch is refused outright by the runner, not silently run unsandboxed). This flag gates the
+#: MECHANISM's own internal logic; the general workflow scheduler does not yet call
+#: `dispatch_pooled` automatically for an unplaced node (the same state `cloud.py`'s on-demand
+#: launch is in) — that auto-placement wiring is the next integration step.
+POOL_SHARING_ENABLED = True
+
+
+class MachinePoolSettingsUpdate(WireModel):
+    """The owner's own opt-in for ONE of their machines: off by default, and switching it on needs
+    a price in the SAME request — an owner can never end up sharing at an unset (silently free)
+    rate."""
+
+    shared: bool
+    price_usd_per_hour: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def priced_when_shared(self) -> Self:
+        if self.shared and self.price_usd_per_hour is None:
+            raise ValueError("sharing a machine needs a price (set price_usd_per_hour, or 0 for free)")
+        return self
+
+
+class MachinePoolSettings(WireModel):
+    machine: MachineRef
+    shared: bool = False
+    price_usd_per_hour: float | None = Field(default=None, ge=0)
+
+
+class PooledMachineCandidate(WireModel):
+    """One OTHER workspace's machine currently offered to the pool — the cross-workspace read a
+    placement decision needs (boundary 4: the first query in this codebase that legitimately
+    returns a machine record to a workspace that does not own it). Carries only what placement and
+    billing need: no owner identity beyond the workspace id billing must attribute to, no token,
+    no working-directory path."""
+
+    machine: MachineRef
+    owner_workspace_id: UUID
+    price_usd_per_hour: float = Field(ge=0)
+    resources: MachineResources | None = None
+    accelerators: tuple[MachineAccelerator, ...] = ()
+
+
+def choose_pooled_placement(requirement: ResourceRequirement, candidates: tuple[PooledMachineCandidate, ...]) -> PooledMachineCandidate | None:
+    """The cheapest fitting pooled candidate — never the first, so offering a machine at a lower
+    price actually wins it more runs. `candidates` are already filtered to ONLINE, opted-in,
+    UNOCCUPIED (one-tenant-at-a-time) machines by the caller; this function knows nothing about
+    connection or lock state, mirroring `cloud.cheapest_fit`'s split of concerns."""
+    fitting = [candidate for candidate in candidates if resources_fit(requirement, candidate.resources, candidate.accelerators)]
+    return min(fitting, key=lambda candidate: candidate.price_usd_per_hour) if fitting else None
+
+
+class PooledRunBilling(WireModel):
+    """What one pooled run cost the TENANT workspace, at the OWNER's own rate — the metering fact
+    itself; settlement between workspaces is a separate payments concern this type does not carry."""
+
+    run_id: UUID
+    node_id: UUID
+    tenant_workspace_id: UUID
+    owner_workspace_id: UUID
+    machine: MachineRef
+    price_usd_per_hour: float = Field(ge=0)
+    elapsed_seconds: float = Field(ge=0)
+    cost_usd: float = Field(ge=0)
+
+
+def pooled_run_cost(price_usd_per_hour: float, elapsed_seconds: float) -> float:
+    return round(price_usd_per_hour * elapsed_seconds / 3600, 6)
