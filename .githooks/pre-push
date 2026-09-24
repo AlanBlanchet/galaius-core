@@ -28,7 +28,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
   hits="$(printf '%s\n' "$added" | grep -E '/home/[a-z_][a-z0-9_-]*/' | head -5)"
   [ -n "$hits" ] && { echo "pre-push: machine-local home path:" >&2; echo "$hits" >&2; status=1; }
 
-  hits="$(printf '%s\n' "$added" | grep -E '"slash_commands"' | head -3)"
+  hits="$(printf '%s\n' "$added" | grep -E '"slash''_commands"' | head -3)"
   [ -n "$hits" ] && { echo "pre-push: recorded agent session (tool/skill roster):" >&2; echo "$hits" | cut -c1-160 >&2; status=1; }
 
   hits="$(printf '%s\n' "$paths" | grep -E '^\.github/(memory|research)/' | head -5)"
