@@ -97,10 +97,11 @@ def test_a_palette_block_is_the_node_it_places() -> None:
         WorkflowBlockAvailability.model_validate({"impl": builtin, "name": "Input", "ports": builtin_ports, "readiness": "executable", "reason": "Holds a constant.", "sovereignty": "vendor_api"})
 
 
-def test_provider_sovereignty_is_unknown_until_a_sourced_registry_entry_lands() -> None:
+def test_provider_sovereignty_reads_the_sourced_registry_and_unknown_otherwise() -> None:
     assert provider_sovereignty(None) is None  # no vendor reached (builtin, bare connector)
     assert provider_sovereignty("self_hosted") is None  # the owner's own endpoint, resolved elsewhere
-    assert provider_sovereignty("gemini") == "unknown"  # a real vendor, not yet in PROVIDER_SOVEREIGNTY
+    assert provider_sovereignty("gemini") == "vendor_api"  # sourced in PROVIDER_SOVEREIGNTY
+    assert provider_sovereignty("not_a_real_provider") == "unknown"  # a vendor with no registry entry
 
 
 def test_workflow_sovereignty_is_the_weakest_node_never_assumed_sovereign() -> None:

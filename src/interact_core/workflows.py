@@ -680,26 +680,60 @@ Sovereignty = Literal["vendor_api", "vendor_cli_session", "self_hosted", "unknow
 _SOVEREIGNTY_RANK: dict[Sovereignty, int] = {"self_hosted": 0, "vendor_cli_session": 1, "vendor_api": 2, "unknown": 3}
 
 
+#: The EU Cloud Sovereignty Framework v1.2.1 (European Commission DG DIGIT, Oct. 2025) grades a
+#: service SEAL-0..SEAL-4 on 8 weighted objectives (legal exposure, data confinement, supply
+#: chain...); interact_core projects that onto 3 buckets for a provider's DEFAULT endpoint/region
+#: (`~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md` §1c, sourced 2026-09-24):
+#: "eu_sovereign" (EU-HQ, no non-EU parent, data stored AND processed in the EU, SEAL >= 2);
+#: "eu_hosted_foreign_law" (EU-region processing available, but the provider or its parent is
+#: reachable under non-EU law, e.g. the US CLOUD Act, 18 U.S.C. § 2713); "non_eu" (processing
+#: outside the EU, or no region guarantee). PROPOSED classifications, not an official grading.
+DataSovereigntyTier = Literal["eu_sovereign", "eu_hosted_foreign_law", "non_eu"]
+
+
 class ProviderSovereignty(WireModel):
-    """One provider's jurisdiction, sourced — never guessed. `sovereignty`/`jurisdiction` stay
-    `None` (read as "unknown" by every node/workflow computation) until a dated, cited source sets
-    them; `source` then names it (a research file path, a provider's own compliance page)."""
+    """One provider's jurisdiction, sourced — never guessed. Every field stays `None` (read as
+    "unknown" by every node/workflow computation) until a dated, cited source sets it; `source`
+    then names it (a research file path, a provider's own compliance page)."""
 
     provider: str = Field(min_length=1, max_length=40)
-    #: ISO 3166-1 alpha-2 (or a short bloc code like "EU"), when sourced.
-    jurisdiction: str | None = Field(default=None, min_length=2, max_length=8)
+    #: The routing figure `provider_sovereignty` returns — "vendor_api" for every entry below
+    #: (every one is a remote, vendor-hosted API by construction: `self_hosted`/machine placement
+    #: never reach this registry); "vendor_cli_session" is reserved for a future CLI-session route.
     sovereignty: Literal["vendor_api", "vendor_cli_session"] | None = None
+    #: The finer jurisdiction figure shown on nodes/the Models area, orthogonal to `sovereignty`
+    #: (a provider can be a definite "vendor_api" route and still be `non_eu` or `eu_sovereign`).
+    tier: DataSovereigntyTier | None = None
+    #: HQ country/bloc (ISO 3166-1 alpha-2, or a short bloc code like "EU"), when sourced.
+    jurisdiction: str | None = Field(default=None, min_length=2, max_length=8)
     source: str | None = Field(default=None, max_length=200)
 
 
-#: Every hosted-API provider this app can reach, by name — every one held to "unknown" until
-#: `~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md` (or a successor) lands a dated,
-#: cited jurisdiction: the SAME discipline `CLOUD_INSTANCE_CATALOG` (interact_core.cloud) already
-#: holds its Scaleway rows to, extended to model/API vendors. Fill an entry's `jurisdiction` /
-#: `sovereignty` / `source` in place here the day that source exists — never invent one meanwhile.
+_SOVEREIGNTY_SOURCE = "~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md §2 (EU Cloud Sovereignty Framework v1.2.1 + provider compliance pages, 2026-09-24)"
+
+
+def _provider_sovereignty(provider: str, jurisdiction: str, tier: DataSovereigntyTier) -> ProviderSovereignty:
+    return ProviderSovereignty(provider=provider, sovereignty="vendor_api", tier=tier, jurisdiction=jurisdiction, source=_SOVEREIGNTY_SOURCE)
+
+
+#: Every hosted-API provider this app can reach, by name, bound to the sourced registry above.
+#: fal/Replicate/OpenAI/Anthropic/Gemini/Hugging Face's DEFAULT endpoint have no documented EU
+#: region guarantee ("non_eu"); Mistral and Scaleway (Generative APIs, same FR/Iliad jurisdiction
+#: as `interact_core.cloud.CLOUD_INSTANCE_CATALOG`'s Scaleway rows) are EU-HQ with EU-default
+#: processing and no non-EU parent ("eu_sovereign", SEAL-3/SEAL-2 in the Commission's 2026-04-17
+#: tender award). Roboflow's hosted API is `non_eu` by default; a customer's own EU-region
+#: self-hosted deployment is a SEPARATE `Placement`, not this table. Extend/re-source a row here —
+#: never invent one — when a provider's own tier changes or a new one is added.
 PROVIDER_SOVEREIGNTY: dict[str, ProviderSovereignty] = {
-    provider: ProviderSovereignty(provider=provider)
-    for provider in ("openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "huggingface", "scaleway")
+    "openai": _provider_sovereignty("openai", "US", "non_eu"),
+    "anthropic": _provider_sovereignty("anthropic", "US", "non_eu"),
+    "gemini": _provider_sovereignty("gemini", "US", "non_eu"),
+    "fal": _provider_sovereignty("fal", "US", "non_eu"),
+    "replicate": _provider_sovereignty("replicate", "US", "non_eu"),
+    "roboflow": _provider_sovereignty("roboflow", "US", "non_eu"),
+    "mistral": _provider_sovereignty("mistral", "FR", "eu_sovereign"),
+    "huggingface": _provider_sovereignty("huggingface", "US", "non_eu"),
+    "scaleway": _provider_sovereignty("scaleway", "FR", "eu_sovereign"),
 }
 
 
