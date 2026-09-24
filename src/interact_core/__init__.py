@@ -69,6 +69,21 @@ from .prompts import (
     PromptSyncStatus,
 )
 from .external_connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart, MicrosoftOAuthStart
+from .cost import (
+    BudgetOverrun,
+    CostUnit,
+    NodeCostActual,
+    NodeCostEstimate,
+    NodeCostModel,
+    NodeUsage,
+    PriceSource,
+    PriceSourceKind,
+    RunCostActual,
+    RunCostEstimate,
+    UnitPrice,
+    USAGE_FIELD,
+    priced_cost,
+)
 from .workflows import (
     ValueType,
     DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, WorkflowFunctionTool,
@@ -86,6 +101,7 @@ from .workflows import (
     TriggerInputMapping, TriggerInvocation, TriggerScheduleState, UsageSummary, VariableSpec, WebhookCredentialCreated, WebhookCredentialSummary, WebhookTrigger,
     WorkflowAgentActivity, WorkflowCapabilityActivity, WorkflowEdge, WorkflowEvent, WorkflowInterface, WorkflowKey, WorkflowRevision, WorkflowValueSummary, WorkspaceApiKeyCreate,
     MachineRef, MachineRuntime, MachineAccelerator, MachineFunctionSummary, MachineSummary, MachineCreateRequest, MachineCreated, MachineCommand, MachineCommandResult, MachineEvent,
+    MachineCostRate, MachineCostRateUpdate,
     WorkspaceApiKeyCreated, WorkspaceApiKeySummary, ProviderUsage, WorkflowRevisionRef, WorkflowRun,
     ValuePreview, VALUE_PREVIEW_MAX_PIXELS, VALUE_PREVIEW_MAX_BYTES,
 )
@@ -107,6 +123,8 @@ __all__ = [
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
     "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "WorkflowFunctionTool",
+    "BudgetOverrun", "CostUnit", "NodeCostActual", "NodeCostEstimate", "NodeCostModel", "NodeUsage", "PriceSource", "PriceSourceKind", "RunCostActual", "RunCostEstimate", "UnitPrice", "USAGE_FIELD", "priced_cost",
+    "MachineCostRate", "MachineCostRateUpdate",
     "AdminWorkspaceSummary", "AgentCapability", "AgentCatalogSnapshot", "AgentGraph", "AgentGraphUpdate", "AgentRevision", "AgentRevisionRef", "ArtifactRef", "BudgetPolicy", "ConfiguredModelRef", "ConnectorAction", "ConnectorActionName", "ConnectorAgentTool", "ConnectorAuthKind", "ConnectorBrowse", "ConnectorBrowseActionName", "ConnectorBrowseRequest", "ConnectorCatalog", "ConnectorCheck", "ConnectorCheckRequest", "ConnectorDefinition", "ConnectorItem", "ConnectorKind", "ConnectorLeaf", "DelegatedAgentTool", 
     "Conversation", "ConversationActivity", "ConversationAppendRequest", "ConversationCreateRequest", "ConversationMessage", "ConversationPage", "ConversationSummary",
     "ConnectionResource", "ConnectionResourceRef", "ConnectionSecretUpdate", "CredentialRef", "PortAddress", "PortExposure", "PortSpec", 

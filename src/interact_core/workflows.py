@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, field_validator, model_validator
 
+from .cost import RunCostActual
 from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
@@ -108,10 +109,13 @@ class MachineRef(WireModel):
 
 #: What a model does, named by the Hugging Face Hub `pipeline_tag` ids (huggingface.js
 #: `PIPELINE_DATA`) — an existing cross-vendor vocabulary, so a hosted API model and a local
-#: checkpoint doing the same job share one task and one port signature.
+#: checkpoint doing the same job share one task; the PORTS it exposes may still differ by
+#: `Placement.target` (`model_task_ports`'s `placement` argument) — a machine-local detector reads
+#: image PATHS already on that machine (never uploaded), a hosted one is handed the real file.
 ModelTask = Literal[
     "text-generation", "text-to-image", "text-to-video", "object-detection", "image-segmentation",
     "feature-extraction", "text-to-speech", "automatic-speech-recognition", "image-to-3d", "text-to-3d",
+    "depth-estimation", "keypoint-detection", "image-to-text",
 ]
 
 class MachineModelSpec(WireModel):
@@ -136,23 +140,42 @@ def _port(name: str, direction: Literal["input", "output"], value_type: str, req
     return PortSpec(name=name, direction=direction, value_type=value_type, required=required, multiple=multiple)
 
 
-def model_task_ports(task: ModelTask) -> tuple["PortSpec", ...]:
-    """The port signature every model performing `task` exposes, whoever serves it. Machine-local
-    vision tasks read image PATHS on that machine (images never leave it) and return the runner's
-    JSON manifest (labels, scores, boxes or mask files, overlay preview)."""
+def model_task_ports(task: ModelTask, placement: Literal["server", "machine"] = "machine") -> tuple["PortSpec", ...]:
+    """The port signature a model performing `task` exposes at this `placement`. A MACHINE-placed
+    vision task reads image PATHS already on that machine (images never leave it) and returns the
+    runner's JSON manifest (labels, scores, boxes or mask files, overlay preview) — unchanged from
+    before `placement` existed, so every existing machine-local node keeps its exact shape. A
+    SERVER-placed (hosted-API) detector/segmenter is handed the real uploaded image file and
+    answers the task's own typed value (`boxes`, a file `mask`) instead of an opaque manifest —
+    the two placements genuinely differ in what they may touch, so they earn different ports
+    rather than being forced to share one that fits neither well."""
     prompt = _port("prompt", "input", "text")
     reference = _port("image", "input", "image", required=False)
+    image_in = _port("image", "input", "image")
+    if placement == "machine":
+        detection_ports = (_port("images", "input", "text", multiple=True), _port("result", "output", "json"))
+        segmentation_ports = (_port("images", "input", "text", multiple=True), _port("result", "output", "json"))
+    else:
+        detection_ports = (image_in, _port("result", "output", "boxes"))
+        segmentation_ports = (image_in, prompt, _port("result", "output", "mask"))
     return {
         "text-generation": (prompt, _port("text", "output", "text")),
         "text-to-image": (prompt, reference, _port("image", "output", "image")),
         "text-to-video": (prompt, reference, _port("video", "output", "video")),
-        "object-detection": (_port("images", "input", "text", multiple=True), _port("result", "output", "json")),
-        "image-segmentation": (_port("images", "input", "text", multiple=True), _port("result", "output", "json")),
+        "object-detection": detection_ports,
+        "image-segmentation": segmentation_ports,
         "feature-extraction": (_port("text", "input", "text"), _port("embedding", "output", "json")),
         "text-to-speech": (_port("text", "input", "text"), _port("audio", "output", "audio")),
         "automatic-speech-recognition": (_port("audio", "input", "audio"), _port("text", "output", "text")),
         "image-to-3d": (_port("image", "input", "image"), _port("mesh", "output", "mesh")),
         "text-to-3d": (prompt, _port("mesh", "output", "mesh")),
+        "depth-estimation": (image_in, _port("result", "output", "image")),
+        # An image, never structured JSON: the verified pose APIs this app calls (fal's DWPose)
+        # answer a rendered skeleton overlay only, no numeric keypoint coordinates in the response
+        # (confirmed against fal's own OpenAPI schema, 2026-09-24) — the port matches what a real
+        # provider can actually deliver, not a wished-for shape.
+        "keypoint-detection": (image_in, _port("result", "output", "image")),
+        "image-to-text": (image_in, _port("text", "output", "text")),
     }[task]
 
 
@@ -209,6 +232,22 @@ class MachineSummary(WireModel):
         if len({function.name for function in self.functions}) != len(self.functions):
             raise ValueError("machine function names must be unique")
         return self
+
+
+class MachineCostRate(WireModel):
+    """The workspace owner's own price for running a node on this machine: $/GPU-second and
+    $/CPU-second, defaulted to 0 ("your hardware" — the machine's own electricity/depreciation
+    cost is the owner's business, not this registry's). Set once per machine; every machine-placed
+    node's actual cost is its measured wall-clock seconds at this rate."""
+
+    machine: MachineRef
+    usd_per_gpu_second: float = Field(default=0.0, ge=0)
+    usd_per_cpu_second: float = Field(default=0.0, ge=0)
+
+
+class MachineCostRateUpdate(WireModel):
+    usd_per_gpu_second: float = Field(default=0.0, ge=0)
+    usd_per_cpu_second: float = Field(default=0.0, ge=0)
 
 
 class MachineCreateRequest(WireModel):
@@ -1080,10 +1119,12 @@ class _Implementation(WireModel):
     #: Where it may run (`Placement.target`).
     placements: ClassVar[frozenset[str]] = frozenset({"server"})
 
-    def signature(self) -> tuple[PortSpec, ...] | None:
+    def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...] | None:
         """The ports this implementation fixes by itself, or None when they come from outside it
         (a builtin's chosen value type, a machine's advertised function, a tool's schema, a
-        subgraph's interface, an agent)."""
+        subgraph's interface, an agent). `placement` matters only to `ModelImplementation` (a
+        hosted vs machine-local model of the same task can expose different ports); every other
+        implementation ignores it."""
         return None
 
     def required_config(self) -> tuple[str, ...]:
@@ -1135,8 +1176,8 @@ class ModelImplementation(_Implementation):
     effects: ClassVar[frozenset[str]] = frozenset({"model"})
     placements: ClassVar[frozenset[str]] = frozenset({"server", "machine"})
 
-    def signature(self) -> tuple[PortSpec, ...]:
-        return model_task_ports(self.task)
+    def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...]:
+        return model_task_ports(self.task, placement)
 
 
 class FunctionImplementation(_Implementation):
@@ -1215,7 +1256,7 @@ class WorkflowNode(WireModel):
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
-        signature = self.impl.signature()
+        signature = self.impl.signature(self.placement.target)
         if signature is not None and self.ports != signature:
             raise ValueError("node ports must be its implementation's signature")
         if self.placement.target not in self.impl.placements:
@@ -1352,7 +1393,7 @@ class WorkflowBlockAvailability(WireModel):
 
     @model_validator(mode="after")
     def coherent_source(self) -> Self:
-        signature = self.impl.signature()
+        signature = self.impl.signature(self.placement.target)
         if signature is not None and self.ports != signature:
             raise ValueError("catalog ports must be its implementation's signature")
         if self.sovereignty is not None and self.impl.kind != "agent":
@@ -1459,7 +1500,7 @@ class ConnectionResource(WireModel):
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
     capabilities: tuple[Literal["read", "write", "list", "http", "command"], ...]
     credential_expires_at: datetime | None = None
@@ -1493,7 +1534,7 @@ class ConnectionResource(WireModel):
             raise ValueError("provider connection requires a credential reference")
         if self.kind not in {"provider_api", "service_connector", "object_storage", "webhook"} and self.provider is not None:
             raise ValueError("provider kind is required only for provider, service, object-storage and webhook connections")
-        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "self_hosted"}:
+        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted"}:
             raise ValueError("provider API kind requires a model provider")
         if self.kind not in {"service_connector", "ssh_server", "object_storage"} and self.credential_expires_at is not None:
             raise ValueError("credential expiry belongs only to connections with vendor-issued expiry")
@@ -1533,6 +1574,9 @@ class WorkflowRun(WireModel):
     updated_at: datetime
     result: WorkflowValue | ArtifactRef | None = None
     error: str | None = Field(default=None, max_length=400)
+    #: What this run actually cost, per node and in total — set once the run leaves "running";
+    #: `None` on a run still queued/running, or one this server version never metered.
+    cost: RunCostActual | None = None
 
 
 class WorkflowEvent(WireModel):
@@ -1696,6 +1740,10 @@ class ConversationActivity(WireModel):
 class BudgetPolicy(WireModel):
     monthly_token_limit: int | None = Field(default=None, ge=1)
     max_output_tokens: int = Field(default=2048, ge=1, le=32768)
+    #: The workspace's monthly cost ceiling in USD, across every metered node kind (not only
+    #: LLM tokens) — `None` means no ceiling. A run whose estimate would cross it is refused
+    #: until the caller confirms it explicitly (`BudgetOverrun`).
+    monthly_cost_usd_limit: float | None = Field(default=None, ge=0)
 
 
 class UsageSummary(WireModel):
