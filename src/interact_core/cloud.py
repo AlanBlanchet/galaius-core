@@ -108,10 +108,16 @@ CLOUD_INSTANCE_CATALOG: tuple[CloudInstanceType, ...] = (
 )
 
 
-def cheapest_fit(requirement: ResourceRequirement, provider: CloudProviderKind = "scaleway", region: str | None = None) -> CloudInstanceType | None:
+def cheapest_fit(requirement: ResourceRequirement, provider: CloudProviderKind = "scaleway", region: str | None = None, sovereign_only: bool = False) -> CloudInstanceType | None:
     """The cheapest catalog entry meeting `requirement`, or `None` if nothing in the catalog fits.
-    `region=None` searches every region for `provider`."""
-    candidates = [entry for entry in CLOUD_INSTANCE_CATALOG if entry.provider == provider and (region is None or entry.region == region) and entry.fits(requirement)]
+    `region=None` searches every region for `provider`. `sovereign_only=True` is the HARD
+    placement constraint threat-model mitigation #6 calls for: a sovereignty-required workflow
+    must fail its provisioning request rather than silently land on a non-sovereign type — never
+    loosen this to "prefer sovereign, fall back otherwise"."""
+    candidates = [
+        entry for entry in CLOUD_INSTANCE_CATALOG
+        if entry.provider == provider and (region is None or entry.region == region) and entry.fits(requirement) and (not sovereign_only or entry.sovereign)
+    ]
     return min(candidates, key=lambda entry: entry.usd_per_hour) if candidates else None
 
 
@@ -149,6 +155,10 @@ class CloudLaunchRequest(WireModel):
     requirement: ResourceRequirement
     provider: CloudProviderKind = "scaleway"
     region: str | None = None
+    #: Threat-model mitigation #6: a HARD constraint, never a soft preference. `True` refuses the
+    #: launch outright (before any provider call) when no catalog entry is both fitting and
+    #: `sovereign=True`, and re-checks the ACTUAL provisioning response before recording success.
+    sovereignty_required: bool = False
 
 
 class PlacementDecision(WireModel):

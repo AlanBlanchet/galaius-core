@@ -82,3 +82,11 @@ def test_choose_placement_rejects_a_machine_with_no_gpu_at_all_when_one_is_requi
     candidates = ((no_gpu, MachineResources(cpu_count=8, ram_mb=16384, disk_free_gb=200), ()),)
     decision = choose_placement(ResourceRequirement(gpu_kind="cuda"), candidates)
     assert decision.needs_cloud_launch is True
+
+
+def test_cheapest_fit_sovereign_only_finds_nothing_while_no_catalog_row_is_sovereign() -> None:
+    """Threat-model mitigation #6 (hard placement constraint, never a soft fallback): every
+    current Scaleway row is `sovereign=False` (SecNumCloud not ANSSI-qualified yet) -- a
+    sovereignty-required search must come back empty, never silently pick a non-sovereign type."""
+    assert cheapest_fit(ResourceRequirement(cpu_count=2), sovereign_only=True) is None
+    assert cheapest_fit(ResourceRequirement(cpu_count=2), sovereign_only=False) is not None
