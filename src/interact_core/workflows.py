@@ -28,6 +28,32 @@ class WorkflowRevisionRef(WireModel):
     revision: UUID
 
 
+class MachineRef(WireModel):
+    id: UUID
+
+
+class MachineRuntime(WireModel):
+    provider: Literal["claude", "codex"]
+    version: str | None = Field(default=None, max_length=80)
+
+
+class MachineSummary(WireModel):
+    id: UUID
+    name: str = Field(min_length=1, max_length=120)
+    state: Literal["online", "offline", "revoked"]
+    runtimes: tuple[MachineRuntime, ...] = Field(default=(), max_length=16)
+    last_seen_at: datetime | None = None
+
+
+class MachineCreateRequest(WireModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class MachineCreated(WireModel):
+    machine: MachineSummary
+    token: SecretStr = Field(min_length=32, max_length=256)
+
+
 class WorkspaceApiKeyCreate(WireModel):
     scopes: tuple[WorkspaceApiKeyScope, ...] = Field(min_length=1, max_length=3)
 
@@ -379,6 +405,44 @@ class ConnectionSecretUpdate(WireModel):
 class AgentRevisionRef(WireModel):
     id: UUID
     revision: UUID
+
+
+class MachineCommand(WireModel):
+    """One owner-scoped workflow step requested from one enrolled machine."""
+
+    id: UUID
+    nonce: UUID
+    machine: MachineRef
+    workspace_id: UUID
+    run_id: UUID
+    workflow: WorkflowRevisionRef
+    node_id: UUID
+    agent: AgentRevisionRef
+    expires_at: datetime
+    task: str = Field(min_length=1, max_length=1 << 16)
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class MachineCommandResult(WireModel):
+    command_id: UUID
+    nonce: UUID
+    status: Literal["succeeded", "failed", "cancelled"]
+    result: str | None = Field(default=None, max_length=1 << 20)
+    error: str | None = Field(default=None, max_length=400)
+
+    @model_validator(mode="after")
+    def coherent_result(self) -> Self:
+        if (self.status == "failed") != (self.error is not None):
+            raise ValueError("failed machine command requires an error")
+        return self
+
+
+class MachineEvent(WireModel):
+    command_id: UUID
+    sequence: int = Field(ge=1)
+    kind: Literal["started", "progress", "result", "error"]
+    timestamp: datetime
+    payload: dict[str, object] = Field(default_factory=dict)
 
 
 class ToolInputProperty(WireModel):
@@ -765,6 +829,7 @@ class AgentTaskNode(WorkflowNode):
     kind: Literal["agent_task"]
     agent: AgentRevisionRef
     parameters: dict[str, WorkflowValue] = Field(default_factory=dict)
+    machine: MachineRef | None = None
 
 
 DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool, Field(discriminator="kind")]

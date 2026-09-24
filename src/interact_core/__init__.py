@@ -79,6 +79,7 @@ from .workflows import (
     SubscriptionConfiguration, ToolInputProperty, ToolInputSchema, TriggerBinding, TriggerConfigurationUpdate, TriggerCreate, TriggerDefinition, TriggerDispatch, TriggerEnableUpdate, TriggerConstant,
     TriggerInputMapping, TriggerInvocation, TriggerScheduleState, UsageSummary, VariableSpec, WebhookCredentialCreated, WebhookCredentialSummary, WebhookTrigger,
     WorkflowAgentActivity, WorkflowCapabilityActivity, WorkflowEdge, WorkflowEvent, WorkflowInterface, WorkflowKey, WorkflowRevision, WorkflowValueSummary, WorkspaceApiKeyCreate,
+    MachineRef, MachineRuntime, MachineSummary, MachineCreateRequest, MachineCreated, MachineCommand, MachineCommandResult, MachineEvent,
     WorkspaceApiKeyCreated, WorkspaceApiKeySummary, ProviderUsage, WorkflowRevisionRef, WorkflowRun,
 )
 
@@ -102,5 +103,6 @@ __all__ = [
     "ConnectionResource", "ConnectionResourceRef", "ConnectionSecretUpdate", "CredentialRef", "InputNode", "PortAddress", "PortExposure", "PortSpec", "ProcessingNode",
     "HttpAgentTool", "ManualTrigger", "ResultNode", "ScheduleTrigger", "SubscriptionConfiguration", "ToolInputProperty", "ToolInputSchema", "TriggerBinding", "TriggerConfigurationUpdate", "TriggerCreate", "TriggerDefinition", "TriggerDispatch", "TriggerEnableUpdate", "TriggerInputMapping", "TriggerInvocation", "TriggerScheduleState", "VariableSpec", "WebhookCredentialCreated", "WebhookCredentialSummary", "WebhookTrigger",
     "WorkflowAgentActivity", "WorkflowCapabilityActivity", "WorkflowEdge", "WorkflowEvent", "WorkflowInterface", "ProviderUsage", "UsageSummary", "WorkflowKey", "WorkflowRevision", "WorkflowRevisionRef", "WorkflowRun", "WorkflowValueSummary",
+    "MachineRef", "MachineRuntime", "MachineSummary", "MachineCreateRequest", "MachineCreated", "MachineCommand", "MachineCommandResult", "MachineEvent",
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
 ]

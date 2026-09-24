@@ -180,6 +180,7 @@
               "mapping": {
                 "connector": "#/$defs/ConnectorAgentTool",
                 "delegate": "#/$defs/DelegatedAgentTool",
+                "function": "#/$defs/WorkflowFunctionTool",
                 "gmail": "#/$defs/GmailAgentTool",
                 "http": "#/$defs/HttpAgentTool"
               },
@@ -197,6 +198,9 @@
               },
               {
                 "$ref": "#/$defs/ConnectorAgentTool"
+              },
+              {
+                "$ref": "#/$defs/WorkflowFunctionTool"
               }
             ]
           },
@@ -411,17 +415,9 @@
     "AgentTaskNode": {
       "additionalProperties": false,
       "properties": {
-        "agent": {
-          "$ref": "#/$defs/AgentRevisionRef"
-        },
         "id": {
           "format": "uuid",
           "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "agent_task",
-          "title": "Kind",
           "type": "string"
         },
         "label": {
@@ -429,6 +425,30 @@
           "minLength": 1,
           "title": "Label",
           "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "kind": {
+          "const": "agent_task",
+          "title": "Kind",
+          "type": "string"
+        },
+        "agent": {
+          "$ref": "#/$defs/AgentRevisionRef"
         },
         "parameters": {
           "additionalProperties": {
@@ -455,21 +475,16 @@
           "title": "Parameters",
           "type": "object"
         },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
+        "machine": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MachineRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -736,11 +751,14 @@
                 "openai",
                 "anthropic",
                 "gemini",
+                "self_hosted",
                 "google_drive",
                 "github",
                 "slack",
                 "notion",
-                "gmail"
+                "gmail",
+                "sharepoint",
+                "onedrive"
               ],
               "type": "string"
             },
@@ -838,7 +856,8 @@
             "list_files",
             "list_repositories",
             "list_channels",
-            "search_pages"
+            "search_pages",
+            "list_sites"
           ],
           "title": "Action",
           "type": "string"
@@ -860,7 +879,9 @@
             "github",
             "slack",
             "notion",
-            "gmail"
+            "gmail",
+            "sharepoint",
+            "onedrive"
           ],
           "title": "Connector",
           "type": "string"
@@ -1976,19 +1997,6 @@
     "PortSpec": {
       "additionalProperties": false,
       "properties": {
-        "direction": {
-          "enum": [
-            "input",
-            "output"
-          ],
-          "title": "Direction",
-          "type": "string"
-        },
-        "multiple": {
-          "default": false,
-          "title": "Multiple",
-          "type": "boolean"
-        },
         "name": {
           "maxLength": 80,
           "minLength": 1,
@@ -1996,10 +2004,13 @@
           "title": "Name",
           "type": "string"
         },
-        "required": {
-          "default": true,
-          "title": "Required",
-          "type": "boolean"
+        "direction": {
+          "enum": [
+            "input",
+            "output"
+          ],
+          "title": "Direction",
+          "type": "string"
         },
         "value_type": {
           "enum": [
@@ -2011,6 +2022,16 @@
           ],
           "title": "Value Type",
           "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "multiple": {
+          "default": false,
+          "title": "Multiple",
+          "type": "boolean"
         }
       },
       "required": [
@@ -2672,7 +2693,7 @@
     },
     "TriggerConstant": {
       "additionalProperties": false,
-      "description": "A value the BINDING carries, not the request.\n\nA schedule has no payload, so a scheduled trigger could only start a workflow whose inputs\nwere all optional \u2014 \"connect it to activate stuff\" stopped at the first required input. A\nconstant supplies that input from the binding itself, and is the only way a schedule reaches\na workflow that needs values.",
+      "description": "A value the BINDING carries, not the request.\n\nA schedule has no payload, so a scheduled trigger could only start a workflow whose inputs\nwere all optional — \"connect it to activate stuff\" stopped at the first required input. A\nconstant supplies that input from the binding itself, and is the only way a schedule reaches\na workflow that needs values.",
       "properties": {
         "target": {
           "maxLength": 80,
@@ -3406,6 +3427,23 @@
           "title": "Required Config Fields",
           "type": "array"
         },
+        "sovereignty": {
+          "anyOf": [
+            {
+              "enum": [
+                "vendor_api",
+                "vendor_cli_session",
+                "self_hosted"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sovereignty"
+        },
         "tool": {
           "anyOf": [
             {
@@ -3658,6 +3696,45 @@
         "timestamp"
       ],
       "title": "WorkflowEvent",
+      "type": "object"
+    },
+    "WorkflowFunctionTool": {
+      "additionalProperties": false,
+      "description": "A 'function' as a tool: a block already in the graph, reused. Not bespoke code — a pinned,\nALREADY-SAVED workflow (deterministic transform nodes only, enforced at save time) exposed as\na callable with named inputs and one scalar result. Opens no code-execution boundary.",
+      "properties": {
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "function",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "workflow",
+        "input_schema"
+      ],
+      "title": "WorkflowFunctionTool",
       "type": "object"
     },
     "WorkflowInterface": {
@@ -4059,6 +4136,315 @@
         "scopes"
       ],
       "title": "WorkspaceApiKeySummary",
+      "type": "object"
+    },
+    "MachineCommand": {
+      "additionalProperties": false,
+      "description": "One owner-scoped workflow step requested from one enrolled machine.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "nonce": {
+          "format": "uuid",
+          "title": "Nonce",
+          "type": "string"
+        },
+        "machine": {
+          "$ref": "#/$defs/MachineRef"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "workflow": {
+          "$ref": "#/$defs/WorkflowRevisionRef"
+        },
+        "node_id": {
+          "format": "uuid",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "agent": {
+          "$ref": "#/$defs/AgentRevisionRef"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "task": {
+          "maxLength": 65536,
+          "minLength": 1,
+          "title": "Task",
+          "type": "string"
+        },
+        "signature": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Signature",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "nonce",
+        "machine",
+        "workspace_id",
+        "run_id",
+        "workflow",
+        "node_id",
+        "agent",
+        "expires_at",
+        "task",
+        "signature"
+      ],
+      "title": "MachineCommand",
+      "type": "object"
+    },
+    "MachineRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MachineRef",
+      "type": "object"
+    },
+    "MachineCommandResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "nonce": {
+          "format": "uuid",
+          "title": "Nonce",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "maxLength": 1048576,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        }
+      },
+      "required": [
+        "command_id",
+        "nonce",
+        "status"
+      ],
+      "title": "MachineCommandResult",
+      "type": "object"
+    },
+    "MachineCreateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MachineCreateRequest",
+      "type": "object"
+    },
+    "MachineCreated": {
+      "additionalProperties": false,
+      "properties": {
+        "machine": {
+          "$ref": "#/$defs/MachineSummary"
+        },
+        "token": {
+          "format": "password",
+          "maxLength": 256,
+          "minLength": 32,
+          "title": "Token",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "required": [
+        "machine",
+        "token"
+      ],
+      "title": "MachineCreated",
+      "type": "object"
+    },
+    "MachineRuntime": {
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "enum": [
+            "claude",
+            "codex"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "MachineRuntime",
+      "type": "object"
+    },
+    "MachineSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "online",
+            "offline",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "runtimes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MachineRuntime"
+          },
+          "maxItems": 16,
+          "title": "Runtimes",
+          "type": "array"
+        },
+        "last_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Seen At"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "state"
+      ],
+      "title": "MachineSummary",
+      "type": "object"
+    },
+    "MachineEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "started",
+            "progress",
+            "result",
+            "error"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "command_id",
+        "sequence",
+        "kind",
+        "timestamp"
+      ],
+      "title": "MachineEvent",
       "type": "object"
     }
   },

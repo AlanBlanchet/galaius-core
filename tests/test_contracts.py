@@ -39,6 +39,12 @@ from interact_core import (
     ToolInputSchema,
     WorkflowFunctionTool,
     WorkflowRevisionRef,
+    MachineCommand,
+    MachineCommandResult,
+    MachineRef,
+    MachineRuntime,
+    MachineSummary,
+    MachineEvent,
 )
 
 
@@ -157,6 +163,30 @@ def test_standalone_package_exports_contracts_and_bundles_all_schemas() -> None:
     for path in schema_dir.iterdir():
         if path.name.endswith(".json"):
             assert "$defs" in json.loads(path.read_text())
+
+
+def test_machine_wire_contract_binds_commands_and_results() -> None:
+    now = datetime.now(UTC)
+    machine = MachineSummary(
+        id=uuid4(), name="Workstation", state="online",
+        runtimes=(MachineRuntime(provider="codex", version="1.2.3"),),
+        last_seen_at=now,
+    )
+    assert machine.runtimes[0].provider == "codex"
+    assert MachineRef(id=machine.id).id == machine.id
+    command = MachineCommand(
+        id=uuid4(), nonce=uuid4(), machine=MachineRef(id=machine.id),
+        workspace_id=uuid4(), run_id=uuid4(),
+        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+        node_id=uuid4(), agent=AgentRevisionRef(id=uuid4(), revision=uuid4()),
+        expires_at=now, task="summarize",
+        signature="a" * 64,
+    )
+    assert command.signature == "a" * 64
+    assert MachineCommandResult(command_id=command.id, nonce=command.nonce, status="succeeded", result="done")
+    assert MachineEvent(command_id=command.id, sequence=1, kind="started", timestamp=now)
+    with pytest.raises(ValidationError, match="requires an error"):
+        MachineCommandResult(command_id=command.id, nonce=command.nonce, status="failed")
 
 
 def test_a_dead_link_is_its_own_wire_failure_never_a_credential_failure() -> None:
