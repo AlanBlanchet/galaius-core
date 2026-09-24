@@ -195,6 +195,15 @@ class MachineAccelerator(WireModel):
     memory_mb: int = Field(ge=0, le=1 << 20)
 
 
+class MachineResources(WireModel):
+    """CPU/RAM/free-disk a runner reports next to its accelerators at hello/heartbeat — the other
+    half of a placement fit check (`interact_core.cloud.resources_fit`)."""
+
+    cpu_count: int = Field(ge=1, le=256)
+    ram_mb: int = Field(ge=1, le=1 << 22)
+    disk_free_gb: int = Field(ge=0, le=1 << 16)
+
+
 class MachineFunctionSummary(WireModel):
     """One `@interact.function`-decorated Python callable or registered shell command a machine
     advertises on connect/heartbeat — typed exactly like a workflow node's own ports, so a
@@ -225,6 +234,9 @@ class MachineSummary(WireModel):
     runtimes: tuple[MachineRuntime, ...] = Field(default=(), max_length=16)
     accelerators: tuple[MachineAccelerator, ...] = Field(default=(), max_length=16)
     functions: tuple[MachineFunctionSummary, ...] = Field(default=(), max_length=64)
+    #: CPU/RAM/disk the runner reported at hello/heartbeat; `None` for an older runner that has
+    #: never reported it — a placement check treats that like "unknown", never "enough".
+    resources: MachineResources | None = None
     last_seen_at: datetime | None = None
 
     @model_validator(mode="after")
@@ -657,8 +669,63 @@ ConnectorAuthKind = Literal["google_oauth", "microsoft_oauth", "access_token"]
 #: How a workflow node's compute is actually reached, right now — never a label. "vendor_api" and
 #: "vendor_cli_session" are the two existing `ModelRoute` routes to a vendor-hosted model,
 #: generalized onto a node; "self_hosted" is the owner's own machine (a `provider_api` connection
-#: whose `provider == "self_hosted"`) — the third pole the owner named and nothing vendor sees.
-Sovereignty = Literal["vendor_api", "vendor_cli_session", "self_hosted"]
+#: whose `provider == "self_hosted"`, or a node placed on an enrolled machine) — the third pole the
+#: owner named and nothing vendor sees; "unknown" is a node that DOES reach a named provider but
+#: that provider has no entry yet in `PROVIDER_SOVEREIGNTY` — never silently counted as sovereign.
+Sovereignty = Literal["vendor_api", "vendor_cli_session", "self_hosted", "unknown"]
+
+#: Rank for the workflow-wide weakest-link reduction (`workflow_sovereignty`): higher = less
+#: sovereign / less certain. "unknown" ranks BELOW "vendor_api" — a provider nobody has classified
+#: yet is treated as worse than one confirmed non-sovereign, never as good-until-proven-otherwise.
+_SOVEREIGNTY_RANK: dict[Sovereignty, int] = {"self_hosted": 0, "vendor_cli_session": 1, "vendor_api": 2, "unknown": 3}
+
+
+class ProviderSovereignty(WireModel):
+    """One provider's jurisdiction, sourced — never guessed. `sovereignty`/`jurisdiction` stay
+    `None` (read as "unknown" by every node/workflow computation) until a dated, cited source sets
+    them; `source` then names it (a research file path, a provider's own compliance page)."""
+
+    provider: str = Field(min_length=1, max_length=40)
+    #: ISO 3166-1 alpha-2 (or a short bloc code like "EU"), when sourced.
+    jurisdiction: str | None = Field(default=None, min_length=2, max_length=8)
+    sovereignty: Literal["vendor_api", "vendor_cli_session"] | None = None
+    source: str | None = Field(default=None, max_length=200)
+
+
+#: Every hosted-API provider this app can reach, by name — every one held to "unknown" until
+#: `~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md` (or a successor) lands a dated,
+#: cited jurisdiction: the SAME discipline `CLOUD_INSTANCE_CATALOG` (interact_core.cloud) already
+#: holds its Scaleway rows to, extended to model/API vendors. Fill an entry's `jurisdiction` /
+#: `sovereignty` / `source` in place here the day that source exists — never invent one meanwhile.
+PROVIDER_SOVEREIGNTY: dict[str, ProviderSovereignty] = {
+    provider: ProviderSovereignty(provider=provider)
+    for provider in ("openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "huggingface", "scaleway")
+}
+
+
+def provider_sovereignty(provider: str | None) -> Sovereignty | None:
+    """A node's sovereignty from the provider it reaches alone (no placement/connection
+    involved): `None` for no provider (a builtin, a pure connector) or `self_hosted` (the owner's
+    own endpoint, or an enrolled machine — every OTHER caller already resolves those before
+    reaching here); `"unknown"` for a real vendor `PROVIDER_SOVEREIGNTY` has not classified yet."""
+    if provider is None or provider == "self_hosted":
+        return None
+    entry = PROVIDER_SOVEREIGNTY.get(provider)
+    return "unknown" if entry is None or entry.sovereignty is None else entry.sovereignty
+
+
+def workflow_sovereignty(values) -> Sovereignty:
+    """The workflow-wide figure shown on its header and in the Models area: the WEAKEST node.
+    `None` (a criteria-routed agent, resolved per run; a node this caller could not classify) ranks
+    as `"unknown"` — never assumed sovereign because nobody could prove otherwise. A workflow with
+    no externally-reaching node at all (every node `self_hosted` or with no provider) is fully
+    sovereign: `"self_hosted"` is the identity element, returned for an empty sequence too."""
+    worst: Sovereignty = "self_hosted"
+    for value in values:
+        candidate: Sovereignty = "unknown" if value is None else value
+        if _SOVEREIGNTY_RANK[candidate] > _SOVEREIGNTY_RANK[worst]:
+            worst = candidate
+    return worst
 
 
 class ConnectorAction(WireModel):
@@ -1387,8 +1454,11 @@ class WorkflowBlockAvailability(WireModel):
     readiness: Literal["executable", "config_required", "unavailable"]
     required_config_fields: tuple[str, ...] = Field(default=(), max_length=32)
     reason: str = Field(min_length=1, max_length=400)
-    #: Set only for agent blocks whose agent has a directly configured model (never for a
-    #: criteria-routed agent, whose route is resolved per run — that stays `None`, not guessed).
+    #: Set for every kind that can reach a named provider or run somewhere (agent, model, function,
+    #: script, connector) — `None` only when it is genuinely undecidable ahead of time (a
+    #: criteria-routed agent, whose route is resolved per run), never for "builtin" or "subgraph"
+    #: (a pure server transform has no vendor to name; a subgraph's figure is its contents',
+    #: computed by expanding it, never guessed at the collapsed node).
     sovereignty: Sovereignty | None = None
 
     @model_validator(mode="after")
@@ -1396,8 +1466,8 @@ class WorkflowBlockAvailability(WireModel):
         signature = self.impl.signature(self.placement.target)
         if signature is not None and self.ports != signature:
             raise ValueError("catalog ports must be its implementation's signature")
-        if self.sovereignty is not None and self.impl.kind != "agent":
-            raise ValueError("sovereignty applies only to agent blocks")
+        if self.sovereignty is not None and self.impl.kind in ("builtin", "subgraph"):
+            raise ValueError("sovereignty does not apply to builtin or subgraph blocks")
         if len({port.name for port in self.ports}) != len(self.ports):
             raise ValueError("catalog ports must have unique names")
         return self
