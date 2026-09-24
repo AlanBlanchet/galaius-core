@@ -182,7 +182,9 @@
                 "delegate": "#/$defs/DelegatedAgentTool",
                 "function": "#/$defs/WorkflowFunctionTool",
                 "gmail": "#/$defs/GmailAgentTool",
-                "http": "#/$defs/HttpAgentTool"
+                "http": "#/$defs/HttpAgentTool",
+                "object_storage": "#/$defs/ObjectStorageAgentTool",
+                "ssh": "#/$defs/SshAgentTool"
               },
               "propertyName": "kind"
             },
@@ -198,6 +200,12 @@
               },
               {
                 "$ref": "#/$defs/ConnectorAgentTool"
+              },
+              {
+                "$ref": "#/$defs/SshAgentTool"
+              },
+              {
+                "$ref": "#/$defs/ObjectStorageAgentTool"
               },
               {
                 "$ref": "#/$defs/WorkflowFunctionTool"
@@ -670,7 +678,8 @@
               "read",
               "write",
               "list",
-              "http"
+              "http",
+              "command"
             ],
             "type": "string"
           },
@@ -714,6 +723,19 @@
           "default": null,
           "title": "Endpoint"
         },
+        "host_key_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^SHA256:[A-Za-z0-9+/]{43}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host Key Fingerprint"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
@@ -724,7 +746,9 @@
             "workspace_storage",
             "http_server",
             "provider_api",
-            "service_connector"
+            "service_connector",
+            "ssh_server",
+            "object_storage"
           ],
           "title": "Kind",
           "type": "string"
@@ -758,7 +782,9 @@
                 "notion",
                 "gmail",
                 "sharepoint",
-                "onedrive"
+                "onedrive",
+                "s3_compatible",
+                "azure_blob"
               ],
               "type": "string"
             },
@@ -768,6 +794,20 @@
           ],
           "default": null,
           "title": "Provider"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
         },
         "revision": {
           "format": "uuid",
@@ -786,6 +826,20 @@
           ],
           "default": null,
           "title": "Root"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Username"
         }
       },
       "required": [
@@ -806,7 +860,8 @@
             "read",
             "write",
             "list",
-            "http"
+            "http",
+            "command"
           ],
           "title": "Capability",
           "type": "string"
@@ -1967,6 +2022,130 @@
       "title": "ModelProperty",
       "type": "object"
     },
+    "ModelTaskNode": {
+      "additionalProperties": false,
+      "description": "Run a cached vision model on one enrolled machine over local image paths.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "model",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "machine": {
+          "$ref": "#/$defs/MachineRef"
+        },
+        "model": {
+          "enum": [
+            "facebook/detr-resnet-50",
+            "facebook/detr-resnet-50-panoptic"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "score_threshold": {
+          "default": 0.5,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score Threshold",
+          "type": "number"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "model",
+        "machine"
+      ],
+      "title": "ModelTaskNode",
+      "type": "object"
+    },
+    "ObjectStorageAgentTool": {
+      "additionalProperties": false,
+      "description": "One S3-compatible or Azure Blob operation against a named bucket/container, bound to a\npinned `object_storage` connection. The connection is provider-agnostic (AWS S3, Scaleway,\nOVH, MinIO, Cloudflare R2, Azure Blob all reach this same tool shape); `bucket` is pinned per\ntool the way `HttpAgentTool.path` is pinned per tool, never left to agent-chosen free text.",
+      "properties": {
+        "bucket": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Bucket",
+          "type": "string"
+        },
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "object_storage",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "list_objects",
+            "get_object",
+            "put_object"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connection",
+        "operation",
+        "bucket",
+        "input_schema"
+      ],
+      "title": "ObjectStorageAgentTool",
+      "type": "object"
+    },
     "PortAddress": {
       "additionalProperties": false,
       "properties": {
@@ -2043,7 +2222,11 @@
             "number",
             "boolean",
             "json",
-            "artifact"
+            "artifact",
+            "image",
+            "mask",
+            "mesh",
+            "boxes"
           ],
           "title": "Value Type",
           "type": "string"
@@ -2415,6 +2598,56 @@
       "title": "ScheduleTrigger",
       "type": "object"
     },
+    "SshAgentTool": {
+      "additionalProperties": false,
+      "description": "One SSH/SFTP operation bound to a pinned `ssh_server` connection. Running a command and\nwriting a file are effects on someone else's machine \u2014 the server gates both behind the same\nowner-approval-by-default ledger `GmailAgentTool.send_message` uses, switchable per\n(agent, connection) grant; listing and reading run immediately, like Gmail's reads.",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "ssh",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "run_command",
+            "list_directory",
+            "read_file",
+            "write_file"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connection",
+        "operation",
+        "input_schema"
+      ],
+      "title": "SshAgentTool",
+      "type": "object"
+    },
     "SubscriptionConfiguration": {
       "additionalProperties": false,
       "properties": {
@@ -2596,7 +2829,9 @@
             "mapping": {
               "connector": "#/$defs/ConnectorAgentTool",
               "gmail": "#/$defs/GmailAgentTool",
-              "http": "#/$defs/HttpAgentTool"
+              "http": "#/$defs/HttpAgentTool",
+              "object_storage": "#/$defs/ObjectStorageAgentTool",
+              "ssh": "#/$defs/SshAgentTool"
             },
             "propertyName": "kind"
           },
@@ -2609,6 +2844,12 @@
             },
             {
               "$ref": "#/$defs/ConnectorAgentTool"
+            },
+            {
+              "$ref": "#/$defs/SshAgentTool"
+            },
+            {
+              "$ref": "#/$defs/ObjectStorageAgentTool"
             }
           ],
           "title": "Tool"
@@ -3225,7 +3466,11 @@
             "number",
             "boolean",
             "json",
-            "artifact"
+            "artifact",
+            "image",
+            "mask",
+            "mesh",
+            "boxes"
           ],
           "title": "Value Type",
           "type": "string"
@@ -3381,6 +3626,7 @@
             "result",
             "composite",
             "agent_task",
+            "model",
             "tool_task"
           ],
           "title": "Kind",
@@ -3466,7 +3712,9 @@
                 "mapping": {
                   "connector": "#/$defs/ConnectorAgentTool",
                   "gmail": "#/$defs/GmailAgentTool",
-                  "http": "#/$defs/HttpAgentTool"
+                  "http": "#/$defs/HttpAgentTool",
+                  "object_storage": "#/$defs/ObjectStorageAgentTool",
+                  "ssh": "#/$defs/SshAgentTool"
                 },
                 "propertyName": "kind"
               },
@@ -3479,6 +3727,12 @@
                 },
                 {
                   "$ref": "#/$defs/ConnectorAgentTool"
+                },
+                {
+                  "$ref": "#/$defs/SshAgentTool"
+                },
+                {
+                  "$ref": "#/$defs/ObjectStorageAgentTool"
                 }
               ]
             },
@@ -3833,6 +4087,7 @@
                 "agent_task": "#/$defs/AgentTaskNode",
                 "composite": "#/$defs/CompositeNode",
                 "input": "#/$defs/InputNode",
+                "model": "#/$defs/ModelTaskNode",
                 "processing": "#/$defs/ProcessingNode",
                 "result": "#/$defs/ResultNode",
                 "tool_task": "#/$defs/ToolTaskNode"
@@ -3854,6 +4109,9 @@
               },
               {
                 "$ref": "#/$defs/AgentTaskNode"
+              },
+              {
+                "$ref": "#/$defs/ModelTaskNode"
               },
               {
                 "$ref": "#/$defs/ToolTaskNode"

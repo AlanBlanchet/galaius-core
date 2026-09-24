@@ -14,7 +14,9 @@ from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
 
-ValueType = Literal["text", "number", "boolean", "json", "artifact"]
+ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes"]
+#: Value types carried as a stored file; `boxes` is structured JSON (label, score, box per item).
+FILE_VALUE_TYPES = frozenset({"artifact", "image", "mask", "mesh"})
 WorkflowValue = str | float | bool | dict[str, object] | list[object]
 WorkspaceApiKeyScope = Literal["read", "write", "execute"]
 
@@ -352,7 +354,7 @@ class PortSpec(WireModel):
             isinstance(item, str) if self.value_type == "text" else
             isinstance(item, bool) if self.value_type == "boolean" else
             isinstance(item, (int, float)) and not isinstance(item, bool) if self.value_type == "number" else
-            isinstance(item, ArtifactRef) if self.value_type == "artifact" else
+            isinstance(item, ArtifactRef) if self.value_type in FILE_VALUE_TYPES else
             isinstance(item, (dict, list))
             for item in values
         )
