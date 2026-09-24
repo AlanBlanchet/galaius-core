@@ -121,6 +121,7 @@ from .workflows import (
     WorkspaceApiKeyCreated, WorkspaceApiKeySummary, ProviderUsage, WorkflowRevisionRef, WorkflowRun,
     ValuePreview, VALUE_PREVIEW_MAX_PIXELS, VALUE_PREVIEW_MAX_BYTES,
 )
+from .user_models import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
 
 __all__ = [
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
@@ -150,4 +151,5 @@ __all__ = [
     "CLOUD_INSTANCE_CATALOG", "CloudInstanceType", "CloudLaunchRequest", "CloudMachine", "CloudMachineState", "CloudProviderKind", "MachineResources", "MachineSovereignty", "MachineSovereigntyUpdate", "PlacementDecision", "ResourceRequirement", "WorkspaceCloudLimits", "cheapest_fit", "choose_placement", "resources_fit",
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
     "ValuePreview", "VALUE_PREVIEW_MAX_PIXELS", "VALUE_PREVIEW_MAX_BYTES",
+    "UserModel", "UserModelOrigin", "UserModelOriginKind", "UserModelRef",
 ]
