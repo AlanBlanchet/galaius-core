@@ -105,6 +105,7 @@ from .cloud import (
 from .workflows import (
     ValueType,
     DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, PROVIDER_SOVEREIGNTY, provider_sovereignty, workflow_sovereignty, WorkflowFunctionTool,
+    NodeSovereigntyRecord, actual_workflow_sovereignty, SovereigntyRequired, meets_requirement,
     NodeLibraryRef, NodeLibraryDefinition, NodeLibraryEntry, NodeLibraryUse,
     Effect, Implementation, BuiltinImplementation, AgentImplementation, ModelImplementation, FunctionImplementation, ScriptImplementation, ConnectorImplementation, SubgraphImplementation, MachineImplementation, BuiltinOp, WorkflowNode, 
     ValueTypeSpec, VALUE_TYPES, FILE_VALUE_TYPES, value_type_accepts, value_type_widening, MachineModelSpec, MACHINE_MODELS,
@@ -156,6 +157,7 @@ __all__ = [
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
     "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "DataSovereigntyTier", "ProviderSovereignty", "PROVIDER_SOVEREIGNTY", "provider_sovereignty", "workflow_sovereignty", "WorkflowFunctionTool",
+    "NodeSovereigntyRecord", "actual_workflow_sovereignty", "SovereigntyRequired", "meets_requirement",
     "BudgetOverrun", "CostUnit", "NodeCostActual", "NodeCostEstimate", "NodeCostModel", "NodeUsage", "PlatformPricing", "PLATFORM_PRICING", "PriceSource", "PriceSourceKind", "RunCostActual", "RunCostEstimate", "UnitPrice", "USAGE_FIELD", "priced_cost",
     "MachineCostRate", "MachineCostRateUpdate",
     "AdminWorkspaceSummary", "AgentCapability", "AgentCatalogSnapshot", "AgentGraph", "AgentGraphUpdate", "AgentRevision", "AgentRevisionRef", "ArtifactRef", "BudgetPolicy", "ConfiguredModelRef", "ConnectorAction", "ConnectorActionName", "ConnectorAgentTool", "ConnectorAuthKind", "ConnectorBrowse", "ConnectorBrowseActionName", "ConnectorBrowseRequest", "ConnectorCatalog", "ConnectorCheck", "ConnectorCheckRequest", "ConnectorDefinition", "ConnectorItem", "ConnectorKind", "ConnectorLeaf", "DelegatedAgentTool", 
