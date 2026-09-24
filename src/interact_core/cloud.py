@@ -1,10 +1,12 @@
-"""On-demand cloud compute: resource requirements, a static provider catalog, provisioned
-machines, and the pure placement decision every scheduler (server or test) reuses.
+"""On-demand cloud compute: resource requirements, the provisioned-machine wire shapes, and the
+pure placement decisions every scheduler (server or test) reuses.
 
-A node's resource need and a machine's actual resources are matched here so "place this node"
-never guesses: fits on a connected machine, or a cloud machine of the cheapest fitting type is
-needed. The catalog itself is data (`CLOUD_INSTANCE_CATALOG`), sourced from the provider's own
-docs, never invented per call — the same shape `MACHINE_MODELS` already uses for model specs."""
+interact-core stays provider-independent and ships NO real-world compute catalog or compliance
+data of its own — `CloudInstanceType` is a SHAPE; the actual Scaleway (or other provider) rows
+are a CSV-bound registry server-side (`server.machines.catalog`, mirroring
+`server.models.sovereignty`'s exact "CSV copied verbatim, loader binds to it" pattern),
+never hand-copied into this package. `cheapest_fit`/`choose_placement` are pure functions over
+whatever catalog/candidates the caller supplies."""
 
 from datetime import datetime
 from typing import Literal
@@ -13,10 +15,21 @@ from uuid import UUID
 from pydantic import Field
 
 from .wire import WireModel
-from .workflows import AcceleratorKind, MachineAccelerator, MachineRef, MachineResources
+from .workflows import AcceleratorKind, DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources
 
 CloudProviderKind = Literal["scaleway"]
 CloudMachineState = Literal["provisioning", "running", "stopping", "stopped", "failed"]
+
+#: Rank for the sovereignty-tier floor check (`cheapest_fit`'s `min_tier`): lower = more
+#: sovereign. Mirrors `workflows._SOVEREIGNTY_RANK`'s "lower rank is more sovereign, at-least-as-
+#: sovereign-as-the-floor" shape, over the finer per-endpoint `DataSovereigntyTier` axis instead
+#: of the coarser routing `Sovereignty` axis that rank covers.
+_TIER_RANK: dict[DataSovereigntyTier, int] = {"eu_sovereign": 0, "eu_hosted_foreign_law": 1, "non_eu": 2}
+
+
+def meets_tier(observed: DataSovereigntyTier, floor: DataSovereigntyTier | None) -> bool:
+    """Whether `observed` is at least as sovereign as `floor` — `True` with no floor declared."""
+    return floor is None or _TIER_RANK[observed] <= _TIER_RANK[floor]
 
 
 class ResourceRequirement(WireModel):
@@ -51,9 +64,9 @@ def resources_fit(requirement: ResourceRequirement, resources: MachineResources 
 
 
 class CloudInstanceType(WireModel):
-    """One instance type a cloud provider sells in one region: static catalog data (the provider's
-    own commercial type list), refreshed by re-running the provider's research — never queried live
-    per launch."""
+    """One instance type a cloud provider sells in one region — the SHAPE a server-side CSV-bound
+    registry populates (never a literal ships here); the provider's OWN quoted price/currency, an
+    honest pair rather than a silently-converted single number."""
 
     provider: CloudProviderKind
     name: str = Field(min_length=1, max_length=40)
@@ -64,9 +77,14 @@ class CloudInstanceType(WireModel):
     gpu_kind: AcceleratorKind = "none"
     gpu_count: int = Field(default=0, ge=0, le=16)
     vram_mb: int = Field(default=0, ge=0, le=1 << 20)
-    usd_per_hour: float = Field(ge=0)
+    price_per_hour: float = Field(ge=0)
+    currency: Literal["EUR", "USD"]
+    #: This instance's ACTUAL processing jurisdiction (ISO 3166-1 alpha-2), and the
+    #: `DataSovereigntyTier` it lands in — sourced from the same registry
+    #: `server.models.sovereignty` reads (§2 of cloud-compute-and-sovereignty CSV),
+    #: never a second, independently-typed encoding of the same fact.
     jurisdiction: str = Field(min_length=2, max_length=8)
-    sovereign: bool
+    sovereignty: DataSovereigntyTier
 
     def fits(self, requirement: ResourceRequirement) -> bool:
         if requirement.cpu_count is not None and self.cpu_count < requirement.cpu_count:
@@ -83,47 +101,24 @@ class CloudInstanceType(WireModel):
         return True
 
 
-#: Scaleway Instances API commercial types, fr-par-2 (the zone carrying every current GPU type;
-#: FR jurisdiction — the fr-par-* zones are the only ones physically in France, per
-#: ~/.github/research/scaleway-instances-api-2026-09-24.md §4). Every cpu/ram/disk/price cell is
-#: copied verbatim from that file's §2 pricing tables (Scaleway's own docs, fetched 2026-09-24) —
-#: never invented. `sovereign=False` on every row: SecNumCloud (ANSSI) is NOT qualified for any
-#: Scaleway zone yet (same source §4) — EU/French data residency is real, the certified-sovereign
-#: bar is not met, so this never silently reads as sovereign. GPU rows with no local disk in the
-#: catalog ("none (Block)") get a 125 GB placeholder — Scaleway's own documented GPU-OS root
-#: volume minimum (§1.6) — standing for the Block Storage volume this scheduler would attach.
-#: §6 of the source file: the LIVE catalog is `GET .../products/servers`, paginated — this static
-#: tuple is a snapshot for placement math, refreshed by re-running the provider's research, never
-#: hand-edited from a launch failure.
-CLOUD_INSTANCE_CATALOG: tuple[CloudInstanceType, ...] = (
-    CloudInstanceType(provider="scaleway", name="DEV1-S", region="fr-par-2", cpu_count=2, ram_mb=2 * 1024, disk_gb=20, usd_per_hour=0.008976, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="DEV1-M", region="fr-par-2", cpu_count=3, ram_mb=4 * 1024, disk_gb=40, usd_per_hour=0.020196, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="DEV1-L", region="fr-par-2", cpu_count=4, ram_mb=8 * 1024, disk_gb=80, usd_per_hour=0.04284, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="POP2-2C-8G", region="fr-par-2", cpu_count=2, ram_mb=8 * 1024, disk_gb=125, usd_per_hour=0.0735, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="POP2-8C-32G", region="fr-par-2", cpu_count=8, ram_mb=32 * 1024, disk_gb=125, usd_per_hour=0.29, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="RENDER-S", region="fr-par-2", cpu_count=10, ram_mb=42 * 1024, disk_gb=400, gpu_kind="cuda", gpu_count=1, vram_mb=16 * 1024, usd_per_hour=1.221, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="L4-1-24G", region="fr-par-2", cpu_count=8, ram_mb=48 * 1024, disk_gb=125, gpu_kind="cuda", gpu_count=1, vram_mb=24 * 1024, usd_per_hour=0.7875, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="L40S-1-48G", region="fr-par-2", cpu_count=8, ram_mb=96 * 1024, disk_gb=1600, gpu_kind="cuda", gpu_count=1, vram_mb=48 * 1024, usd_per_hour=1.469916, jurisdiction="FR", sovereign=False),
-    CloudInstanceType(provider="scaleway", name="H100-1-80G", region="fr-par-2", cpu_count=24, ram_mb=240 * 1024, disk_gb=3000, gpu_kind="cuda", gpu_count=1, vram_mb=80 * 1024, usd_per_hour=2.8665, jurisdiction="FR", sovereign=False),
-)
-
-
-def cheapest_fit(requirement: ResourceRequirement, provider: CloudProviderKind = "scaleway", region: str | None = None, sovereign_only: bool = False) -> CloudInstanceType | None:
-    """The cheapest catalog entry meeting `requirement`, or `None` if nothing in the catalog fits.
-    `region=None` searches every region for `provider`. `sovereign_only=True` is the HARD
-    placement constraint threat-model mitigation #6 calls for: a sovereignty-required workflow
-    must fail its provisioning request rather than silently land on a non-sovereign type — never
-    loosen this to "prefer sovereign, fall back otherwise"."""
+def cheapest_fit(requirement: ResourceRequirement, catalog: tuple[CloudInstanceType, ...], provider: CloudProviderKind = "scaleway", region: str | None = None, min_tier: DataSovereigntyTier | None = None) -> CloudInstanceType | None:
+    """The cheapest `catalog` entry meeting `requirement`, or `None` if nothing fits. `region=None`
+    searches every region for `provider`. `min_tier` is the HARD sovereignty floor (threat-model
+    mitigation #6): a caller with a `min_tier` set must get back `None` rather than a type ranked
+    below it — never a soft "prefer sovereign, fall back otherwise". Compares within `currency` —
+    ranking across mixed EUR/USD rows on raw `price_per_hour` would be wrong; callers comparing
+    across currencies convert first."""
     candidates = [
-        entry for entry in CLOUD_INSTANCE_CATALOG
-        if entry.provider == provider and (region is None or entry.region == region) and entry.fits(requirement) and (not sovereign_only or entry.sovereign)
+        entry for entry in catalog
+        if entry.provider == provider and (region is None or entry.region == region) and entry.fits(requirement) and meets_tier(entry.sovereignty, min_tier)
     ]
-    return min(candidates, key=lambda entry: entry.usd_per_hour) if candidates else None
+    return min(candidates, key=lambda entry: entry.price_per_hour) if candidates else None
 
 
 class WorkspaceCloudLimits(WireModel):
     """A workspace's server-side ceiling on cloud spend/fleet size — the blast-radius bound the
-    scheduler checks before EVERY cloud launch, never only a client-side flag."""
+    scheduler checks before EVERY cloud launch, never only a client-side flag. Denominated in USD,
+    the platform's own normalized accounting currency (matches the cost engine's usage records)."""
 
     max_machines: int = Field(default=2, ge=0, le=50)
     max_hourly_usd: float = Field(default=5.0, ge=0, le=1000)
@@ -135,8 +130,10 @@ class CloudMachine(WireModel):
     region: str = Field(min_length=1, max_length=40)
     instance_type: str = Field(min_length=1, max_length=40)
     jurisdiction: str = Field(min_length=2, max_length=8)
-    sovereign: bool
+    sovereignty: DataSovereigntyTier
     state: CloudMachineState
+    #: Normalized to USD at launch time from the catalog entry's own `price_per_hour`/`currency` —
+    #: the platform's accounting currency, not necessarily what the provider bills in.
     usd_per_hour: float = Field(ge=0)
     cost_usd_so_far: float = Field(default=0.0, ge=0)
     workflow_id: UUID | None = None
@@ -155,10 +152,12 @@ class CloudLaunchRequest(WireModel):
     requirement: ResourceRequirement
     provider: CloudProviderKind = "scaleway"
     region: str | None = None
-    #: Threat-model mitigation #6: a HARD constraint, never a soft preference. `True` refuses the
-    #: launch outright (before any provider call) when no catalog entry is both fitting and
-    #: `sovereign=True`, and re-checks the ACTUAL provisioning response before recording success.
-    sovereignty_required: bool = False
+    #: Threat-model mitigation #6: a HARD constraint, never a soft preference — mirrors
+    #: `SovereigntyRequired.min_sovereignty`'s exact shape over the finer per-endpoint tier axis.
+    #: `None` = unconstrained (today's default). Refuses the launch outright (before any provider
+    #: call) when no catalog entry both fits and meets this floor, and re-checks the ACTUAL
+    #: provisioning response's landed region against it before recording success.
+    min_sovereignty_tier: DataSovereigntyTier | None = None
 
 
 class PlacementDecision(WireModel):
@@ -181,17 +180,17 @@ def choose_placement(requirement: ResourceRequirement, candidates: tuple[tuple[M
 
 
 class MachineSovereignty(WireModel):
-    """Where a self-hosted machine's compute physically runs and whether that counts as sovereign
-    for this workspace — the OWNER'S OWN declaration (a laptop's IP-geolocation is not proof of
-    where it sits), never auto-detected. Mirrors `MachineCostRate`: unset until the owner sets it,
-    never a guessed default. A `CloudMachine`'s jurisdiction/sovereign instead come straight from
-    the `CloudInstanceType` it was launched as — provider-determined, not owner-declared."""
+    """Where a self-hosted machine's compute physically runs and what tier that counts as for this
+    workspace — the OWNER'S OWN declaration (a laptop's IP-geolocation is not proof of where it
+    sits), never auto-detected. Mirrors `MachineCostRate`: unset until the owner sets it, never a
+    guessed default. A `CloudMachine`'s jurisdiction/sovereignty instead come straight from the
+    `CloudInstanceType` it was launched as — provider-determined, not owner-declared."""
 
     machine: MachineRef
     jurisdiction: str = Field(min_length=2, max_length=8)
-    sovereign: bool
+    sovereignty: DataSovereigntyTier
 
 
 class MachineSovereigntyUpdate(WireModel):
     jurisdiction: str = Field(min_length=2, max_length=8)
-    sovereign: bool
+    sovereignty: DataSovereigntyTier

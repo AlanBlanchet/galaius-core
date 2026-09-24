@@ -87,7 +87,6 @@ from .cost import (
     priced_cost,
 )
 from .cloud import (
-    CLOUD_INSTANCE_CATALOG,
     CloudInstanceType,
     CloudLaunchRequest,
     CloudMachine,
@@ -100,11 +99,12 @@ from .cloud import (
     WorkspaceCloudLimits,
     cheapest_fit,
     choose_placement,
+    meets_tier,
     resources_fit,
 )
 from .workflows import (
     ValueType,
-    DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, PROVIDER_SOVEREIGNTY, provider_sovereignty, workflow_sovereignty, WorkflowFunctionTool,
+    DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, provider_sovereignty, workflow_sovereignty, WorkflowFunctionTool,
     NodeSovereigntyRecord, actual_workflow_sovereignty, SovereigntyRequired, meets_requirement,
     NodeLibraryRef, NodeLibraryDefinition, NodeLibraryEntry, NodeLibraryUse,
     Effect, Implementation, BuiltinImplementation, AgentImplementation, ModelImplementation, FunctionImplementation, ScriptImplementation, ConnectorImplementation, SubgraphImplementation, MachineImplementation, BuiltinOp, WorkflowNode, 
@@ -156,7 +156,7 @@ __all__ = [
     "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceMemberRoleUpdate", "WorkspaceRole", "WorkspaceUpdate",
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
-    "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "DataSovereigntyTier", "ProviderSovereignty", "PROVIDER_SOVEREIGNTY", "provider_sovereignty", "workflow_sovereignty", "WorkflowFunctionTool",
+    "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "DataSovereigntyTier", "ProviderSovereignty", "provider_sovereignty", "workflow_sovereignty", "WorkflowFunctionTool",
     "NodeSovereigntyRecord", "actual_workflow_sovereignty", "SovereigntyRequired", "meets_requirement",
     "BudgetOverrun", "CostUnit", "NodeCostActual", "NodeCostEstimate", "NodeCostModel", "NodeUsage", "PlatformPricing", "PLATFORM_PRICING", "PriceSource", "PriceSourceKind", "RunCostActual", "RunCostEstimate", "UnitPrice", "USAGE_FIELD", "priced_cost",
     "MachineCostRate", "MachineCostRateUpdate",
@@ -166,7 +166,7 @@ __all__ = [
     "HttpAgentTool", "ManualTrigger", "ScheduleTrigger", "SubscriptionConfiguration", "ToolInputProperty", "ToolInputSchema", "TriggerBinding", "TriggerConfigurationUpdate", "TriggerCreate", "TriggerDefinition", "TriggerDispatch", "TriggerEnableUpdate", "TriggerInputMapping", "TriggerInvocation", "TriggerScheduleState", "VariableSpec", "WebhookCredentialCreated", "WebhookCredentialSummary", "WebhookTrigger",
     "WorkflowAgentActivity", "WorkflowCapabilityActivity", "WorkflowEdge", "WorkflowEvent", "WorkflowInterface", "ProviderUsage", "UsageSummary", "WorkflowKey", "WorkflowRevision", "WorkflowRevisionRef", "WorkflowRun", "WorkflowValueSummary",
     "MachineRef", "MachineRuntime", "MachineAccelerator", "MachineFunctionSummary", "MachineSummary", "MachineCreateRequest", "MachineCreated", "MachineCommand", "MachineCommandResult", "MachineEvent",
-    "CLOUD_INSTANCE_CATALOG", "CloudInstanceType", "CloudLaunchRequest", "CloudMachine", "CloudMachineState", "CloudProviderKind", "MachineResources", "MachineSovereignty", "MachineSovereigntyUpdate", "PlacementDecision", "ResourceRequirement", "WorkspaceCloudLimits", "cheapest_fit", "choose_placement", "resources_fit",
+    "CloudInstanceType", "CloudLaunchRequest", "CloudMachine", "CloudMachineState", "CloudProviderKind", "MachineResources", "MachineSovereignty", "MachineSovereigntyUpdate", "PlacementDecision", "ResourceRequirement", "WorkspaceCloudLimits", "cheapest_fit", "choose_placement", "meets_tier", "resources_fit",
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
     "ValuePreview", "VALUE_PREVIEW_MAX_PIXELS", "VALUE_PREVIEW_MAX_BYTES",
     "UserModel", "UserModelOrigin", "UserModelOriginKind", "UserModelRef",
