@@ -5,7 +5,7 @@ import json
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
-from typing import Annotated, Literal, Self, get_args
+from typing import Annotated, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -16,10 +16,54 @@ from .prompts import PromptExecutionRef, PromptRevision
 from .wire import WireModel
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio"]
-#: Value types carried as a stored file; `boxes` is structured JSON (label, score, box per item).
-FILE_VALUE_TYPES = frozenset({"artifact", "image", "mask", "mesh", "video", "audio"})
 WorkflowValue = str | float | bool | dict[str, object] | list[object]
 WorkspaceApiKeyScope = Literal["read", "write", "execute"]
+
+
+class ValueTypeSpec(WireModel):
+    """One port value type: whether its values are stored files, the WIDER types a value of it may
+    flow into (`widens`, followed transitively), and the narrower-looking types its ports also take
+    (`accepts_from`: an image port takes a text PATH, as the machine-side models read files). The
+    ONE lattice both the server's save validation and the canvas read (generated to TS)."""
+
+    name: ValueType
+    file: bool = False
+    widens: tuple[ValueType, ...] = ()
+    accepts_from: tuple[ValueType, ...] = ()
+
+
+VALUE_TYPES: tuple[ValueTypeSpec, ...] = (
+    ValueTypeSpec(name="text"),
+    ValueTypeSpec(name="number"),
+    ValueTypeSpec(name="boolean"),
+    ValueTypeSpec(name="json"),
+    ValueTypeSpec(name="artifact", file=True),
+    ValueTypeSpec(name="image", file=True, widens=("artifact",), accepts_from=("text",)),
+    ValueTypeSpec(name="mask", file=True, widens=("image", "json")),
+    #: Structured JSON (label, score, box per item), not a file.
+    ValueTypeSpec(name="boxes", widens=("json",)),
+    ValueTypeSpec(name="mesh", file=True, widens=("artifact",)),
+    ValueTypeSpec(name="video", file=True, widens=("artifact",)),
+    ValueTypeSpec(name="audio", file=True, widens=("artifact",)),
+)
+_VALUE_TYPE_SPECS = {spec.name: spec for spec in VALUE_TYPES}
+#: Value types carried as a stored file (an `ArtifactRef` at run time).
+FILE_VALUE_TYPES = frozenset(spec.name for spec in VALUE_TYPES if spec.file)
+
+
+def value_type_widening(name: str) -> tuple[str, ...]:
+    """Every type a value of `name` can be read as: itself, then every wider type, transitively."""
+    seen = [name]
+    for current in seen:
+        for wider in (_VALUE_TYPE_SPECS[current].widens if current in _VALUE_TYPE_SPECS else ()):
+            if wider not in seen:
+                seen.append(wider)
+    return tuple(seen)
+
+
+def value_type_accepts(source: str, target: str) -> bool:
+    """A wire from a `source`-typed output may enter a `target`-typed input."""
+    return target in value_type_widening(source) or (target in _VALUE_TYPE_SPECS and source in _VALUE_TYPE_SPECS[target].accepts_from)
 
 
 class PortSpec(WireModel):
@@ -61,7 +105,6 @@ class MachineRef(WireModel):
     id: UUID
 
 
-VisionModel = Literal["facebook/detr-resnet-50", "facebook/detr-resnet-50-panoptic"]
 
 #: What a model does, named by the Hugging Face Hub `pipeline_tag` ids (huggingface.js
 #: `PIPELINE_DATA`) — an existing cross-vendor vocabulary, so a hosted API model and a local
@@ -71,11 +114,22 @@ ModelTask = Literal[
     "feature-extraction", "text-to-speech", "automatic-speech-recognition", "image-to-3d", "text-to-3d",
 ]
 
-#: The machine-runnable vision checkpoints (`MachineCommand.model`) and the task each performs.
-VISION_MODEL_TASKS: dict[str, ModelTask] = {
-    "facebook/detr-resnet-50": "object-detection",
-    "facebook/detr-resnet-50-panoptic": "image-segmentation",
-}
+class MachineModelSpec(WireModel):
+    """A checkpoint an enrolled machine can run itself (`MachineCommand.model`): its Hugging Face id,
+    the task it performs and its licence. The ONE list the server's catalog, the command contract
+    and the machine runner read."""
+
+    id: str = Field(min_length=1, max_length=160)
+    task: ModelTask
+    license: str = Field(min_length=1, max_length=80)
+
+
+MACHINE_MODELS: dict[str, MachineModelSpec] = {spec.id: spec for spec in (
+    MachineModelSpec(id="facebook/detr-resnet-50", task="object-detection", license="Apache-2.0"),
+    MachineModelSpec(id="facebook/detr-resnet-50-panoptic", task="image-segmentation", license="Apache-2.0"),
+)}
+#: The same registry read as model -> task.
+VISION_MODEL_TASKS: dict[str, ModelTask] = {model: spec.task for model, spec in MACHINE_MODELS.items()}
 
 
 def _port(name: str, direction: Literal["input", "output"], value_type: str, required: bool = True, multiple: bool = False) -> "PortSpec":
@@ -505,7 +559,7 @@ class MachineCommand(WireModel):
     node_id: UUID
     action: Literal["agent", "model", "function", "script"] = "agent"
     agent: AgentRevisionRef | None = None
-    model: VisionModel | None = None
+    model: str | None = Field(default=None, min_length=1, max_length=160)
     image_paths: tuple[str, ...] = Field(default=(), max_length=16)
     score_threshold: FiniteFloat = Field(default=0.5, ge=0, le=1)
     function: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=80)
@@ -522,6 +576,13 @@ class MachineCommand(WireModel):
     expires_at: datetime
     task: str | None = Field(default=None, min_length=1, max_length=1 << 16)
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("model")
+    @classmethod
+    def registered_model(cls, value: str | None) -> str | None:
+        if value is not None and value not in MACHINE_MODELS:
+            raise ValueError("machine model is not in the machine model registry")
+        return value
 
     @model_validator(mode="after")
     def coherent_action(self) -> Self:
@@ -959,10 +1020,16 @@ class WorkflowNode(WireModel):
     y: float
     ports: tuple[PortSpec, ...] = Field(max_length=64)
 
+    def _position(self) -> dict[str, object]:
+        return {"id": self.id, "label": self.label, "x": self.x, "y": self.y, "ports": self.ports}
+
 
 class InputNode(WorkflowNode):
     kind: Literal["input"]
     value: WorkflowValue
+
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=BuiltinImplementation(kind="builtin", op="input"), config={"value": self.value})
 
 
 class ProcessingNode(WorkflowNode):
@@ -971,11 +1038,24 @@ class ProcessingNode(WorkflowNode):
     model: ConfiguredModelRef | None = None
     connection: ConnectionResourceRef | None = None
 
+    def generic(self) -> "GenericNode":
+        # `model` is never set (save validation refuses it): the generic shape drops it.
+        config = {} if self.connection is None else {"connection": self.connection.model_dump(mode="json")}
+        return GenericNode(**self._position(), impl=BuiltinImplementation(kind="builtin", op=self.operation), config=config)
+
 
 class ResultNode(WorkflowNode):
     kind: Literal["result"]
     connection: ConnectionResourceRef | None = None
     artifact_path: str | None = Field(default=None, min_length=1, max_length=512)
+
+    def generic(self) -> "GenericNode":
+        config: dict[str, WorkflowValue] = {}
+        if self.connection is not None:
+            config["connection"] = self.connection.model_dump(mode="json")
+        if self.artifact_path is not None:
+            config["artifact_path"] = self.artifact_path
+        return GenericNode(**self._position(), impl=BuiltinImplementation(kind="builtin", op="write_artifact" if self.artifact_path else "output"), config=config)
 
 
 class CompositeNode(WorkflowNode):
@@ -983,12 +1063,18 @@ class CompositeNode(WorkflowNode):
     workflow: WorkflowRevisionRef
     variables: dict[str, WorkflowValue] = Field(default_factory=dict)
 
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=SubgraphImplementation(kind="subgraph", ref=self.workflow), config=dict(self.variables))
+
 
 class AgentTaskNode(WorkflowNode):
     kind: Literal["agent_task"]
     agent: AgentRevisionRef
     parameters: dict[str, WorkflowValue] = Field(default_factory=dict)
     machine: MachineRef | None = None
+
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=AgentImplementation(kind="agent", agent=self.agent), config=dict(self.parameters), placement=_machine_placement(self.machine))
 
 
 class Placement(WireModel):
@@ -1024,6 +1110,9 @@ class ModelTaskNode(WorkflowNode):
             raise ValueError("model node ports must be its task's signature")
         return self
 
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=ModelImplementation(kind="model", provider=self.provider, model=self.model, task=self.task), config=dict(self.config), placement=self.placement)
+
 
 DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool, Field(discriminator="kind")]
 
@@ -1034,6 +1123,9 @@ class ToolTaskNode(WorkflowNode):
     kind: Literal["tool_task"]
     tool: DirectTool
     arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
+
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=ConnectorImplementation(kind="connector", tool=self.tool), config=dict(self.arguments))
 
 
 class MachineFunctionTaskNode(WorkflowNode):
@@ -1050,6 +1142,9 @@ class MachineFunctionTaskNode(WorkflowNode):
     function: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     function_version: str = Field(pattern=r"^[0-9a-f]{64}$")
     arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
+
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=FunctionImplementation(kind="function", name=self.function, version=self.function_version), config=dict(self.arguments), placement=_machine_placement(self.machine))
 
 
 class ScriptTaskNode(WorkflowNode):
@@ -1076,6 +1171,9 @@ class ScriptTaskNode(WorkflowNode):
             raise ValueError("script node source does not match its pinned digest")
         return self
 
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=ScriptImplementation(kind="script", language=self.language, source_digest=self.source_digest), config={"source": self.source}, placement=_machine_placement(self.machine))
+
 
 class NodeLibraryRef(WireModel):
     id: UUID
@@ -1089,6 +1187,139 @@ class LibraryNode(WorkflowNode):
 
     kind: Literal["library"]
     library: NodeLibraryRef
+
+    def generic(self) -> "GenericNode":
+        return GenericNode(**self._position(), impl=SubgraphImplementation(kind="subgraph", ref=self.library))
+
+
+# ---- The generic node (docs: .github/memory/generic-node-contract.md) ----
+#
+# Every node is ONE shape: what it runs (`impl`, data only), its `ports`, its `config` (settings
+# AND the constants of unwired input ports) and its `placement`. Phase A: each kind class below
+# exposes that shape as a view (`generic()`), and the server dispatches on `impl.kind`; saved JSON
+# keeps the kind classes. Phase B rewrites the stored nodes to `GenericNode` and deletes them.
+
+#: What a node reaches outside the workflow: a model provider, a connector / API, or an enrolled
+#: machine. A pure function workflow has none, at any depth.
+Effect = Literal["model", "connector", "machine"]
+
+
+class _Implementation(WireModel):
+    #: What running it reaches; `placement` on a machine adds "machine" (GenericNode.effects).
+    effects: ClassVar[frozenset[str]] = frozenset()
+
+    def signature(self) -> tuple[PortSpec, ...] | None:
+        """The ports this implementation fixes by itself, or None when they come from outside it
+        (a machine's advertised function, a tool's schema, a subgraph's interface, an agent)."""
+        return None
+
+    def check(self, config: dict[str, WorkflowValue]) -> None:
+        """Rules binding this implementation to its config; raises ValueError."""
+
+
+class BuiltinImplementation(_Implementation):
+    """Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through
+    a configured connection, or an artifact write to workspace storage."""
+
+    kind: Literal["builtin"]
+    op: Literal["input", "output", "write_artifact", "uppercase", "lowercase", "identity", "http_get"]
+
+
+class AgentImplementation(_Implementation):
+    kind: Literal["agent"]
+    agent: AgentRevisionRef
+    effects: ClassVar[frozenset[str]] = frozenset({"model"})
+
+
+class ModelImplementation(_Implementation):
+    """Any model typed by its task (`ModelTask`, Hugging Face pipeline tags)."""
+
+    kind: Literal["model"]
+    provider: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
+    model: str = Field(min_length=1, max_length=160)
+    task: ModelTask
+    effects: ClassVar[frozenset[str]] = frozenset({"model"})
+
+    def signature(self) -> tuple[PortSpec, ...]:
+        return model_task_ports(self.task)
+
+
+class FunctionImplementation(_Implementation):
+    """A function an enrolled machine declared, pinned to the exact signature it was wired against."""
+
+    kind: Literal["function"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    version: str = Field(pattern=r"^[0-9a-f]{64}$")
+    effects: ClassVar[frozenset[str]] = frozenset({"machine"})
+
+
+class ScriptImplementation(_Implementation):
+    """Server-authored source, pinned by digest; the source itself is `config["source"]`."""
+
+    kind: Literal["script"]
+    language: Literal["python", "shell"]
+    source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    effects: ClassVar[frozenset[str]] = frozenset({"machine"})
+
+    def check(self, config: dict[str, WorkflowValue]) -> None:
+        source = config.get("source")
+        if not isinstance(source, str) or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
+            raise ValueError("script node source does not match its pinned digest")
+
+
+class ConnectorImplementation(_Implementation):
+    """A configured connector or API operation (`DirectTool`), executable without a model call."""
+
+    kind: Literal["connector"]
+    tool: DirectTool
+    effects: ClassVar[frozenset[str]] = frozenset({"connector"})
+
+
+class SubgraphImplementation(_Implementation):
+    """Another graph run as one node: a saved workflow pinned to a revision, or a reusable node from
+    the workspace's library (its current definition). Its effects are its contents' (resolved by
+    whoever can read them: the server expands it)."""
+
+    kind: Literal["subgraph"]
+    ref: WorkflowRevisionRef | NodeLibraryRef
+
+
+Implementation = Annotated[BuiltinImplementation | AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation | ConnectorImplementation | SubgraphImplementation, Field(discriminator="kind")]
+
+
+def _machine_placement(machine: MachineRef | None) -> Placement:
+    return Placement(target="machine", machine=machine) if machine is not None else Placement()
+
+
+class GenericNode(WireModel):
+    """One node, whatever it runs. `config` holds the implementation's settings AND the constant
+    value of any input port left unwired (a wire, when present, wins)."""
+
+    id: UUID
+    label: str = Field(min_length=1, max_length=120)
+    x: float
+    y: float
+    impl: Implementation
+    ports: tuple[PortSpec, ...] = Field(max_length=64)
+    config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    placement: Placement = Field(default_factory=Placement)
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        signature = self.impl.signature()
+        if signature is not None and self.ports != signature:
+            raise ValueError("node ports must be its implementation's signature")
+        self.impl.check(self.config)
+        return self
+
+    @property
+    def effects(self) -> frozenset[str]:
+        return self.impl.effects | ({"machine"} if self.placement.target == "machine" else frozenset())
+
+    def constant(self, port: str) -> WorkflowValue | None:
+        """The constant an unwired input port takes, or None."""
+        value = self.config.get(port)
+        return None if value in (None, "") else value
 
 
 #: What a library definition may hold: any configured node but another reference (one level).
@@ -1145,7 +1376,10 @@ class NodeLibraryDefinition(WireModel):
                         counter += 1
                     name = f"{candidates[1]}_{counter}"
                 taken.add(name)
-                result.append((port.model_copy(update={"name": name[:80]}), address))
+                # An inner input holding a constant has its default: the boundary port is optional
+                # (a wire into the reusable node, when present, still wins).
+                optional = port.direction == "input" and node.generic().constant(port.name) is not None
+                result.append((port.model_copy(update={"name": name[:80], **({"required": False} if optional else {})}), address))
         return tuple(result)
 
     def ports(self) -> tuple[PortSpec, ...]:
@@ -1187,8 +1421,8 @@ class WorkflowBlockAvailability(WireModel):
     def builtins(cls):
         entries = []
         for node_type in get_args(get_args(Node)[0]):
-            if node_type in (ToolTaskNode, MachineFunctionTaskNode):
-                continue  # Tool and machine-function blocks come from live workspace/machine state.
+            if node_type in (ToolTaskNode, MachineFunctionTaskNode, LibraryNode):
+                continue  # Tool, machine-function and reusable-node blocks come from live workspace/machine state.
             kind = get_args(node_type.model_fields["kind"].annotation)[0]
             if node_type is ScriptTaskNode:
                 # A machine to run it is the only catalog-time requirement -- language and source

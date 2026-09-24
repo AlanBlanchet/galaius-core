@@ -49,6 +49,9 @@ from interact_core import (
     MachineFunctionSummary,
     MachineFunctionTaskNode,
     ModelTaskNode,
+    Placement,
+    VISION_MODEL_TASKS,
+    model_task_ports,
     PortSpec,
     ScriptTaskNode,
     WorkflowBlockAvailability,
@@ -203,15 +206,11 @@ def test_machine_wire_contract_binds_commands_and_results() -> None:
         MachineCommandResult(command_id=command.id, nonce=command.nonce, status="failed")
 
 
-def test_model_node_and_machine_command_bind_local_vision_execution() -> None:
+def test_model_node_is_typed_by_its_task_and_binds_local_vision_execution() -> None:
     machine = MachineRef(id=uuid4())
     node = ModelTaskNode(
-        kind="model", id=uuid4(), label="Detect", x=0, y=0,
-        model="facebook/detr-resnet-50", machine=machine,
-        ports=(
-            PortSpec(name="images", direction="input", value_type="text", multiple=True),
-            PortSpec(name="result", direction="output", value_type="json"),
-        ),
+        kind="model", id=uuid4(), label="Detect", x=0, y=0, provider="huggingface", model="facebook/detr-resnet-50", task="object-detection",
+        placement=Placement(target="machine", machine=machine), ports=model_task_ports("object-detection"), config={"score_threshold": 0.4},
     )
     command = MachineCommand(
         id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
@@ -219,12 +218,15 @@ def test_model_node_and_machine_command_bind_local_vision_execution() -> None:
         node_id=node.id, action="model", model=node.model, image_paths=("photo.jpg",),
         expires_at=datetime.now(UTC), signature="a" * 64,
     )
-    model_block = next(block for block in WorkflowBlockAvailability.builtins() if block.kind == "model")
-
-    assert command.action == "model"
-    assert command.image_paths == ("photo.jpg",)
-    assert model_block.readiness == "config_required"
-    assert model_block.required_config_fields == ("machine", "model")
+    assert command.action == "model" and command.image_paths == ("photo.jpg",)
+    assert VISION_MODEL_TASKS[node.model] == node.task
+    # Ports are the task's signature, whoever serves it; a node claiming other ports is refused.
+    with pytest.raises(ValidationError, match="task's signature"):
+        ModelTaskNode(kind="model", id=uuid4(), label="Video", x=0, y=0, provider="gemini", model="veo-3.1-lite-generate-preview", task="text-to-video", ports=model_task_ports("text-to-image"))
+    with pytest.raises(ValidationError, match="names its machine"):
+        Placement(target="machine")
+    # Model blocks come from the model catalog, never the static builtins.
+    assert not any(block.kind == "model" for block in WorkflowBlockAvailability.builtins())
 
 
 def test_machine_function_node_pins_version_and_dispatches_typed_ports() -> None:

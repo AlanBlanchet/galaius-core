@@ -2163,8 +2163,34 @@
     },
     "ModelTaskNode": {
       "additionalProperties": false,
-      "description": "Run a cached vision model on one enrolled machine over local image paths.",
+      "description": "Any model, one node: a hosted API model or a local checkpoint, typed by its `task`. Ports\nare the task's signature (`model_task_ports`); `config` holds the model's parameters AND the\nconstant value of any input port left unwired, so a node tried in the Models area keeps its\ninputs when dropped into a workflow.",
       "properties": {
+        "config": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "maxProperties": 32,
+          "title": "Config",
+          "type": "object"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
@@ -2181,16 +2207,14 @@
           "title": "Label",
           "type": "string"
         },
-        "machine": {
-          "$ref": "#/$defs/MachineRef"
-        },
         "model": {
-          "enum": [
-            "facebook/detr-resnet-50",
-            "facebook/detr-resnet-50-panoptic"
-          ],
+          "maxLength": 160,
+          "minLength": 1,
           "title": "Model",
           "type": "string"
+        },
+        "placement": {
+          "$ref": "#/$defs/Placement"
         },
         "ports": {
           "items": {
@@ -2200,12 +2224,28 @@
           "title": "Ports",
           "type": "array"
         },
-        "score_threshold": {
-          "default": 0.5,
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Score Threshold",
-          "type": "number"
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Provider",
+          "type": "string"
+        },
+        "task": {
+          "enum": [
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d"
+          ],
+          "title": "Task",
+          "type": "string"
         },
         "x": {
           "title": "X",
@@ -2223,8 +2263,9 @@
         "y",
         "ports",
         "kind",
+        "provider",
         "model",
-        "machine"
+        "task"
       ],
       "title": "ModelTaskNode",
       "type": "object"
@@ -2275,6 +2316,7 @@
                 "model": "#/$defs/ModelTaskNode",
                 "processing": "#/$defs/ProcessingNode",
                 "result": "#/$defs/ResultNode",
+                "script": "#/$defs/ScriptTaskNode",
                 "tool_task": "#/$defs/ToolTaskNode"
               },
               "propertyName": "kind"
@@ -2303,6 +2345,9 @@
               },
               {
                 "$ref": "#/$defs/MachineFunctionTaskNode"
+              },
+              {
+                "$ref": "#/$defs/ScriptTaskNode"
               }
             ]
           },
@@ -2439,6 +2484,34 @@
       "title": "ObjectStorageAgentTool",
       "type": "object"
     },
+    "Placement": {
+      "additionalProperties": false,
+      "description": "Where a node runs: on the server (hosted APIs), or on one enrolled machine (local\ncheckpoints, the owner's own GPU \u2014 data stays on it).",
+      "properties": {
+        "machine": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MachineRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target": {
+          "default": "server",
+          "enum": [
+            "server",
+            "machine"
+          ],
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "title": "Placement",
+      "type": "object"
+    },
     "PortAddress": {
       "additionalProperties": false,
       "properties": {
@@ -2519,7 +2592,9 @@
             "image",
             "mask",
             "mesh",
-            "boxes"
+            "boxes",
+            "video",
+            "audio"
           ],
           "title": "Value Type",
           "type": "string"
@@ -2889,6 +2964,80 @@
         "timezone"
       ],
       "title": "ScheduleTrigger",
+      "type": "object"
+    },
+    "ScriptTaskNode": {
+      "additionalProperties": false,
+      "description": "Server-authored source (Python or shell), pinned by content digest, dispatched to run on\none enrolled machine \u2014 a NEW code-execution boundary a threat-modeler review (2026-09-24)\ngated before this class existed: same-workflow tampering by any mutate-role workspace member\n(not just a stranger targeting another account's machine) can inject or edit this node's\n`source`, so the machine owner must explicitly approve the exact `source_digest` before the\nserver will ever dispatch it (`MachineStore.script_approved`); this is checked ON TOP OF the\nper-command signature, never instead of it. `source_digest` is derived from `source` itself\n(never a separately-settable field two values could disagree on), and any edit to `source`\nchanges the digest, which re-arms approval automatically \u2014 there is no \"same script, new\ntext\" path that skips a fresh owner decision.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "script",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "python",
+            "shell"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "machine": {
+          "$ref": "#/$defs/MachineRef"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "source": {
+          "maxLength": 65536,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "source_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Digest",
+          "type": "string"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "ports",
+        "kind",
+        "machine",
+        "language",
+        "source",
+        "source_digest"
+      ],
+      "title": "ScriptTaskNode",
       "type": "object"
     },
     "SshAgentTool": {
@@ -3763,7 +3912,9 @@
             "image",
             "mask",
             "mesh",
-            "boxes"
+            "boxes",
+            "video",
+            "audio"
           ],
           "title": "Value Type",
           "type": "string"
@@ -3949,7 +4100,8 @@
             "model",
             "tool_task",
             "library",
-            "machine_function"
+            "machine_function",
+            "script"
           ],
           "title": "Kind",
           "type": "string"
@@ -4425,6 +4577,7 @@
                 "model": "#/$defs/ModelTaskNode",
                 "processing": "#/$defs/ProcessingNode",
                 "result": "#/$defs/ResultNode",
+                "script": "#/$defs/ScriptTaskNode",
                 "tool_task": "#/$defs/ToolTaskNode"
               },
               "propertyName": "kind"
@@ -4453,6 +4606,9 @@
               },
               {
                 "$ref": "#/$defs/MachineFunctionTaskNode"
+              },
+              {
+                "$ref": "#/$defs/ScriptTaskNode"
               },
               {
                 "$ref": "#/$defs/LibraryNode"
