@@ -50,6 +50,7 @@ from interact_core import (
     MachineFunctionTaskNode,
     ModelTaskNode,
     PortSpec,
+    ScriptTaskNode,
     WorkflowBlockAvailability,
 )
 
@@ -259,6 +260,47 @@ def test_machine_function_node_pins_version_and_dispatches_typed_ports() -> None
             id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
             workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
             node_id=node.id, action="function", expires_at=datetime.now(UTC), signature="a" * 64,
+        )
+
+
+def test_script_node_pins_its_own_source_digest_and_the_command_re_checks_it() -> None:
+    """A script node's `source_digest` is computed from ITS OWN `source`, never trusted as a
+    separate field a saver could mismatch -- and `MachineCommand` re-derives + compares the same
+    digest again, so the wire itself refuses a payload whose source and digest disagree (the
+    threat-modeler's mitigation #3: no silent drift between what was approved and what runs)."""
+    machine = MachineRef(id=uuid4())
+    source = "print('hi')\n"
+    digest = hashlib.sha256(source.encode()).hexdigest()
+    node = ScriptTaskNode(
+        kind="script", id=uuid4(), label="Greet", x=0, y=0, machine=machine,
+        language="python", source=source, source_digest=digest,
+        ports=(PortSpec(name="result", direction="output", value_type="text"),),
+    )
+    assert node.source_digest == digest
+    with pytest.raises(ValidationError, match="digest"):
+        ScriptTaskNode(kind="script", id=uuid4(), label="Bad", x=0, y=0, machine=machine,
+                        language="python", source=source, source_digest="a" * 64, ports=node.ports)
+
+    command = MachineCommand(
+        id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
+        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+        node_id=node.id, action="script", script_language="python", script_source=source,
+        script_source_digest=digest, expires_at=datetime.now(UTC), signature="a" * 64,
+    )
+    assert command.script_source_digest == digest
+    with pytest.raises(ValidationError, match="digest"):
+        MachineCommand(
+            id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
+            workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+            node_id=node.id, action="script", script_language="python", script_source=source,
+            script_source_digest="b" * 64, expires_at=datetime.now(UTC), signature="a" * 64,
+        )
+    with pytest.raises(ValidationError, match="agent"):
+        MachineCommand(
+            id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
+            workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
+            node_id=node.id, action="agent", agent=AgentRevisionRef(id=uuid4(), revision=uuid4()),
+            task="x", script_language="python", expires_at=datetime.now(UTC), signature="a" * 64,
         )
 
 

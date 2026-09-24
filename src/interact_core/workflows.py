@@ -15,9 +15,9 @@ from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
 
-ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes"]
+ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio"]
 #: Value types carried as a stored file; `boxes` is structured JSON (label, score, box per item).
-FILE_VALUE_TYPES = frozenset({"artifact", "image", "mask", "mesh"})
+FILE_VALUE_TYPES = frozenset({"artifact", "image", "mask", "mesh", "video", "audio"})
 WorkflowValue = str | float | bool | dict[str, object] | list[object]
 WorkspaceApiKeyScope = Literal["read", "write", "execute"]
 
@@ -62,6 +62,44 @@ class MachineRef(WireModel):
 
 
 VisionModel = Literal["facebook/detr-resnet-50", "facebook/detr-resnet-50-panoptic"]
+
+#: What a model does, named by the Hugging Face Hub `pipeline_tag` ids (huggingface.js
+#: `PIPELINE_DATA`) — an existing cross-vendor vocabulary, so a hosted API model and a local
+#: checkpoint doing the same job share one task and one port signature.
+ModelTask = Literal[
+    "text-generation", "text-to-image", "text-to-video", "object-detection", "image-segmentation",
+    "feature-extraction", "text-to-speech", "automatic-speech-recognition", "image-to-3d", "text-to-3d",
+]
+
+#: The machine-runnable vision checkpoints (`MachineCommand.model`) and the task each performs.
+VISION_MODEL_TASKS: dict[str, ModelTask] = {
+    "facebook/detr-resnet-50": "object-detection",
+    "facebook/detr-resnet-50-panoptic": "image-segmentation",
+}
+
+
+def _port(name: str, direction: Literal["input", "output"], value_type: str, required: bool = True, multiple: bool = False) -> "PortSpec":
+    return PortSpec(name=name, direction=direction, value_type=value_type, required=required, multiple=multiple)
+
+
+def model_task_ports(task: ModelTask) -> tuple["PortSpec", ...]:
+    """The port signature every model performing `task` exposes, whoever serves it. Machine-local
+    vision tasks read image PATHS on that machine (images never leave it) and return the runner's
+    JSON manifest (labels, scores, boxes or mask files, overlay preview)."""
+    prompt = _port("prompt", "input", "text")
+    reference = _port("image", "input", "image", required=False)
+    return {
+        "text-generation": (prompt, _port("text", "output", "text")),
+        "text-to-image": (prompt, reference, _port("image", "output", "image")),
+        "text-to-video": (prompt, reference, _port("video", "output", "video")),
+        "object-detection": (_port("images", "input", "text", multiple=True), _port("result", "output", "json")),
+        "image-segmentation": (_port("images", "input", "text", multiple=True), _port("result", "output", "json")),
+        "feature-extraction": (_port("text", "input", "text"), _port("embedding", "output", "json")),
+        "text-to-speech": (_port("text", "input", "text"), _port("audio", "output", "audio")),
+        "automatic-speech-recognition": (_port("audio", "input", "audio"), _port("text", "output", "text")),
+        "image-to-3d": (_port("image", "input", "image"), _port("mesh", "output", "mesh")),
+        "text-to-3d": (prompt, _port("mesh", "output", "mesh")),
+    }[task]
 
 
 class MachineRuntime(WireModel):
@@ -465,7 +503,7 @@ class MachineCommand(WireModel):
     run_id: UUID
     workflow: WorkflowRevisionRef
     node_id: UUID
-    action: Literal["agent", "model", "function"] = "agent"
+    action: Literal["agent", "model", "function", "script"] = "agent"
     agent: AgentRevisionRef | None = None
     model: VisionModel | None = None
     image_paths: tuple[str, ...] = Field(default=(), max_length=16)
@@ -473,20 +511,34 @@ class MachineCommand(WireModel):
     function: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=80)
     function_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     function_arguments: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    #: A script command carries its own SOURCE (never a blob-store reference the server would
+    #: have to scope-check cross-workspace) so the runner re-hashes and compares it against
+    #: `script_source_digest` locally, on top of the server's own pre-dispatch approval gate
+    #: (`MachineStore.script_approved`) -- two independent checks of the same exact bytes, never
+    #: one trusted alone. `script_language` picks python vs shell interpreter on the runner.
+    script_language: Literal["python", "shell"] | None = None
+    script_source: str | None = Field(default=None, min_length=1, max_length=1 << 16)
+    script_source_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     expires_at: datetime
     task: str | None = Field(default=None, min_length=1, max_length=1 << 16)
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def coherent_action(self) -> Self:
-        if self.action == "agent" and (self.agent is None or self.task is None or self.model is not None or self.image_paths or self.function is not None):
+        if self.action == "agent" and (self.agent is None or self.task is None or self.model is not None or self.image_paths or self.function is not None or self.script_language is not None):
             raise ValueError("agent commands require an agent and task only")
-        if self.action == "model" and (self.model is None or not self.image_paths or self.agent is not None or self.task is not None or self.function is not None):
+        if self.action == "model" and (self.model is None or not self.image_paths or self.agent is not None or self.task is not None or self.function is not None or self.script_language is not None):
             raise ValueError("model commands require a model and image paths only")
-        if self.action == "function" and (self.function is None or self.function_version is None or self.agent is not None or self.task is not None or self.model is not None or self.image_paths):
+        if self.action == "function" and (self.function is None or self.function_version is None or self.agent is not None or self.task is not None or self.model is not None or self.image_paths or self.script_language is not None):
             raise ValueError("function commands require a function name and version only")
         if self.action != "function" and (self.function is not None or self.function_version is not None or self.function_arguments):
             raise ValueError("function name, version and arguments belong only to function commands")
+        if self.action == "script" and (self.script_language is None or self.script_source is None or self.script_source_digest is None or self.agent is not None or self.task is not None or self.model is not None or self.image_paths or self.function is not None):
+            raise ValueError("script commands require a language, source and its digest only")
+        if self.action != "script" and (self.script_language is not None or self.script_source is not None or self.script_source_digest is not None):
+            raise ValueError("script language, source and digest belong only to script commands")
+        if self.action == "script" and hashlib.sha256(self.script_source.encode()).hexdigest() != self.script_source_digest:
+            raise ValueError("script source does not match its pinned digest")
         return self
 
 
@@ -939,13 +991,38 @@ class AgentTaskNode(WorkflowNode):
     machine: MachineRef | None = None
 
 
+class Placement(WireModel):
+    """Where a node runs: on the server (hosted APIs), or on one enrolled machine (local
+    checkpoints, the owner's own GPU — data stays on it)."""
+
+    target: Literal["server", "machine"] = "server"
+    machine: MachineRef | None = None
+
+    @model_validator(mode="after")
+    def machine_named(self) -> Self:
+        if (self.target == "machine") != (self.machine is not None):
+            raise ValueError("a machine placement names its machine, and only it")
+        return self
+
+
 class ModelTaskNode(WorkflowNode):
-    """Run a cached vision model on one enrolled machine over local image paths."""
+    """Any model, one node: a hosted API model or a local checkpoint, typed by its `task`. Ports
+    are the task's signature (`model_task_ports`); `config` holds the model's parameters AND the
+    constant value of any input port left unwired, so a node tried in the Models area keeps its
+    inputs when dropped into a workflow."""
 
     kind: Literal["model"]
-    model: VisionModel
-    machine: MachineRef
-    score_threshold: FiniteFloat = Field(default=0.5, ge=0, le=1)
+    provider: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
+    model: str = Field(min_length=1, max_length=160)
+    task: ModelTask
+    config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    placement: Placement = Field(default_factory=Placement)
+
+    @model_validator(mode="after")
+    def task_signature(self) -> Self:
+        if self.ports != model_task_ports(self.task):
+            raise ValueError("model node ports must be its task's signature")
+        return self
 
 
 DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool, Field(discriminator="kind")]
@@ -975,6 +1052,31 @@ class MachineFunctionTaskNode(WorkflowNode):
     arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
 
 
+class ScriptTaskNode(WorkflowNode):
+    """Server-authored source (Python or shell), pinned by content digest, dispatched to run on
+    one enrolled machine — a NEW code-execution boundary a threat-modeler review (2026-09-24)
+    gated before this class existed: same-workflow tampering by any mutate-role workspace member
+    (not just a stranger targeting another account's machine) can inject or edit this node's
+    `source`, so the machine owner must explicitly approve the exact `source_digest` before the
+    server will ever dispatch it (`MachineStore.script_approved`); this is checked ON TOP OF the
+    per-command signature, never instead of it. `source_digest` is derived from `source` itself
+    (never a separately-settable field two values could disagree on), and any edit to `source`
+    changes the digest, which re-arms approval automatically — there is no "same script, new
+    text" path that skips a fresh owner decision."""
+
+    kind: Literal["script"]
+    machine: MachineRef
+    language: Literal["python", "shell"]
+    source: str = Field(min_length=1, max_length=1 << 16)
+    source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def digest_matches_source(self) -> Self:
+        if hashlib.sha256(self.source.encode()).hexdigest() != self.source_digest:
+            raise ValueError("script node source does not match its pinned digest")
+        return self
+
+
 class NodeLibraryRef(WireModel):
     id: UUID
 
@@ -990,9 +1092,9 @@ class LibraryNode(WorkflowNode):
 
 
 #: What a library definition may hold: any configured node but another reference (one level).
-LibraryContent = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode, Field(discriminator="kind")]
+LibraryContent = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode | ScriptTaskNode, Field(discriminator="kind")]
 
-Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode | LibraryNode, Field(discriminator="kind")]
+Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode | ScriptTaskNode | LibraryNode, Field(discriminator="kind")]
 
 
 def _port_slug(label: str) -> str:
@@ -1061,7 +1163,7 @@ class NodeLibraryEntry(WireModel):
 
 
 class WorkflowBlockAvailability(WireModel):
-    kind: Literal["input", "processing", "result", "composite", "agent_task", "model", "tool_task", "library", "machine_function"]
+    kind: Literal["input", "processing", "result", "composite", "agent_task", "model", "tool_task", "library", "machine_function", "script"]
     operation: Literal["uppercase", "lowercase", "identity", "http_get"] | None = None
     workflow: WorkflowRevisionRef | None = None
     agent: AgentRevisionRef | None = None
@@ -1088,14 +1190,20 @@ class WorkflowBlockAvailability(WireModel):
             if node_type in (ToolTaskNode, MachineFunctionTaskNode):
                 continue  # Tool and machine-function blocks come from live workspace/machine state.
             kind = get_args(node_type.model_fields["kind"].annotation)[0]
+            if node_type is ScriptTaskNode:
+                # A machine to run it is the only catalog-time requirement -- language and source
+                # are configured directly on the placed node, never resolved from live state, but
+                # DISPATCH still needs the machine owner's explicit per-digest approval (server-
+                # side gate, threat-modeler mitigation #1): "executable" here means placeable, not
+                # "will run unapproved".
+                entries.append(cls(kind=kind, name="Script", ports=(PortSpec(name="result", direction="output", value_type="text"),), readiness="config_required", required_config_fields=("machine", "language", "source"), reason="Choose a machine and write the script; the machine owner must approve its exact source before it can run."))
+                continue
             operations = get_args(node_type.model_fields["operation"].annotation) if node_type is ProcessingNode else (None,)
             for operation in operations:
-                required = ("connection",) if operation == "http_get" else ("workflow",) if node_type is CompositeNode else ("agent",) if node_type is AgentTaskNode else ("machine", "model") if node_type is ModelTaskNode else ()
-                ports = (
-                    (PortSpec(name="images", direction="input", value_type="text", multiple=True), PortSpec(name="result", direction="output", value_type="json"))
-                    if node_type is ModelTaskNode else
-                    (() if node_type is InputNode else (PortSpec(name="value", direction="input", value_type="text"),)) + (PortSpec(name="result", direction="output", value_type="text"),)
-                )
+                if node_type is ModelTaskNode:
+                    continue  # Model blocks come from the model catalog (registry + discovery).
+                required = ("connection",) if operation == "http_get" else ("workflow",) if node_type is CompositeNode else ("agent",) if node_type is AgentTaskNode else ()
+                ports = (() if node_type is InputNode else (PortSpec(name="value", direction="input", value_type="text"),)) + (PortSpec(name="result", direction="output", value_type="text"),)
                 entries.append(cls(kind=kind, operation=operation, name=operation.replace("_", " ").title() if operation else kind.replace("_", " ").title(), ports=ports, readiness="config_required" if required else "executable", required_config_fields=required, reason="Select the required configuration before execution." if required else "Runs locally without a model provider."))
         entries.append(cls(kind="result", name="Write artifact", ports=(PortSpec(name="value", direction="input", value_type="text"), PortSpec(name="result", direction="output", value_type="artifact")), readiness="config_required", required_config_fields=("connection", "artifact_path"), reason="Select writable workspace storage and a relative artifact path."))
         return tuple(entries)
