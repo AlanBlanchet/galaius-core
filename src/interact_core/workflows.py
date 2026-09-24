@@ -1563,9 +1563,12 @@ class ValuePreview(WireModel):
     items: int | None = None
     media_type: str | None = None
     path: str | None = Field(default=None, max_length=512)
-    #: Base64 bytes of a thumbnail at most VALUE_PREVIEW_MAX_PIXELS px and VALUE_PREVIEW_MAX_BYTES
-    #: bytes — set only for `kind == "image"`.
-    image: str | None = Field(default=None, max_length=(VALUE_PREVIEW_MAX_BYTES * 4 // 3) + 64)
+    #: Base64 image bytes, verbatim. A NEW preview keeps to VALUE_PREVIEW_MAX_PIXELS /
+    #: VALUE_PREVIEW_MAX_BYTES at the producer (the runner encodes to fit, never this field —
+    #: an older, differently-sized preview already reaches this same shape); unbounded here, so
+    #: this type never rejects a value its own producer already promised to bound. Set only for
+    #: `kind == "image"`.
+    image: str | None = None
 
 
 class ProviderUsage(WireModel):

@@ -24,6 +24,7 @@ from interact_core import (
     PromptExecutionRef,
     PromptKey,
     ToolInputSchema,
+    ValuePreview,
     WebhookAgentTool,
 )
 
@@ -87,3 +88,14 @@ def test_new_tool_kinds_are_valid_agent_capabilities_and_direct_tools(tool) -> N
     bug `ConnectorImplementation`'s narrower `DirectTool` union would otherwise hide)."""
     assert _agent((tool,)).capabilities == (tool,)
     assert ConnectorImplementation(kind="connector", tool=tool).tool == tool
+
+
+def test_value_preview_image_accepts_a_larger_pre_existing_thumbnail() -> None:
+    """`ValuePreview.image` carries a NEW machine-read/produced thumbnail bounded at the producer
+    to VALUE_PREVIEW_MAX_PIXELS / VALUE_PREVIEW_MAX_BYTES — but the SAME shape already carries an
+    older, differently-sized preview (a vision model's output overlay, historically unbounded).
+    The field itself must never reject that pre-existing value: bounding is the producer's job,
+    never a validation ceiling the shared wire type enforces on every past shape it also serves."""
+    oversized = "a" * 200_000  # far past a 64 KB-bounded thumbnail's ~87K base64 characters
+    preview = ValuePreview(kind="image", text="29 detection: book 9", media_type="image/jpeg", image=oversized)
+    assert preview.image == oversized
