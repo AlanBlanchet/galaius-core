@@ -200,10 +200,14 @@
                 "connector": "#/$defs/ConnectorAgentTool",
                 "delegate": "#/$defs/DelegatedAgentTool",
                 "function": "#/$defs/WorkflowFunctionTool",
+                "git": "#/$defs/GitAgentTool",
                 "gmail": "#/$defs/GmailAgentTool",
                 "http": "#/$defs/HttpAgentTool",
+                "mail_server": "#/$defs/MailAgentTool",
+                "messaging": "#/$defs/MessagingAgentTool",
                 "object_storage": "#/$defs/ObjectStorageAgentTool",
-                "ssh": "#/$defs/SshAgentTool"
+                "ssh": "#/$defs/SshAgentTool",
+                "webhook": "#/$defs/WebhookAgentTool"
               },
               "propertyName": "kind"
             },
@@ -225,6 +229,18 @@
               },
               {
                 "$ref": "#/$defs/ObjectStorageAgentTool"
+              },
+              {
+                "$ref": "#/$defs/MessagingAgentTool"
+              },
+              {
+                "$ref": "#/$defs/GitAgentTool"
+              },
+              {
+                "$ref": "#/$defs/MailAgentTool"
+              },
+              {
+                "$ref": "#/$defs/WebhookAgentTool"
               },
               {
                 "$ref": "#/$defs/WorkflowFunctionTool"
@@ -634,7 +650,9 @@
             "provider_api",
             "service_connector",
             "ssh_server",
-            "object_storage"
+            "object_storage",
+            "mail_server",
+            "webhook"
           ],
           "title": "Kind",
           "type": "string"
@@ -670,7 +688,13 @@
                 "sharepoint",
                 "onedrive",
                 "s3_compatible",
-                "azure_blob"
+                "azure_blob",
+                "discord",
+                "telegram",
+                "whatsapp",
+                "gitlab",
+                "discord_webhook",
+                "teams_webhook"
               ],
               "type": "string"
             },
@@ -798,7 +822,9 @@
             "list_repositories",
             "list_channels",
             "search_pages",
-            "list_sites"
+            "list_sites",
+            "list_messages",
+            "read_file"
           ],
           "title": "Action",
           "type": "string"
@@ -822,7 +848,11 @@
             "notion",
             "gmail",
             "sharepoint",
-            "onedrive"
+            "onedrive",
+            "discord",
+            "telegram",
+            "whatsapp",
+            "gitlab"
           ],
           "title": "Connector",
           "type": "string"
@@ -1425,6 +1455,65 @@
       "title": "FunctionImplementation",
       "type": "object"
     },
+    "GitAgentTool": {
+      "additionalProperties": false,
+      "description": "A write-class git-hosting operation, bound to a pinned `service_connector` connection.\nEvery operation here changes something outside this app (a branch, a commit, a pull/merge\nrequest, a comment) and is gated by the same owner-approval ledger SSH writes use.",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "connector": {
+          "enum": [
+            "github",
+            "gitlab"
+          ],
+          "title": "Connector",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "git",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "create_branch",
+            "commit_file",
+            "open_pull_request",
+            "add_comment"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connector",
+        "operation",
+        "connection",
+        "input_schema"
+      ],
+      "title": "GitAgentTool",
+      "type": "object"
+    },
     "GmailAgentTool": {
       "additionalProperties": false,
       "properties": {
@@ -1543,6 +1632,54 @@
       "title": "MachineRef",
       "type": "object"
     },
+    "MailAgentTool": {
+      "additionalProperties": false,
+      "description": "One SMTP send or IMAP read against a pinned `mail_server` connection \u2014 the same\nread-direct / write-approved split SSH and Gmail draw, generalized to any mail server instead\nof only Gmail's OAuth-bound Workspace account.",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "mail_server",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "send_email",
+            "read_inbox"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "operation",
+        "connection",
+        "input_schema"
+      ],
+      "title": "MailAgentTool",
+      "type": "object"
+    },
     "ManualTrigger": {
       "additionalProperties": false,
       "properties": {
@@ -1556,6 +1693,65 @@
         "kind"
       ],
       "title": "ManualTrigger",
+      "type": "object"
+    },
+    "MessagingAgentTool": {
+      "additionalProperties": false,
+      "description": "One send or list operation against a bot-token/API-key messaging provider, bound to a\npinned `service_connector` connection. Mirrors `GmailAgentTool`'s shape (one tool kind, an\n`operation` field) generalized across four providers instead of a class per app;\n`send_message` is gated by the same owner-approval ledger Gmail's send and SSH's writes use \u2014\nposting into someone else's channel is the same risk class. Not every provider supports both\noperations (WhatsApp's Cloud API has no read endpoint): the server only ever publishes the\noperations a given connector actually supports.",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "connector": {
+          "enum": [
+            "slack",
+            "discord",
+            "telegram",
+            "whatsapp"
+          ],
+          "title": "Connector",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "messaging",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "send_message",
+            "list_messages"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connector",
+        "operation",
+        "connection",
+        "input_schema"
+      ],
+      "title": "MessagingAgentTool",
       "type": "object"
     },
     "ModelCriteriaCatalog": {
@@ -3316,6 +3512,45 @@
         "value_type"
       ],
       "title": "VariableSpec",
+      "type": "object"
+    },
+    "WebhookAgentTool": {
+      "additionalProperties": false,
+      "description": "Posts to a pinned `webhook` connection's URL \u2014 a Discord/Teams incoming webhook or a\nNetlify/Vercel deploy hook. The connection grants exactly one verb (\"write\"); this tool is\nalways owner-approval-gated, since a webhook post is an effect on someone else's system (a\nmessage sent, a deploy triggered) with no read counterpart to check first.",
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionResourceRef"
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "webhook",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "connection",
+        "input_schema"
+      ],
+      "title": "WebhookAgentTool",
       "type": "object"
     },
     "WebhookCredentialCreated": {

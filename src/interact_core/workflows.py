@@ -644,7 +644,7 @@ class ConnectorDefinition(WireModel):
 
 class ConnectorCatalog(WireModel):
     version: Literal["v1"] = "v1"
-    connectors: tuple[ConnectorDefinition, ...] = Field(min_length=1, max_length=8)
+    connectors: tuple[ConnectorDefinition, ...] = Field(min_length=1, max_length=16)
 
 
 class ConnectorCheckRequest(WireModel):
@@ -829,18 +829,21 @@ class MessagingAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-#: `list_repositories` and `read_file` stay on the existing read-only `ConnectorAgentTool` /
-#: `ConnectorBrowseActionName` path (pure reads, no owner approval); this tool covers only the
-#: write-shaped operations. `repository` is normalized as "owner/repo" for both providers (GitLab
-#: accepts that as its URL-encoded project path), so one input shape serves both.
+#: `list_repositories` stays on the existing read-only `ConnectorAgentTool` /
+#: `ConnectorBrowseActionName` path (pure read, no owner approval, fits its query/cursor/limit
+#: shape); `read_file` needs a repository + path + ref together, so it lives here beside the four
+#: write operations, direct like `SshAgentTool`'s own read/list operations. `repository` is
+#: normalized as "owner/repo" for both providers (GitLab accepts that as its URL-encoded project
+#: path), so one input shape serves both.
 GitConnector = Literal["github", "gitlab"]
-GitOperationName = Literal["create_branch", "commit_file", "open_pull_request", "add_comment"]
+GitOperationName = Literal["read_file", "create_branch", "commit_file", "open_pull_request", "add_comment"]
 
 
 class GitAgentTool(WireModel):
-    """A write-class git-hosting operation, bound to a pinned `service_connector` connection.
-    Every operation here changes something outside this app (a branch, a commit, a pull/merge
-    request, a comment) and is gated by the same owner-approval ledger SSH writes use."""
+    """A git-hosting operation beyond plain listing, bound to a pinned `service_connector`
+    connection. `read_file` runs directly; the other four each change something outside this app
+    (a branch, a commit, a pull/merge request, a comment) and are gated by the same owner-approval
+    ledger SSH writes use — the same read-direct/write-approved split `SshAgentTool` draws."""
 
     kind: Literal["git"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
@@ -1052,7 +1055,7 @@ class Placement(WireModel):
         return self
 
 
-DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool, Field(discriminator="kind")]
+DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | MessagingAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool, Field(discriminator="kind")]
 
 
 class NodeLibraryRef(WireModel):

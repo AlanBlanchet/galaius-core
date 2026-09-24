@@ -136,15 +136,18 @@ class WorkspaceMemberRoleUpdate(WireModel):
 
 PlatformErrorCode = Literal[
     "authentication_failed", "csrf_failed", "invalid_origin", "invalid_request",
-    "link_expired", "not_found", "rate_limited", "verification_failed", "recovery_failed",
-    "unavailable",
+    "last_sign_in_method", "link_expired", "not_found", "not_linked", "rate_limited",
+    "verification_failed", "recovery_failed", "unavailable",
 ]
 """The wire's complete failure vocabulary, and the single source the server's own raisable set
 binds to (`server.errors.ErrorCode`) — a code can never reach a client without being
 in the contract that client's types are generated from. `link_expired`: a one-time link the
 caller presented is gone (expired, already consumed, or never issued), which no retry of the
 same link can fix — distinct from `authentication_failed`, where the CREDENTIAL was wrong and
-retrying is exactly the right move."""
+retrying is exactly the right move. `last_sign_in_method`: disconnecting a linked Google
+identity was refused because the account has no password and this is its last one — the only
+door out, so it is never removed silently. `not_linked`: the email named in a disconnect
+request is not one of the caller's own linked Google identities."""
 
 
 class PlatformError(WireModel):

@@ -208,6 +208,19 @@ def test_a_dead_link_is_its_own_wire_failure_never_a_credential_failure() -> Non
     assert set(get_args(PlatformError.model_fields["code"].annotation)) == codes
 
 
+def test_google_unlink_failures_are_their_own_wire_codes() -> None:
+    """Disconnecting a linked Google identity can fail two distinct ways a shared code would
+    blur: the account has no other way to sign in (`last_sign_in_method`), or the named email
+    is not one of this account's linked identities at all (`not_linked`) — never folded into
+    the generic `invalid_request` / `not_found` pair another failure already uses for a
+    different reason."""
+    codes = set(get_args(PlatformErrorCode))
+    assert {"last_sign_in_method", "not_linked"} <= codes
+    assert PlatformError(code="last_sign_in_method").code == "last_sign_in_method"
+    assert PlatformError(code="not_linked").code == "not_linked"
+    assert set(get_args(PlatformError.model_fields["code"].annotation)) == codes
+
+
 def test_agent_paradigms_are_ordered_and_unique() -> None:
     prompt = PromptExecutionRef(
         key=PromptKey(namespace="test", slug="main"),
