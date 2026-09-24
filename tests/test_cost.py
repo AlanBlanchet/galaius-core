@@ -105,9 +105,12 @@ def test_run_cost_actual_sums_known_nodes_and_counts_unknown_ones():
     assert actual.unknown_node_count == 1
 
 
-def test_known_node_actual_requires_its_fee_figure():
-    with pytest.raises(ValidationError):
-        NodeCostActual(node_id=uuid4(), usage=NodeUsage(calls=1), known=True, cost_usd=0.03, source=_source())
+def test_a_known_node_actual_stored_before_the_fee_field_existed_reads_back_as_zero_fee():
+    """`fee_usd` is persisted per run: a record written before this field shipped has none in its
+    stored JSON. It must still parse — 0 is the true historical fact (no platform fee existed
+    yet), never a validation failure that would 400 every pre-fee run out of the Usage page."""
+    node = NodeCostActual.model_validate({"node_id": str(uuid4()), "usage": {"calls": 1}, "known": True, "cost_usd": 0.03, "source": _source().model_dump()})
+    assert node.fee_usd == 0.0
 
 
 def test_budget_overrun_carries_the_estimate_that_triggered_it():

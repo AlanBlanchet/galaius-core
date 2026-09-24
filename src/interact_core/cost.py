@@ -116,15 +116,17 @@ class NodeCostActual(WireModel):
     usage: NodeUsage
     known: bool
     cost_usd: float | None = Field(default=None, ge=0)
-    fee_usd: float | None = Field(default=None, ge=0)
+    #: Always present, defaulting to 0 — never `None`-gated on `known` like `cost_usd`. A node
+    #: cost PERSISTS (it is stored per run), so a record written before this field existed reads
+    #: back with no `fee_usd` at all; 0 is not a shim standing in for a missing figure, it is the
+    #: true historical fact — the platform fee didn't exist yet when that run happened.
+    fee_usd: float = Field(default=0.0, ge=0)
     source: PriceSource | None = None
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
         if self.known != (self.cost_usd is not None):
             raise ValueError("a known node cost carries its figure, an unknown one carries none")
-        if self.known != (self.fee_usd is not None):
-            raise ValueError("a known node cost carries its fee figure, an unknown one carries none")
         return self
 
 
