@@ -39,6 +39,7 @@ from interact_core import (
     ToolInputSchema,
     WorkflowFunctionTool,
     WorkflowRevisionRef,
+    MachineAccelerator,
     MachineCommand,
     MachineCommandResult,
     MachineRef,
@@ -176,6 +177,13 @@ def test_machine_wire_contract_binds_commands_and_results() -> None:
         last_seen_at=now,
     )
     assert machine.runtimes[0].provider == "codex"
+    assert machine.accelerators == ()
+    gpu_machine = machine.model_copy(update={"accelerators": (MachineAccelerator(kind="cuda", name="RTX 2070", memory_mb=8192),)})
+    assert gpu_machine.accelerators[0].kind == "cuda"
+    assert gpu_machine.accelerators[0].memory_mb == 8192
+    with pytest.raises(ValidationError):
+        MachineAccelerator(kind="tpu", name="x", memory_mb=1)
+    assert MachineAccelerator(kind="none", name="none", memory_mb=0).memory_mb == 0
     assert MachineRef(id=machine.id).id == machine.id
     command = MachineCommand(
         id=uuid4(), nonce=uuid4(), machine=MachineRef(id=machine.id),

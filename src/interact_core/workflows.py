@@ -42,11 +42,23 @@ class MachineRuntime(WireModel):
     version: str | None = Field(default=None, max_length=80)
 
 
+AcceleratorKind = Literal["cuda", "mps", "rocm", "none"]
+
+
+class MachineAccelerator(WireModel):
+    """One GPU (or `none`) the runner detected, so model steps default to a machine that has one."""
+
+    kind: AcceleratorKind
+    name: str = Field(min_length=1, max_length=120)
+    memory_mb: int = Field(ge=0, le=1 << 20)
+
+
 class MachineSummary(WireModel):
     id: UUID
     name: str = Field(min_length=1, max_length=120)
     state: Literal["online", "offline", "revoked"]
     runtimes: tuple[MachineRuntime, ...] = Field(default=(), max_length=16)
+    accelerators: tuple[MachineAccelerator, ...] = Field(default=(), max_length=16)
     last_seen_at: datetime | None = None
 
 
