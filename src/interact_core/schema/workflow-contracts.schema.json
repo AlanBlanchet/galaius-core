@@ -170,6 +170,25 @@
       "title": "AgentGraphUpdate",
       "type": "object"
     },
+    "AgentImplementation": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/AgentRevisionRef"
+        },
+        "kind": {
+          "const": "agent",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "agent"
+      ],
+      "title": "AgentImplementation",
+      "type": "object"
+    },
     "AgentRevision": {
       "additionalProperties": false,
       "properties": {
@@ -420,93 +439,6 @@
       "title": "AgentRevisionRef",
       "type": "object"
     },
-    "AgentTaskNode": {
-      "additionalProperties": false,
-      "properties": {
-        "agent": {
-          "$ref": "#/$defs/AgentRevisionRef"
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "agent_task",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "machine": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/MachineRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "parameters": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "items": {},
-                "type": "array"
-              }
-            ]
-          },
-          "title": "Parameters",
-          "type": "object"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "agent"
-      ],
-      "title": "AgentTaskNode",
-      "type": "object"
-    },
     "ArtifactRef": {
       "additionalProperties": false,
       "properties": {
@@ -573,80 +505,34 @@
       "title": "BudgetPolicy",
       "type": "object"
     },
-    "CompositeNode": {
+    "BuiltinImplementation": {
       "additionalProperties": false,
+      "description": "Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through\na configured connection, or an artifact write to workspace storage.",
       "properties": {
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
         "kind": {
-          "const": "composite",
+          "const": "builtin",
           "title": "Kind",
           "type": "string"
         },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
+        "op": {
+          "enum": [
+            "input",
+            "output",
+            "write_artifact",
+            "uppercase",
+            "lowercase",
+            "identity",
+            "http_get"
+          ],
+          "title": "Op",
           "type": "string"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "variables": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "items": {},
-                "type": "array"
-              }
-            ]
-          },
-          "title": "Variables",
-          "type": "object"
-        },
-        "workflow": {
-          "$ref": "#/$defs/WorkflowRevisionRef"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
         }
       },
       "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
         "kind",
-        "workflow"
+        "op"
       ],
-      "title": "CompositeNode",
+      "title": "BuiltinImplementation",
       "type": "object"
     },
     "ConfiguredModelRef": {
@@ -972,6 +858,53 @@
         "input_schema"
       ],
       "title": "ConnectorAgentTool",
+      "type": "object"
+    },
+    "ConnectorImplementation": {
+      "additionalProperties": false,
+      "description": "A configured connector or API operation (`DirectTool`), executable without a model call.\nIts config holds scalar arguments only (the tool's declared input schema).",
+      "properties": {
+        "kind": {
+          "const": "connector",
+          "title": "Kind",
+          "type": "string"
+        },
+        "tool": {
+          "discriminator": {
+            "mapping": {
+              "connector": "#/$defs/ConnectorAgentTool",
+              "gmail": "#/$defs/GmailAgentTool",
+              "http": "#/$defs/HttpAgentTool",
+              "object_storage": "#/$defs/ObjectStorageAgentTool",
+              "ssh": "#/$defs/SshAgentTool"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/HttpAgentTool"
+            },
+            {
+              "$ref": "#/$defs/GmailAgentTool"
+            },
+            {
+              "$ref": "#/$defs/ConnectorAgentTool"
+            },
+            {
+              "$ref": "#/$defs/SshAgentTool"
+            },
+            {
+              "$ref": "#/$defs/ObjectStorageAgentTool"
+            }
+          ],
+          "title": "Tool"
+        }
+      },
+      "required": [
+        "kind",
+        "tool"
+      ],
+      "title": "ConnectorImplementation",
       "type": "object"
     },
     "Conversation": {
@@ -1462,6 +1395,36 @@
       "title": "DelegatedAgentTool",
       "type": "object"
     },
+    "FunctionImplementation": {
+      "additionalProperties": false,
+      "description": "A function an enrolled machine declared (`MachineFunctionSummary`), pinned to the exact\nsignature version it was wired against: a later change on the machine refuses the call\ninstead of silently running under a different shape.",
+      "properties": {
+        "kind": {
+          "const": "function",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "version"
+      ],
+      "title": "FunctionImplementation",
+      "type": "object"
+    },
     "GmailAgentTool": {
       "additionalProperties": false,
       "properties": {
@@ -1563,215 +1526,6 @@
         "json_body_from_arguments"
       ],
       "title": "HttpAgentTool",
-      "type": "object"
-    },
-    "InputNode": {
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "input",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "value": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            },
-            {
-              "type": "boolean"
-            },
-            {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            {
-              "items": {},
-              "type": "array"
-            }
-          ],
-          "title": "Value"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "value"
-      ],
-      "title": "InputNode",
-      "type": "object"
-    },
-    "LibraryNode": {
-      "additionalProperties": false,
-      "description": "A reusable node dropped BY REFERENCE: its definition lives in the workspace's node library\nand is expanded at run time, so editing the definition updates every workflow using it. Its\n`ports` mirror the definition's boundary (`NodeLibraryDefinition.boundary`) at the time it was\nplaced; the server re-derives them from the definition when the workflow is saved and run.",
-      "properties": {
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "library",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "library": {
-          "$ref": "#/$defs/NodeLibraryRef"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "library"
-      ],
-      "title": "LibraryNode",
-      "type": "object"
-    },
-    "MachineFunctionTaskNode": {
-      "additionalProperties": false,
-      "description": "Runs one function an enrolled machine itself declared \u2014 a `@interact.function`-decorated\nPython callable or a registered shell command \u2014 typed by that machine's own advertised\nsignature (`MachineFunctionSummary`). `ports` is copied verbatim from the summary at node\nplacement time; `function_version` pins the exact signature the node was wired against, so a\nlater change to the function on the machine re-arms the block as `config_required` instead\nof silently running under a different shape. `arguments` carries constant bindings for ports\nwith no incoming edge, exactly like `ToolTaskNode.arguments`.",
-      "properties": {
-        "arguments": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              }
-            ]
-          },
-          "maxProperties": 32,
-          "title": "Arguments",
-          "type": "object"
-        },
-        "function": {
-          "maxLength": 80,
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "title": "Function",
-          "type": "string"
-        },
-        "function_version": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Function Version",
-          "type": "string"
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "machine_function",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "machine": {
-          "$ref": "#/$defs/MachineRef"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "machine",
-        "function",
-        "function_version"
-      ],
-      "title": "MachineFunctionTaskNode",
       "type": "object"
     },
     "MachineRef": {
@@ -2108,6 +1862,54 @@
       "title": "ModelEligibilityEvidence",
       "type": "object"
     },
+    "ModelImplementation": {
+      "additionalProperties": false,
+      "description": "Any model typed by its task (`ModelTask`, Hugging Face pipeline tags).",
+      "properties": {
+        "kind": {
+          "const": "model",
+          "title": "Kind",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Provider",
+          "type": "string"
+        },
+        "task": {
+          "enum": [
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d"
+          ],
+          "title": "Task",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "provider",
+        "model",
+        "task"
+      ],
+      "title": "ModelImplementation",
+      "type": "object"
+    },
     "ModelProperty": {
       "additionalProperties": false,
       "properties": {
@@ -2161,118 +1963,9 @@
       "title": "ModelProperty",
       "type": "object"
     },
-    "ModelTaskNode": {
-      "additionalProperties": false,
-      "description": "Any model, one node: a hosted API model or a local checkpoint, typed by its `task`. Ports\nare the task's signature (`model_task_ports`); `config` holds the model's parameters AND the\nconstant value of any input port left unwired, so a node tried in the Models area keeps its\ninputs when dropped into a workflow.",
-      "properties": {
-        "config": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "items": {},
-                "type": "array"
-              }
-            ]
-          },
-          "maxProperties": 32,
-          "title": "Config",
-          "type": "object"
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "model",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "model": {
-          "maxLength": 160,
-          "minLength": 1,
-          "title": "Model",
-          "type": "string"
-        },
-        "placement": {
-          "$ref": "#/$defs/Placement"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "provider": {
-          "maxLength": 40,
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "title": "Provider",
-          "type": "string"
-        },
-        "task": {
-          "enum": [
-            "text-generation",
-            "text-to-image",
-            "text-to-video",
-            "object-detection",
-            "image-segmentation",
-            "feature-extraction",
-            "text-to-speech",
-            "automatic-speech-recognition",
-            "image-to-3d",
-            "text-to-3d"
-          ],
-          "title": "Task",
-          "type": "string"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "provider",
-        "model",
-        "task"
-      ],
-      "title": "ModelTaskNode",
-      "type": "object"
-    },
     "NodeLibraryDefinition": {
       "additionalProperties": false,
-      "description": "One reusable node: a configured node, or a selection of nodes with the wires between them.\nIts BOUNDARY \u2014 inner input ports no inner edge feeds, inner output ports no inner edge reads \u2014\nis the port list every `LibraryNode` referencing it carries. Positions are relative to the\nreference node's own position.",
+      "description": "One reusable node: a configured node, or a selection of nodes with the wires between them.\nIts BOUNDARY \u2014 inner input ports no inner edge feeds, inner output ports no inner edge reads \u2014\nis the port list every node referencing it (`SubgraphImplementation` with a `NodeLibraryRef`)\ncarries. Positions are relative to the reference node's own position.",
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -2307,49 +2000,7 @@
         },
         "nodes": {
           "items": {
-            "discriminator": {
-              "mapping": {
-                "agent_task": "#/$defs/AgentTaskNode",
-                "composite": "#/$defs/CompositeNode",
-                "input": "#/$defs/InputNode",
-                "machine_function": "#/$defs/MachineFunctionTaskNode",
-                "model": "#/$defs/ModelTaskNode",
-                "processing": "#/$defs/ProcessingNode",
-                "result": "#/$defs/ResultNode",
-                "script": "#/$defs/ScriptTaskNode",
-                "tool_task": "#/$defs/ToolTaskNode"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/$defs/InputNode"
-              },
-              {
-                "$ref": "#/$defs/ProcessingNode"
-              },
-              {
-                "$ref": "#/$defs/ResultNode"
-              },
-              {
-                "$ref": "#/$defs/CompositeNode"
-              },
-              {
-                "$ref": "#/$defs/AgentTaskNode"
-              },
-              {
-                "$ref": "#/$defs/ModelTaskNode"
-              },
-              {
-                "$ref": "#/$defs/ToolTaskNode"
-              },
-              {
-                "$ref": "#/$defs/MachineFunctionTaskNode"
-              },
-              {
-                "$ref": "#/$defs/ScriptTaskNode"
-              }
-            ]
+            "$ref": "#/$defs/WorkflowNode"
           },
           "maxItems": 50,
           "minItems": 1,
@@ -2608,86 +2259,6 @@
       "title": "PortSpec",
       "type": "object"
     },
-    "ProcessingNode": {
-      "additionalProperties": false,
-      "properties": {
-        "connection": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ConnectionResourceRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "processing",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "model": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ConfiguredModelRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "operation": {
-          "enum": [
-            "uppercase",
-            "lowercase",
-            "identity",
-            "http_get"
-          ],
-          "title": "Operation",
-          "type": "string"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "operation"
-      ],
-      "title": "ProcessingNode",
-      "type": "object"
-    },
     "PromptExecutionRef": {
       "additionalProperties": false,
       "description": "Server-verified immutable prompt identity persisted with one execution.",
@@ -2865,78 +2436,6 @@
       "title": "ProviderUsage",
       "type": "object"
     },
-    "ResultNode": {
-      "additionalProperties": false,
-      "properties": {
-        "artifact_path": {
-          "anyOf": [
-            {
-              "maxLength": 512,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Artifact Path"
-        },
-        "connection": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ConnectionResourceRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "result",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind"
-      ],
-      "title": "ResultNode",
-      "type": "object"
-    },
     "ScheduleTrigger": {
       "additionalProperties": false,
       "properties": {
@@ -2966,24 +2465,13 @@
       "title": "ScheduleTrigger",
       "type": "object"
     },
-    "ScriptTaskNode": {
+    "ScriptImplementation": {
       "additionalProperties": false,
-      "description": "Server-authored source (Python or shell), pinned by content digest, dispatched to run on\none enrolled machine \u2014 a NEW code-execution boundary a threat-modeler review (2026-09-24)\ngated before this class existed: same-workflow tampering by any mutate-role workspace member\n(not just a stranger targeting another account's machine) can inject or edit this node's\n`source`, so the machine owner must explicitly approve the exact `source_digest` before the\nserver will ever dispatch it (`MachineStore.script_approved`); this is checked ON TOP OF the\nper-command signature, never instead of it. `source_digest` is derived from `source` itself\n(never a separately-settable field two values could disagree on), and any edit to `source`\nchanges the digest, which re-arms approval automatically \u2014 there is no \"same script, new\ntext\" path that skips a fresh owner decision.",
+      "description": "Server-authored source (Python or shell), pinned by content digest, run on one enrolled\nmachine \u2014 a code-execution boundary: the machine owner approves the exact `source_digest`\nbefore the server dispatches it (`MachineStore.script_approved`), on top of the per-command\nsignature. The source itself is `config[\"source\"]`; any edit changes the digest and re-arms\nthat approval.",
       "properties": {
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
         "kind": {
           "const": "script",
           "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
           "type": "string"
         },
         "language": {
@@ -2994,50 +2482,18 @@
           "title": "Language",
           "type": "string"
         },
-        "machine": {
-          "$ref": "#/$defs/MachineRef"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "source": {
-          "maxLength": 65536,
-          "minLength": 1,
-          "title": "Source",
-          "type": "string"
-        },
         "source_digest": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Source Digest",
           "type": "string"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
         }
       },
       "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
         "kind",
-        "machine",
         "language",
-        "source",
         "source_digest"
       ],
-      "title": "ScriptTaskNode",
+      "title": "ScriptImplementation",
       "type": "object"
     },
     "SshAgentTool": {
@@ -3088,6 +2544,34 @@
         "input_schema"
       ],
       "title": "SshAgentTool",
+      "type": "object"
+    },
+    "SubgraphImplementation": {
+      "additionalProperties": false,
+      "description": "Another graph run as one node: a saved workflow pinned to a revision, or a reusable node from\nthe workspace's library (its current definition). Its effects are its contents' (resolved by\nwhoever can read them: the server expands it).",
+      "properties": {
+        "kind": {
+          "const": "subgraph",
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowRevisionRef"
+            },
+            {
+              "$ref": "#/$defs/NodeLibraryRef"
+            }
+          ],
+          "title": "Ref"
+        }
+      },
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "title": "SubgraphImplementation",
       "type": "object"
     },
     "SubscriptionConfiguration": {
@@ -3217,106 +2701,6 @@
       "title": "ToolInputSchema",
       "type": "object"
     },
-    "ToolTaskNode": {
-      "additionalProperties": false,
-      "description": "A configured connector or API operation, executable without a model call.",
-      "properties": {
-        "arguments": {
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              }
-            ]
-          },
-          "maxProperties": 32,
-          "title": "Arguments",
-          "type": "object"
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "const": "tool_task",
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "maxLength": 120,
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "ports": {
-          "items": {
-            "$ref": "#/$defs/PortSpec"
-          },
-          "maxItems": 64,
-          "title": "Ports",
-          "type": "array"
-        },
-        "tool": {
-          "discriminator": {
-            "mapping": {
-              "connector": "#/$defs/ConnectorAgentTool",
-              "gmail": "#/$defs/GmailAgentTool",
-              "http": "#/$defs/HttpAgentTool",
-              "object_storage": "#/$defs/ObjectStorageAgentTool",
-              "ssh": "#/$defs/SshAgentTool"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/HttpAgentTool"
-            },
-            {
-              "$ref": "#/$defs/GmailAgentTool"
-            },
-            {
-              "$ref": "#/$defs/ConnectorAgentTool"
-            },
-            {
-              "$ref": "#/$defs/SshAgentTool"
-            },
-            {
-              "$ref": "#/$defs/ObjectStorageAgentTool"
-            }
-          ],
-          "title": "Tool"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "x",
-        "y",
-        "ports",
-        "kind",
-        "tool"
-      ],
-      "title": "ToolTaskNode",
-      "type": "object"
-    },
     "TriggerBinding": {
       "additionalProperties": false,
       "properties": {
@@ -3411,6 +2795,9 @@
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "integer"
             },
             {
               "type": "number"
@@ -3763,6 +3150,9 @@
                 "type": "string"
               },
               {
+                "type": "integer"
+              },
+              {
                 "type": "number"
               },
               {
@@ -4051,71 +3441,74 @@
     },
     "WorkflowBlockAvailability": {
       "additionalProperties": false,
+      "description": "One block the editor's palette offers: the node it places (implementation, ports, default\nconfig, placement) and whether it runs as placed. The editor copies these four fields onto a\nnew `WorkflowNode`; nothing is per kind.",
       "properties": {
-        "agent": {
-          "anyOf": [
+        "config": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "maxProperties": 32,
+          "title": "Config",
+          "type": "object"
+        },
+        "impl": {
+          "discriminator": {
+            "mapping": {
+              "agent": "#/$defs/AgentImplementation",
+              "builtin": "#/$defs/BuiltinImplementation",
+              "connector": "#/$defs/ConnectorImplementation",
+              "function": "#/$defs/FunctionImplementation",
+              "model": "#/$defs/ModelImplementation",
+              "script": "#/$defs/ScriptImplementation",
+              "subgraph": "#/$defs/SubgraphImplementation"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
             {
-              "$ref": "#/$defs/AgentRevisionRef"
+              "$ref": "#/$defs/BuiltinImplementation"
             },
             {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "function": {
-          "anyOf": [
-            {
-              "maxLength": 80,
-              "pattern": "^[a-z][a-z0-9_]*$",
-              "type": "string"
+              "$ref": "#/$defs/AgentImplementation"
             },
             {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Function"
-        },
-        "function_version": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
+              "$ref": "#/$defs/ModelImplementation"
             },
             {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Function Version"
-        },
-        "kind": {
-          "enum": [
-            "input",
-            "processing",
-            "result",
-            "composite",
-            "agent_task",
-            "model",
-            "tool_task",
-            "library",
-            "machine_function",
-            "script"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "machine": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/MachineRef"
+              "$ref": "#/$defs/FunctionImplementation"
             },
             {
-              "type": "null"
+              "$ref": "#/$defs/ScriptImplementation"
+            },
+            {
+              "$ref": "#/$defs/ConnectorImplementation"
+            },
+            {
+              "$ref": "#/$defs/SubgraphImplementation"
             }
           ],
-          "default": null
+          "title": "Impl"
         },
         "name": {
           "maxLength": 120,
@@ -4123,23 +3516,8 @@
           "title": "Name",
           "type": "string"
         },
-        "operation": {
-          "anyOf": [
-            {
-              "enum": [
-                "uppercase",
-                "lowercase",
-                "identity",
-                "http_get"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Operation"
+        "placement": {
+          "$ref": "#/$defs/Placement"
         },
         "ports": {
           "items": {
@@ -4189,59 +3567,10 @@
           ],
           "default": null,
           "title": "Sovereignty"
-        },
-        "tool": {
-          "anyOf": [
-            {
-              "discriminator": {
-                "mapping": {
-                  "connector": "#/$defs/ConnectorAgentTool",
-                  "gmail": "#/$defs/GmailAgentTool",
-                  "http": "#/$defs/HttpAgentTool",
-                  "object_storage": "#/$defs/ObjectStorageAgentTool",
-                  "ssh": "#/$defs/SshAgentTool"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/$defs/HttpAgentTool"
-                },
-                {
-                  "$ref": "#/$defs/GmailAgentTool"
-                },
-                {
-                  "$ref": "#/$defs/ConnectorAgentTool"
-                },
-                {
-                  "$ref": "#/$defs/SshAgentTool"
-                },
-                {
-                  "$ref": "#/$defs/ObjectStorageAgentTool"
-                }
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tool"
-        },
-        "workflow": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/WorkflowRevisionRef"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         }
       },
       "required": [
-        "kind",
+        "impl",
         "name",
         "ports",
         "readiness",
@@ -4537,6 +3866,119 @@
       "title": "WorkflowKey",
       "type": "object"
     },
+    "WorkflowNode": {
+      "additionalProperties": false,
+      "description": "One node, whatever it runs. `config` holds the implementation's settings AND the constant\nvalue of any input port left unwired (a wire, when present, wins).",
+      "properties": {
+        "config": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "maxProperties": 32,
+          "title": "Config",
+          "type": "object"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "impl": {
+          "discriminator": {
+            "mapping": {
+              "agent": "#/$defs/AgentImplementation",
+              "builtin": "#/$defs/BuiltinImplementation",
+              "connector": "#/$defs/ConnectorImplementation",
+              "function": "#/$defs/FunctionImplementation",
+              "model": "#/$defs/ModelImplementation",
+              "script": "#/$defs/ScriptImplementation",
+              "subgraph": "#/$defs/SubgraphImplementation"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/BuiltinImplementation"
+            },
+            {
+              "$ref": "#/$defs/AgentImplementation"
+            },
+            {
+              "$ref": "#/$defs/ModelImplementation"
+            },
+            {
+              "$ref": "#/$defs/FunctionImplementation"
+            },
+            {
+              "$ref": "#/$defs/ScriptImplementation"
+            },
+            {
+              "$ref": "#/$defs/ConnectorImplementation"
+            },
+            {
+              "$ref": "#/$defs/SubgraphImplementation"
+            }
+          ],
+          "title": "Impl"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "placement": {
+          "$ref": "#/$defs/Placement"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/PortSpec"
+          },
+          "maxItems": 64,
+          "title": "Ports",
+          "type": "array"
+        },
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "x",
+        "y",
+        "impl",
+        "ports"
+      ],
+      "title": "WorkflowNode",
+      "type": "object"
+    },
     "WorkflowRevision": {
       "additionalProperties": false,
       "properties": {
@@ -4567,53 +4009,7 @@
         },
         "nodes": {
           "items": {
-            "discriminator": {
-              "mapping": {
-                "agent_task": "#/$defs/AgentTaskNode",
-                "composite": "#/$defs/CompositeNode",
-                "input": "#/$defs/InputNode",
-                "library": "#/$defs/LibraryNode",
-                "machine_function": "#/$defs/MachineFunctionTaskNode",
-                "model": "#/$defs/ModelTaskNode",
-                "processing": "#/$defs/ProcessingNode",
-                "result": "#/$defs/ResultNode",
-                "script": "#/$defs/ScriptTaskNode",
-                "tool_task": "#/$defs/ToolTaskNode"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/$defs/InputNode"
-              },
-              {
-                "$ref": "#/$defs/ProcessingNode"
-              },
-              {
-                "$ref": "#/$defs/ResultNode"
-              },
-              {
-                "$ref": "#/$defs/CompositeNode"
-              },
-              {
-                "$ref": "#/$defs/AgentTaskNode"
-              },
-              {
-                "$ref": "#/$defs/ModelTaskNode"
-              },
-              {
-                "$ref": "#/$defs/ToolTaskNode"
-              },
-              {
-                "$ref": "#/$defs/MachineFunctionTaskNode"
-              },
-              {
-                "$ref": "#/$defs/ScriptTaskNode"
-              },
-              {
-                "$ref": "#/$defs/LibraryNode"
-              }
-            ]
+            "$ref": "#/$defs/WorkflowNode"
           },
           "maxItems": 500,
           "minItems": 1,
@@ -4709,6 +4105,9 @@
           "anyOf": [
             {
               "type": "string"
+            },
+            {
+              "type": "integer"
             },
             {
               "type": "number"

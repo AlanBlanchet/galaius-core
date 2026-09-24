@@ -5,7 +5,7 @@ import json
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
-from typing import Annotated, ClassVar, Literal, Self, get_args
+from typing import Annotated, ClassVar, Literal, Self
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -16,7 +16,7 @@ from .prompts import PromptExecutionRef, PromptRevision
 from .wire import WireModel
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio"]
-WorkflowValue = str | float | bool | dict[str, object] | list[object]
+WorkflowValue = str | int | float | bool | dict[str, object] | list[object]
 WorkspaceApiKeyScope = Literal["read", "write", "execute"]
 
 
@@ -175,7 +175,7 @@ class MachineAccelerator(WireModel):
 class MachineFunctionSummary(WireModel):
     """One `@interact.function`-decorated Python callable or registered shell command a machine
     advertises on connect/heartbeat — typed exactly like a workflow node's own ports, so a
-    `MachineFunctionTaskNode` copies `ports` verbatim when it is placed. `version` is a content
+    function node (`FunctionImplementation`) copies `ports` verbatim when it is placed. `version` is a content
     hash (name + description + ports) the runner recomputes locally on every call: a node keeps
     running the version it was wired against, and a machine whose function changed shape since
     then refuses the call instead of silently coercing mismatched arguments."""
@@ -547,62 +547,6 @@ class AgentRevisionRef(WireModel):
     revision: UUID
 
 
-class MachineCommand(WireModel):
-    """One owner-scoped workflow step requested from one enrolled machine."""
-
-    id: UUID
-    nonce: UUID
-    machine: MachineRef
-    workspace_id: UUID
-    run_id: UUID
-    workflow: WorkflowRevisionRef
-    node_id: UUID
-    action: Literal["agent", "model", "function", "script"] = "agent"
-    agent: AgentRevisionRef | None = None
-    model: str | None = Field(default=None, min_length=1, max_length=160)
-    image_paths: tuple[str, ...] = Field(default=(), max_length=16)
-    score_threshold: FiniteFloat = Field(default=0.5, ge=0, le=1)
-    function: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=80)
-    function_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    function_arguments: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
-    #: A script command carries its own SOURCE (never a blob-store reference the server would
-    #: have to scope-check cross-workspace) so the runner re-hashes and compares it against
-    #: `script_source_digest` locally, on top of the server's own pre-dispatch approval gate
-    #: (`MachineStore.script_approved`) -- two independent checks of the same exact bytes, never
-    #: one trusted alone. `script_language` picks python vs shell interpreter on the runner.
-    script_language: Literal["python", "shell"] | None = None
-    script_source: str | None = Field(default=None, min_length=1, max_length=1 << 16)
-    script_source_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    expires_at: datetime
-    task: str | None = Field(default=None, min_length=1, max_length=1 << 16)
-    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-    @field_validator("model")
-    @classmethod
-    def registered_model(cls, value: str | None) -> str | None:
-        if value is not None and value not in MACHINE_MODELS:
-            raise ValueError("machine model is not in the machine model registry")
-        return value
-
-    @model_validator(mode="after")
-    def coherent_action(self) -> Self:
-        if self.action == "agent" and (self.agent is None or self.task is None or self.model is not None or self.image_paths or self.function is not None or self.script_language is not None):
-            raise ValueError("agent commands require an agent and task only")
-        if self.action == "model" and (self.model is None or not self.image_paths or self.agent is not None or self.task is not None or self.function is not None or self.script_language is not None):
-            raise ValueError("model commands require a model and image paths only")
-        if self.action == "function" and (self.function is None or self.function_version is None or self.agent is not None or self.task is not None or self.model is not None or self.image_paths or self.script_language is not None):
-            raise ValueError("function commands require a function name and version only")
-        if self.action != "function" and (self.function is not None or self.function_version is not None or self.function_arguments):
-            raise ValueError("function name, version and arguments belong only to function commands")
-        if self.action == "script" and (self.script_language is None or self.script_source is None or self.script_source_digest is None or self.agent is not None or self.task is not None or self.model is not None or self.image_paths or self.function is not None):
-            raise ValueError("script commands require a language, source and its digest only")
-        if self.action != "script" and (self.script_language is not None or self.script_source is not None or self.script_source_digest is not None):
-            raise ValueError("script language, source and digest belong only to script commands")
-        if self.action == "script" and hashlib.sha256(self.script_source.encode()).hexdigest() != self.script_source_digest:
-            raise ValueError("script source does not match its pinned digest")
-        return self
-
-
 class MachineCommandResult(WireModel):
     command_id: UUID
     nonce: UUID
@@ -660,12 +604,16 @@ class ToolInputSchema(WireModel):
         return arguments
 
 
-ConnectorKind = Literal["google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"]
+ConnectorKind = Literal["google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "discord", "telegram", "whatsapp", "gitlab"]
 ConnectorActionName = Literal[
     "list_files", "list_repositories", "list_channels", "search_pages", "list_sites",
-    "search_metadata", "read_message", "send_message",
+    "search_metadata", "read_message", "send_message", "list_messages", "read_file",
 ]
-ConnectorBrowseActionName = Literal["list_files", "list_repositories", "list_channels", "search_pages", "list_sites"]
+#: Read/list-shaped actions only, reached through the generic `ConnectorAgentTool` with no owner
+#: approval — `send_message` and git's write operations run through their own dedicated,
+#: approval-gated tool (`MessagingAgentTool`, `GitAgentTool`), the same split Gmail's read vs send
+#: already draws.
+ConnectorBrowseActionName = Literal["list_files", "list_repositories", "list_channels", "search_pages", "list_sites", "list_messages", "read_file"]
 ConnectorAuthKind = Literal["google_oauth", "microsoft_oauth", "access_token"]
 #: How a workflow node's compute is actually reached, right now — never a label. "vendor_api" and
 #: "vendor_cli_session" are the two existing `ModelRoute` routes to a vendor-hosted model,
@@ -855,7 +803,84 @@ class ObjectStorageAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | WorkflowFunctionTool, Field(discriminator="kind")]
+#: Which bot-token/API-key REST API a `MessagingAgentTool` calls. Microsoft Teams is deliberately
+#: absent: it offers no bot-token send/list API, only incoming webhooks — reached through the
+#: generic `webhook` connection kind and `WebhookAgentTool` instead, alongside Discord's own
+#: webhook mode (Discord supports both; the owner picks bot token or webhook per connection).
+MessagingConnector = Literal["slack", "discord", "telegram", "whatsapp"]
+MessagingOperationName = Literal["send_message", "list_messages"]
+
+
+class MessagingAgentTool(WireModel):
+    """One send or list operation against a bot-token/API-key messaging provider, bound to a
+    pinned `service_connector` connection. Mirrors `GmailAgentTool`'s shape (one tool kind, an
+    `operation` field) generalized across four providers instead of a class per app;
+    `send_message` is gated by the same owner-approval ledger Gmail's send and SSH's writes use —
+    posting into someone else's channel is the same risk class. Not every provider supports both
+    operations (WhatsApp's Cloud API has no read endpoint): the server only ever publishes the
+    operations a given connector actually supports."""
+
+    kind: Literal["messaging"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    connector: MessagingConnector
+    operation: MessagingOperationName
+    connection: ConnectionResourceRef
+    input_schema: ToolInputSchema
+
+
+#: `list_repositories` and `read_file` stay on the existing read-only `ConnectorAgentTool` /
+#: `ConnectorBrowseActionName` path (pure reads, no owner approval); this tool covers only the
+#: write-shaped operations. `repository` is normalized as "owner/repo" for both providers (GitLab
+#: accepts that as its URL-encoded project path), so one input shape serves both.
+GitConnector = Literal["github", "gitlab"]
+GitOperationName = Literal["create_branch", "commit_file", "open_pull_request", "add_comment"]
+
+
+class GitAgentTool(WireModel):
+    """A write-class git-hosting operation, bound to a pinned `service_connector` connection.
+    Every operation here changes something outside this app (a branch, a commit, a pull/merge
+    request, a comment) and is gated by the same owner-approval ledger SSH writes use."""
+
+    kind: Literal["git"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    connector: GitConnector
+    operation: GitOperationName
+    connection: ConnectionResourceRef
+    input_schema: ToolInputSchema
+
+
+MailOperationName = Literal["send_email", "read_inbox"]
+
+
+class MailAgentTool(WireModel):
+    """One SMTP send or IMAP read against a pinned `mail_server` connection — the same
+    read-direct / write-approved split SSH and Gmail draw, generalized to any mail server instead
+    of only Gmail's OAuth-bound Workspace account."""
+
+    kind: Literal["mail_server"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    operation: MailOperationName
+    connection: ConnectionResourceRef
+    input_schema: ToolInputSchema
+
+
+class WebhookAgentTool(WireModel):
+    """Posts to a pinned `webhook` connection's URL — a Discord/Teams incoming webhook or a
+    Netlify/Vercel deploy hook. The connection grants exactly one verb ("write"); this tool is
+    always owner-approval-gated, since a webhook post is an effect on someone else's system (a
+    message sent, a deploy triggered) with no read counterpart to check first."""
+
+    kind: Literal["webhook"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    connection: ConnectionResourceRef
+    input_schema: ToolInputSchema
+
+
+AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | MessagingAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | WorkflowFunctionTool, Field(discriminator="kind")]
 
 
 class AgentRevision(WireModel):
@@ -1013,70 +1038,6 @@ class ArtifactRef(WireModel):
     size: int = Field(ge=0)
 
 
-class WorkflowNode(WireModel):
-    id: UUID
-    label: str = Field(min_length=1, max_length=120)
-    x: float
-    y: float
-    ports: tuple[PortSpec, ...] = Field(max_length=64)
-
-    def _position(self) -> dict[str, object]:
-        return {"id": self.id, "label": self.label, "x": self.x, "y": self.y, "ports": self.ports}
-
-
-class InputNode(WorkflowNode):
-    kind: Literal["input"]
-    value: WorkflowValue
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=BuiltinImplementation(kind="builtin", op="input"), config={"value": self.value})
-
-
-class ProcessingNode(WorkflowNode):
-    kind: Literal["processing"]
-    operation: Literal["uppercase", "lowercase", "identity", "http_get"]
-    model: ConfiguredModelRef | None = None
-    connection: ConnectionResourceRef | None = None
-
-    def generic(self) -> "GenericNode":
-        # `model` is never set (save validation refuses it): the generic shape drops it.
-        config = {} if self.connection is None else {"connection": self.connection.model_dump(mode="json")}
-        return GenericNode(**self._position(), impl=BuiltinImplementation(kind="builtin", op=self.operation), config=config)
-
-
-class ResultNode(WorkflowNode):
-    kind: Literal["result"]
-    connection: ConnectionResourceRef | None = None
-    artifact_path: str | None = Field(default=None, min_length=1, max_length=512)
-
-    def generic(self) -> "GenericNode":
-        config: dict[str, WorkflowValue] = {}
-        if self.connection is not None:
-            config["connection"] = self.connection.model_dump(mode="json")
-        if self.artifact_path is not None:
-            config["artifact_path"] = self.artifact_path
-        return GenericNode(**self._position(), impl=BuiltinImplementation(kind="builtin", op="write_artifact" if self.artifact_path else "output"), config=config)
-
-
-class CompositeNode(WorkflowNode):
-    kind: Literal["composite"]
-    workflow: WorkflowRevisionRef
-    variables: dict[str, WorkflowValue] = Field(default_factory=dict)
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=SubgraphImplementation(kind="subgraph", ref=self.workflow), config=dict(self.variables))
-
-
-class AgentTaskNode(WorkflowNode):
-    kind: Literal["agent_task"]
-    agent: AgentRevisionRef
-    parameters: dict[str, WorkflowValue] = Field(default_factory=dict)
-    machine: MachineRef | None = None
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=AgentImplementation(kind="agent", agent=self.agent), config=dict(self.parameters), placement=_machine_placement(self.machine))
-
-
 class Placement(WireModel):
     """Where a node runs: on the server (hosted APIs), or on one enrolled machine (local
     checkpoints, the owner's own GPU — data stays on it)."""
@@ -1091,113 +1052,19 @@ class Placement(WireModel):
         return self
 
 
-class ModelTaskNode(WorkflowNode):
-    """Any model, one node: a hosted API model or a local checkpoint, typed by its `task`. Ports
-    are the task's signature (`model_task_ports`); `config` holds the model's parameters AND the
-    constant value of any input port left unwired, so a node tried in the Models area keeps its
-    inputs when dropped into a workflow."""
-
-    kind: Literal["model"]
-    provider: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
-    model: str = Field(min_length=1, max_length=160)
-    task: ModelTask
-    config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
-    placement: Placement = Field(default_factory=Placement)
-
-    @model_validator(mode="after")
-    def task_signature(self) -> Self:
-        if self.ports != model_task_ports(self.task):
-            raise ValueError("model node ports must be its task's signature")
-        return self
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=ModelImplementation(kind="model", provider=self.provider, model=self.model, task=self.task), config=dict(self.config), placement=self.placement)
-
-
 DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool, Field(discriminator="kind")]
-
-
-class ToolTaskNode(WorkflowNode):
-    """A configured connector or API operation, executable without a model call."""
-
-    kind: Literal["tool_task"]
-    tool: DirectTool
-    arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=ConnectorImplementation(kind="connector", tool=self.tool), config=dict(self.arguments))
-
-
-class MachineFunctionTaskNode(WorkflowNode):
-    """Runs one function an enrolled machine itself declared — a `@interact.function`-decorated
-    Python callable or a registered shell command — typed by that machine's own advertised
-    signature (`MachineFunctionSummary`). `ports` is copied verbatim from the summary at node
-    placement time; `function_version` pins the exact signature the node was wired against, so a
-    later change to the function on the machine re-arms the block as `config_required` instead
-    of silently running under a different shape. `arguments` carries constant bindings for ports
-    with no incoming edge, exactly like `ToolTaskNode.arguments`."""
-
-    kind: Literal["machine_function"]
-    machine: MachineRef
-    function: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    function_version: str = Field(pattern=r"^[0-9a-f]{64}$")
-    arguments: dict[str, str | int | float | bool] = Field(default_factory=dict, max_length=32)
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=FunctionImplementation(kind="function", name=self.function, version=self.function_version), config=dict(self.arguments), placement=_machine_placement(self.machine))
-
-
-class ScriptTaskNode(WorkflowNode):
-    """Server-authored source (Python or shell), pinned by content digest, dispatched to run on
-    one enrolled machine — a NEW code-execution boundary a threat-modeler review (2026-09-24)
-    gated before this class existed: same-workflow tampering by any mutate-role workspace member
-    (not just a stranger targeting another account's machine) can inject or edit this node's
-    `source`, so the machine owner must explicitly approve the exact `source_digest` before the
-    server will ever dispatch it (`MachineStore.script_approved`); this is checked ON TOP OF the
-    per-command signature, never instead of it. `source_digest` is derived from `source` itself
-    (never a separately-settable field two values could disagree on), and any edit to `source`
-    changes the digest, which re-arms approval automatically — there is no "same script, new
-    text" path that skips a fresh owner decision."""
-
-    kind: Literal["script"]
-    machine: MachineRef
-    language: Literal["python", "shell"]
-    source: str = Field(min_length=1, max_length=1 << 16)
-    source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-    @model_validator(mode="after")
-    def digest_matches_source(self) -> Self:
-        if hashlib.sha256(self.source.encode()).hexdigest() != self.source_digest:
-            raise ValueError("script node source does not match its pinned digest")
-        return self
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=ScriptImplementation(kind="script", language=self.language, source_digest=self.source_digest), config={"source": self.source}, placement=_machine_placement(self.machine))
 
 
 class NodeLibraryRef(WireModel):
     id: UUID
 
 
-class LibraryNode(WorkflowNode):
-    """A reusable node dropped BY REFERENCE: its definition lives in the workspace's node library
-    and is expanded at run time, so editing the definition updates every workflow using it. Its
-    `ports` mirror the definition's boundary (`NodeLibraryDefinition.boundary`) at the time it was
-    placed; the server re-derives them from the definition when the workflow is saved and run."""
-
-    kind: Literal["library"]
-    library: NodeLibraryRef
-
-    def generic(self) -> "GenericNode":
-        return GenericNode(**self._position(), impl=SubgraphImplementation(kind="subgraph", ref=self.library))
-
-
-# ---- The generic node (docs: .github/memory/generic-node-contract.md) ----
+# ---- The workflow node (docs: .github/memory/generic-node-contract.md) ----
 #
 # Every node is ONE shape: what it runs (`impl`, data only), its `ports`, its `config` (settings
-# AND the constants of unwired input ports) and its `placement`. Phase A: each kind class below
-# exposes that shape as a view (`generic()`), and the server dispatches on `impl.kind`; saved JSON
-# keeps the kind classes. Phase B rewrites the stored nodes to `GenericNode` and deletes them.
+# AND the constants of unwired input ports) and its `placement`. The server and the machine runner
+# dispatch on `impl.kind`; an implementation declares its effects, where it may run, the ports it
+# fixes by itself and the rules binding it to its config.
 
 #: What a node reaches outside the workflow: a model provider, a connector / API, or an enrolled
 #: machine. A pure function workflow has none, at any depth.
@@ -1205,16 +1072,26 @@ Effect = Literal["model", "connector", "machine"]
 
 
 class _Implementation(WireModel):
-    #: What running it reaches; `placement` on a machine adds "machine" (GenericNode.effects).
+    #: What running it reaches; `placement` on a machine adds "machine" (WorkflowNode.effects).
     effects: ClassVar[frozenset[str]] = frozenset()
+    #: Where it may run (`Placement.target`).
+    placements: ClassVar[frozenset[str]] = frozenset({"server"})
 
     def signature(self) -> tuple[PortSpec, ...] | None:
         """The ports this implementation fixes by itself, or None when they come from outside it
-        (a machine's advertised function, a tool's schema, a subgraph's interface, an agent)."""
+        (a builtin's chosen value type, a machine's advertised function, a tool's schema, a
+        subgraph's interface, an agent)."""
         return None
+
+    def required_config(self) -> tuple[str, ...]:
+        """Config keys a node needs before it can run (the palette's `required_config_fields`)."""
+        return ()
 
     def check(self, config: dict[str, WorkflowValue]) -> None:
         """Rules binding this implementation to its config; raises ValueError."""
+
+
+BuiltinOp = Literal["input", "output", "write_artifact", "uppercase", "lowercase", "identity", "http_get"]
 
 
 class BuiltinImplementation(_Implementation):
@@ -1222,13 +1099,27 @@ class BuiltinImplementation(_Implementation):
     a configured connection, or an artifact write to workspace storage."""
 
     kind: Literal["builtin"]
-    op: Literal["input", "output", "write_artifact", "uppercase", "lowercase", "identity", "http_get"]
+    op: BuiltinOp
+    _REQUIRED: ClassVar[dict[str, tuple[str, ...]]] = {"input": ("value",), "http_get": ("connection",), "write_artifact": ("connection", "artifact_path")}
+
+    def required_config(self) -> tuple[str, ...]:
+        return self._REQUIRED.get(self.op, ())
+
+    def check(self, config: dict[str, WorkflowValue]) -> None:
+        if self.op == "input" and "value" not in config:
+            raise ValueError("a workflow input holds its value")
+        if config.get("connection") is not None:
+            ConnectionResourceRef.model_validate(config["connection"])
+        path = config.get("artifact_path")
+        if path is not None and not (isinstance(path, str) and 1 <= len(path) <= 512):
+            raise ValueError("artifact path must be a relative path of 1-512 characters")
 
 
 class AgentImplementation(_Implementation):
     kind: Literal["agent"]
     agent: AgentRevisionRef
     effects: ClassVar[frozenset[str]] = frozenset({"model"})
+    placements: ClassVar[frozenset[str]] = frozenset({"server", "machine"})
 
 
 class ModelImplementation(_Implementation):
@@ -1239,40 +1130,57 @@ class ModelImplementation(_Implementation):
     model: str = Field(min_length=1, max_length=160)
     task: ModelTask
     effects: ClassVar[frozenset[str]] = frozenset({"model"})
+    placements: ClassVar[frozenset[str]] = frozenset({"server", "machine"})
 
     def signature(self) -> tuple[PortSpec, ...]:
         return model_task_ports(self.task)
 
 
 class FunctionImplementation(_Implementation):
-    """A function an enrolled machine declared, pinned to the exact signature it was wired against."""
+    """A function an enrolled machine declared (`MachineFunctionSummary`), pinned to the exact
+    signature version it was wired against: a later change on the machine refuses the call
+    instead of silently running under a different shape."""
 
     kind: Literal["function"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     version: str = Field(pattern=r"^[0-9a-f]{64}$")
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
+    placements: ClassVar[frozenset[str]] = frozenset({"machine"})
 
 
 class ScriptImplementation(_Implementation):
-    """Server-authored source, pinned by digest; the source itself is `config["source"]`."""
+    """Server-authored source (Python or shell), pinned by content digest, run on one enrolled
+    machine — a code-execution boundary: the machine owner approves the exact `source_digest`
+    before the server dispatches it (`MachineStore.script_approved`), on top of the per-command
+    signature. The source itself is `config["source"]`; any edit changes the digest and re-arms
+    that approval."""
 
     kind: Literal["script"]
     language: Literal["python", "shell"]
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
+    placements: ClassVar[frozenset[str]] = frozenset({"machine"})
+
+    def required_config(self) -> tuple[str, ...]:
+        return ("source",)
 
     def check(self, config: dict[str, WorkflowValue]) -> None:
         source = config.get("source")
-        if not isinstance(source, str) or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
+        if not isinstance(source, str) or len(source) > 1 << 16 or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
             raise ValueError("script node source does not match its pinned digest")
 
 
 class ConnectorImplementation(_Implementation):
-    """A configured connector or API operation (`DirectTool`), executable without a model call."""
+    """A configured connector or API operation (`DirectTool`), executable without a model call.
+    Its config holds scalar arguments only (the tool's declared input schema)."""
 
     kind: Literal["connector"]
     tool: DirectTool
     effects: ClassVar[frozenset[str]] = frozenset({"connector"})
+
+    def check(self, config: dict[str, WorkflowValue]) -> None:
+        if any(not isinstance(value, (str, int, float, bool)) for value in config.values()):
+            raise ValueError("connector arguments are scalar values")
 
 
 class SubgraphImplementation(_Implementation):
@@ -1285,13 +1193,11 @@ class SubgraphImplementation(_Implementation):
 
 
 Implementation = Annotated[BuiltinImplementation | AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation | ConnectorImplementation | SubgraphImplementation, Field(discriminator="kind")]
+#: What an enrolled machine runs itself (`MachineCommand.impl`).
+MachineImplementation = Annotated[AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation, Field(discriminator="kind")]
 
 
-def _machine_placement(machine: MachineRef | None) -> Placement:
-    return Placement(target="machine", machine=machine) if machine is not None else Placement()
-
-
-class GenericNode(WireModel):
+class WorkflowNode(WireModel):
     """One node, whatever it runs. `config` holds the implementation's settings AND the constant
     value of any input port left unwired (a wire, when present, wins)."""
 
@@ -1309,6 +1215,8 @@ class GenericNode(WireModel):
         signature = self.impl.signature()
         if signature is not None and self.ports != signature:
             raise ValueError("node ports must be its implementation's signature")
+        if self.placement.target not in self.impl.placements:
+            raise ValueError(f"a {self.impl.kind} node cannot run on the {self.placement.target}")
         self.impl.check(self.config)
         return self
 
@@ -1322,10 +1230,34 @@ class GenericNode(WireModel):
         return None if value in (None, "") else value
 
 
-#: What a library definition may hold: any configured node but another reference (one level).
-LibraryContent = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode | ScriptTaskNode, Field(discriminator="kind")]
+class MachineCommand(WireModel):
+    """One owner-scoped workflow step requested from one enrolled machine: the node's
+    implementation, its config (settings, a script's source) and its resolved input values
+    (an agent's `task`, a model's `images`, a function's arguments). The runner dispatches on
+    `impl.kind` and re-checks everything it can locally (signature, function version, script
+    digest) on top of the server's own checks."""
 
-Node = Annotated[InputNode | ProcessingNode | ResultNode | CompositeNode | AgentTaskNode | ModelTaskNode | ToolTaskNode | MachineFunctionTaskNode | ScriptTaskNode | LibraryNode, Field(discriminator="kind")]
+    id: UUID
+    nonce: UUID
+    machine: MachineRef
+    workspace_id: UUID
+    run_id: UUID
+    workflow: WorkflowRevisionRef
+    node_id: UUID
+    impl: MachineImplementation
+    config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    inputs: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    expires_at: datetime
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def runnable(self) -> Self:
+        self.impl.check(self.config)
+        if self.impl.kind == "model" and self.impl.model not in MACHINE_MODELS:
+            raise ValueError("machine model is not in the machine model registry")
+        if self.impl.kind == "agent" and not isinstance(self.inputs.get("task"), str):
+            raise ValueError("agent commands carry their task")
+        return self
 
 
 def _port_slug(label: str) -> str:
@@ -1336,13 +1268,13 @@ def _port_slug(label: str) -> str:
 class NodeLibraryDefinition(WireModel):
     """One reusable node: a configured node, or a selection of nodes with the wires between them.
     Its BOUNDARY — inner input ports no inner edge feeds, inner output ports no inner edge reads —
-    is the port list every `LibraryNode` referencing it carries. Positions are relative to the
-    reference node's own position."""
+    is the port list every node referencing it (`SubgraphImplementation` with a `NodeLibraryRef`)
+    carries. Positions are relative to the reference node's own position."""
 
     id: UUID
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=400)
-    nodes: tuple[LibraryContent, ...] = Field(min_length=1, max_length=50)
+    nodes: tuple[WorkflowNode, ...] = Field(min_length=1, max_length=50)
     edges: tuple[WorkflowEdge, ...] = Field(default=(), max_length=150)
     created_at: datetime
     updated_at: datetime
@@ -1352,6 +1284,8 @@ class NodeLibraryDefinition(WireModel):
         ids = {node.id for node in self.nodes}
         if len(ids) != len(self.nodes):
             raise ValueError("library node identifiers must be unique")
+        if any(node.impl.kind == "subgraph" and isinstance(node.impl.ref, NodeLibraryRef) for node in self.nodes):
+            raise ValueError("a reusable node cannot hold another reusable node")
         if any(edge.source.node not in ids or edge.target.node not in ids for edge in self.edges):
             raise ValueError("library edges must stay inside the definition")
         return self
@@ -1378,7 +1312,7 @@ class NodeLibraryDefinition(WireModel):
                 taken.add(name)
                 # An inner input holding a constant has its default: the boundary port is optional
                 # (a wire into the reusable node, when present, still wins).
-                optional = port.direction == "input" and node.generic().constant(port.name) is not None
+                optional = port.direction == "input" and node.constant(port.name) is not None
                 result.append((port.model_copy(update={"name": name[:80], **({"required": False} if optional else {})}), address))
         return tuple(result)
 
@@ -1397,62 +1331,28 @@ class NodeLibraryEntry(WireModel):
 
 
 class WorkflowBlockAvailability(WireModel):
-    kind: Literal["input", "processing", "result", "composite", "agent_task", "model", "tool_task", "library", "machine_function", "script"]
-    operation: Literal["uppercase", "lowercase", "identity", "http_get"] | None = None
-    workflow: WorkflowRevisionRef | None = None
-    agent: AgentRevisionRef | None = None
-    tool: DirectTool | None = None
-    #: Set only for `machine_function` blocks — one per function an ONLINE machine advertised;
-    #: never a `builtins()` entry, exactly like `tool_task` (both need live external data no
-    #: static catalog can guess: which machines are online, which connectors are configured).
-    machine: MachineRef | None = None
-    function: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$", max_length=80)
-    function_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    """One block the editor's palette offers: the node it places (implementation, ports, default
+    config, placement) and whether it runs as placed. The editor copies these four fields onto a
+    new `WorkflowNode`; nothing is per kind."""
+
+    impl: Implementation
     name: str = Field(min_length=1, max_length=120)
     ports: tuple[PortSpec, ...] = Field(max_length=64)
+    config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    placement: Placement = Field(default_factory=Placement)
     readiness: Literal["executable", "config_required", "unavailable"]
     required_config_fields: tuple[str, ...] = Field(default=(), max_length=32)
     reason: str = Field(min_length=1, max_length=400)
-    #: Set only for `agent_task` blocks whose agent has a directly configured model (never for a
+    #: Set only for agent blocks whose agent has a directly configured model (never for a
     #: criteria-routed agent, whose route is resolved per run — that stays `None`, not guessed).
     sovereignty: Sovereignty | None = None
 
-    @classmethod
-    def builtins(cls):
-        entries = []
-        for node_type in get_args(get_args(Node)[0]):
-            if node_type in (ToolTaskNode, MachineFunctionTaskNode, LibraryNode):
-                continue  # Tool, machine-function and reusable-node blocks come from live workspace/machine state.
-            kind = get_args(node_type.model_fields["kind"].annotation)[0]
-            if node_type is ScriptTaskNode:
-                # A machine to run it is the only catalog-time requirement -- language and source
-                # are configured directly on the placed node, never resolved from live state, but
-                # DISPATCH still needs the machine owner's explicit per-digest approval (server-
-                # side gate, threat-modeler mitigation #1): "executable" here means placeable, not
-                # "will run unapproved".
-                entries.append(cls(kind=kind, name="Script", ports=(PortSpec(name="result", direction="output", value_type="text"),), readiness="config_required", required_config_fields=("machine", "language", "source"), reason="Choose a machine and write the script; the machine owner must approve its exact source before it can run."))
-                continue
-            operations = get_args(node_type.model_fields["operation"].annotation) if node_type is ProcessingNode else (None,)
-            for operation in operations:
-                if node_type is ModelTaskNode:
-                    continue  # Model blocks come from the model catalog (registry + discovery).
-                required = ("connection",) if operation == "http_get" else ("workflow",) if node_type is CompositeNode else ("agent",) if node_type is AgentTaskNode else ()
-                ports = (() if node_type is InputNode else (PortSpec(name="value", direction="input", value_type="text"),)) + (PortSpec(name="result", direction="output", value_type="text"),)
-                entries.append(cls(kind=kind, operation=operation, name=operation.replace("_", " ").title() if operation else kind.replace("_", " ").title(), ports=ports, readiness="config_required" if required else "executable", required_config_fields=required, reason="Select the required configuration before execution." if required else "Runs locally without a model provider."))
-        entries.append(cls(kind="result", name="Write artifact", ports=(PortSpec(name="value", direction="input", value_type="text"), PortSpec(name="result", direction="output", value_type="artifact")), readiness="config_required", required_config_fields=("connection", "artifact_path"), reason="Select writable workspace storage and a relative artifact path."))
-        return tuple(entries)
-
     @model_validator(mode="after")
     def coherent_source(self) -> Self:
-        if (self.kind == "processing") != (self.operation is not None):
-            raise ValueError("processing catalog entries require an operation")
-        if self.workflow is not None and self.kind != "composite" or self.agent is not None and self.kind != "agent_task":
-            raise ValueError("catalog references must match their node kind")
-        if (self.kind == "tool_task") != (self.tool is not None):
-            raise ValueError("tool catalog entries require a configured tool")
-        if (self.kind == "machine_function") != (self.machine is not None and self.function is not None and self.function_version is not None):
-            raise ValueError("machine function catalog entries require a machine, function and version")
-        if self.sovereignty is not None and self.kind != "agent_task":
+        signature = self.impl.signature()
+        if signature is not None and self.ports != signature:
+            raise ValueError("catalog ports must be its implementation's signature")
+        if self.sovereignty is not None and self.impl.kind != "agent":
             raise ValueError("sovereignty applies only to agent blocks")
         if len({port.name for port in self.ports}) != len(self.ports):
             raise ValueError("catalog ports must have unique names")
@@ -1533,7 +1433,7 @@ class WorkflowRevision(WireModel):
     revision: UUID
     parent_revision: UUID | None = None
     name: str = Field(min_length=1, max_length=120)
-    nodes: tuple[Node, ...] = Field(min_length=1, max_length=500)
+    nodes: tuple[WorkflowNode, ...] = Field(min_length=1, max_length=500)
     edges: tuple[WorkflowEdge, ...] = Field(max_length=1500)
     interface: WorkflowInterface
     created_at: datetime
@@ -1548,17 +1448,21 @@ class WorkflowRevision(WireModel):
 class ConnectionResource(WireModel):
     id: UUID
     revision: UUID
-    kind: Literal["workspace_storage", "http_server", "provider_api", "service_connector", "ssh_server", "object_storage"]
+    kind: Literal["workspace_storage", "http_server", "provider_api", "service_connector", "ssh_server", "object_storage", "mail_server", "webhook"]
     name: str = Field(min_length=1, max_length=120)
+    #: Reused per kind (documented at each validator branch below): workspace storage's folder,
+    #: OR — for `mail_server` only — the `smtp://host:port` send endpoint, alongside `endpoint`
+    #: holding the `imap://host:port` read endpoint.
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
     capabilities: tuple[Literal["read", "write", "list", "http", "command"], ...]
     credential_expires_at: datetime | None = None
-    #: SSH login name, or the object-storage access-key-id / storage-account name — the one
-    #: identity string every non-OAuth remote credential needs alongside its secret.
+    #: SSH login name, the object-storage access-key-id / storage-account name, a mail server's
+    #: login, or a WhatsApp Business phone_number_id — the one identity string every non-OAuth
+    #: remote credential needs alongside its secret.
     username: str | None = Field(default=None, min_length=1, max_length=256)
     #: SHA256 OpenSSH host-key fingerprint pinned on the connection's first successful `ssh_server`
     #: test (trust-on-first-use), shown to the owner then; every later connect refuses a host that
@@ -1574,20 +1478,23 @@ class ConnectionResource(WireModel):
             raise ValueError("workspace storage requires only a root")
         if self.kind in {"http_server", "provider_api"} and (self.endpoint is None or self.root is not None):
             raise ValueError("server connection requires only an endpoint")
-        if self.kind == "service_connector" and (self.endpoint is not None or self.root is not None or self.provider is None or self.credential is None or "list" not in self.capabilities or "write" in self.capabilities):
-            raise ValueError("service connector requires a credential, provider, and list capability only")
+        # A service connector's grantable verbs generalized beyond read-only browsing: "list"
+        # covers every read/browse action (unchanged), "write" now also covers a messaging send or
+        # a git write operation — the same owner-approval ledger SSH and object storage writes use.
+        if self.kind == "service_connector" and (self.endpoint is not None or self.root is not None or self.provider is None or self.credential is None or not self.capabilities or set(self.capabilities) - {"list", "write"}):
+            raise ValueError("service connector requires a credential, provider, and at least one of list/write")
         # A self-hosted endpoint is the owner's own machine, typically on a trusted/private
         # network with no vendor credential to hold — unlike openai/anthropic/gemini, which
         # always require one.
         if self.kind == "provider_api" and self.provider != "self_hosted" and self.credential is None:
             raise ValueError("provider connection requires a credential reference")
-        if self.kind not in {"provider_api", "service_connector", "object_storage"} and self.provider is not None:
-            raise ValueError("provider kind is required only for provider, service and object-storage connections")
+        if self.kind not in {"provider_api", "service_connector", "object_storage", "webhook"} and self.provider is not None:
+            raise ValueError("provider kind is required only for provider, service, object-storage and webhook connections")
         if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "self_hosted"}:
             raise ValueError("provider API kind requires a model provider")
         if self.kind not in {"service_connector", "ssh_server", "object_storage"} and self.credential_expires_at is not None:
             raise ValueError("credential expiry belongs only to connections with vendor-issued expiry")
-        if self.kind == "service_connector" and self.provider not in {"google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive"}:
+        if self.kind == "service_connector" and self.provider not in {"google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "discord", "telegram", "whatsapp", "gitlab"}:
             raise ValueError("service connector provider is unsupported")
         if self.kind != "provider_api" and self.models:
             raise ValueError("only provider connections declare models")
@@ -1597,12 +1504,19 @@ class ConnectionResource(WireModel):
             raise ValueError("SSH connection requires an ssh:// endpoint, credential, username and at least one of command/read/write/list")
         if self.kind == "object_storage" and (self.endpoint is None or self.root is not None or self.provider not in {"s3_compatible", "azure_blob"} or self.credential is None or self.username is None or not self.capabilities or set(self.capabilities) - {"read", "write", "list"}):
             raise ValueError("object storage connection requires an endpoint, s3_compatible or azure_blob provider, credential, username and at least one of read/write/list")
+        # Two host:port pairs on one connection: `endpoint` reads (IMAP), `root` sends (SMTP) — the
+        # same generic-field-reuse-per-kind convention `root`/`endpoint` already carry elsewhere on
+        # this model, never a config blob.
+        if self.kind == "mail_server" and (self.endpoint is None or not self.endpoint.startswith("imap://") or self.root is None or not self.root.startswith("smtp://") or self.provider is not None or self.credential is None or self.username is None or not self.capabilities or set(self.capabilities) - {"read", "write"}):
+            raise ValueError("mail connection requires an imap:// endpoint, an smtp:// root, credential, username and at least one of read/write")
+        if self.kind == "webhook" and (self.endpoint is None or not self.endpoint.startswith("https://") or self.root is not None or self.username is not None or self.provider not in {None, "discord_webhook", "teams_webhook"} or self.capabilities != ("write",)):
+            raise ValueError("webhook connection requires an https:// endpoint and write capability only")
         if self.kind != "ssh_server" and self.host_key_fingerprint is not None:
             raise ValueError("host key pinning belongs only to SSH connections")
         if self.kind != "object_storage" and self.region is not None:
             raise ValueError("region belongs only to object storage connections")
-        if self.kind not in {"ssh_server", "object_storage"} and self.username is not None:
-            raise ValueError("username belongs only to SSH and object storage connections")
+        if self.kind not in {"ssh_server", "object_storage", "mail_server"} and self.username is not None:
+            raise ValueError("username belongs only to SSH, object storage and mail connections")
         return self
 
 

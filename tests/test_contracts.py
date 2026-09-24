@@ -46,15 +46,6 @@ from interact_core import (
     MachineRuntime,
     MachineSummary,
     MachineEvent,
-    MachineFunctionSummary,
-    MachineFunctionTaskNode,
-    ModelTaskNode,
-    Placement,
-    VISION_MODEL_TASKS,
-    model_task_ports,
-    PortSpec,
-    ScriptTaskNode,
-    WorkflowBlockAvailability,
 )
 
 
@@ -195,115 +186,14 @@ def test_machine_wire_contract_binds_commands_and_results() -> None:
         id=uuid4(), nonce=uuid4(), machine=MachineRef(id=machine.id),
         workspace_id=uuid4(), run_id=uuid4(),
         workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-        node_id=uuid4(), agent=AgentRevisionRef(id=uuid4(), revision=uuid4()),
-        expires_at=now, task="summarize",
-        signature="a" * 64,
+        node_id=uuid4(), impl={"kind": "agent", "agent": {"id": str(uuid4()), "revision": str(uuid4())}},
+        inputs={"task": "summarize"}, expires_at=now, signature="a" * 64,
     )
     assert command.signature == "a" * 64
     assert MachineCommandResult(command_id=command.id, nonce=command.nonce, status="succeeded", result="done")
     assert MachineEvent(command_id=command.id, sequence=1, kind="started", timestamp=now)
     with pytest.raises(ValidationError, match="requires an error"):
         MachineCommandResult(command_id=command.id, nonce=command.nonce, status="failed")
-
-
-def test_model_node_is_typed_by_its_task_and_binds_local_vision_execution() -> None:
-    machine = MachineRef(id=uuid4())
-    node = ModelTaskNode(
-        kind="model", id=uuid4(), label="Detect", x=0, y=0, provider="huggingface", model="facebook/detr-resnet-50", task="object-detection",
-        placement=Placement(target="machine", machine=machine), ports=model_task_ports("object-detection"), config={"score_threshold": 0.4},
-    )
-    command = MachineCommand(
-        id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
-        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-        node_id=node.id, action="model", model=node.model, image_paths=("photo.jpg",),
-        expires_at=datetime.now(UTC), signature="a" * 64,
-    )
-    assert command.action == "model" and command.image_paths == ("photo.jpg",)
-    assert VISION_MODEL_TASKS[node.model] == node.task
-    # Ports are the task's signature, whoever serves it; a node claiming other ports is refused.
-    with pytest.raises(ValidationError, match="task's signature"):
-        ModelTaskNode(kind="model", id=uuid4(), label="Video", x=0, y=0, provider="gemini", model="veo-3.1-lite-generate-preview", task="text-to-video", ports=model_task_ports("text-to-image"))
-    with pytest.raises(ValidationError, match="names its machine"):
-        Placement(target="machine")
-    # Model blocks come from the model catalog, never the static builtins.
-    assert not any(block.kind == "model" for block in WorkflowBlockAvailability.builtins())
-
-
-def test_machine_function_node_pins_version_and_dispatches_typed_ports() -> None:
-    """A machine advertises a typed function (ports + a version hash); a workflow node pins
-    that exact version, so a signature change on the PC re-arms `config_required` instead of
-    silently running the old shape. The command carries the same pinned name/version + typed
-    arguments the machine will re-check against its own current registry."""
-    machine = MachineRef(id=uuid4())
-    function = MachineFunctionSummary(
-        name="hostname", description="This machine's hostname.", version="a" * 64,
-        permission="read_only",
-        ports=(PortSpec(name="result", direction="output", value_type="text"),),
-    )
-    assert function.ports[0].value_type == "text"
-    with pytest.raises(ValidationError):
-        MachineFunctionSummary(name="Bad Name", description="x", version="a" * 64, permission="read_only", ports=())
-
-    node = MachineFunctionTaskNode(
-        kind="machine_function", id=uuid4(), label="Hostname", x=0, y=0,
-        machine=machine, function=function.name, function_version=function.version,
-        ports=function.ports,
-    )
-    command = MachineCommand(
-        id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
-        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-        node_id=node.id, action="function", function=node.function, function_version=node.function_version,
-        function_arguments={"arg": "value"}, expires_at=datetime.now(UTC), signature="a" * 64,
-    )
-    assert command.function == "hostname"
-    assert command.function_arguments == {"arg": "value"}
-    with pytest.raises(ValidationError, match="function"):
-        MachineCommand(
-            id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
-            workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-            node_id=node.id, action="function", expires_at=datetime.now(UTC), signature="a" * 64,
-        )
-
-
-def test_script_node_pins_its_own_source_digest_and_the_command_re_checks_it() -> None:
-    """A script node's `source_digest` is computed from ITS OWN `source`, never trusted as a
-    separate field a saver could mismatch -- and `MachineCommand` re-derives + compares the same
-    digest again, so the wire itself refuses a payload whose source and digest disagree (the
-    threat-modeler's mitigation #3: no silent drift between what was approved and what runs)."""
-    machine = MachineRef(id=uuid4())
-    source = "print('hi')\n"
-    digest = hashlib.sha256(source.encode()).hexdigest()
-    node = ScriptTaskNode(
-        kind="script", id=uuid4(), label="Greet", x=0, y=0, machine=machine,
-        language="python", source=source, source_digest=digest,
-        ports=(PortSpec(name="result", direction="output", value_type="text"),),
-    )
-    assert node.source_digest == digest
-    with pytest.raises(ValidationError, match="digest"):
-        ScriptTaskNode(kind="script", id=uuid4(), label="Bad", x=0, y=0, machine=machine,
-                        language="python", source=source, source_digest="a" * 64, ports=node.ports)
-
-    command = MachineCommand(
-        id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
-        workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-        node_id=node.id, action="script", script_language="python", script_source=source,
-        script_source_digest=digest, expires_at=datetime.now(UTC), signature="a" * 64,
-    )
-    assert command.script_source_digest == digest
-    with pytest.raises(ValidationError, match="digest"):
-        MachineCommand(
-            id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
-            workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-            node_id=node.id, action="script", script_language="python", script_source=source,
-            script_source_digest="b" * 64, expires_at=datetime.now(UTC), signature="a" * 64,
-        )
-    with pytest.raises(ValidationError, match="agent"):
-        MachineCommand(
-            id=uuid4(), nonce=uuid4(), machine=machine, workspace_id=uuid4(), run_id=uuid4(),
-            workflow=WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4()),
-            node_id=node.id, action="agent", agent=AgentRevisionRef(id=uuid4(), revision=uuid4()),
-            task="x", script_language="python", expires_at=datetime.now(UTC), signature="a" * 64,
-        )
 
 
 def test_a_dead_link_is_its_own_wire_failure_never_a_credential_failure() -> None:
