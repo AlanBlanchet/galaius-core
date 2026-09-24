@@ -674,9 +674,12 @@ ConnectorAuthKind = Literal["google_oauth", "microsoft_oauth", "access_token"]
 #: How a workflow node's compute is actually reached, right now — never a label. "vendor_api" and
 #: "vendor_cli_session" are the two existing `ModelRoute` routes to a vendor-hosted model,
 #: generalized onto a node; "self_hosted" is the owner's own machine (a `provider_api` connection
-#: whose `provider == "self_hosted"`, or a node placed on an enrolled machine) — the third pole the
-#: owner named and nothing vendor sees; "unknown" is a node that DOES reach a named provider but
-#: that provider has no entry yet in `PROVIDER_SOVEREIGNTY` — never silently counted as sovereign.
+#: whose `provider == "self_hosted"`, or a node placed on a machine whose OWN sourced grading says
+#: so) — the third pole the owner named and nothing vendor sees; "unknown" is a node this caller
+#: could not classify at all — a connector/subgraph this app has not modelled, a machine placement
+#: with no sourced grading, or a criteria-routed agent's undecidable-ahead-of-run route — never
+#: silently counted as sovereign. This is the ROUTING axis; the finer per-endpoint JURISDICTION
+#: tier (`DataSovereigntyTier`, below) is a separate, CSV-bound question.
 Sovereignty = Literal["vendor_api", "vendor_cli_session", "self_hosted", "unknown"]
 
 #: Rank for the workflow-wide weakest-link reduction (`workflow_sovereignty`): higher = less
@@ -697,60 +700,59 @@ DataSovereigntyTier = Literal["eu_sovereign", "eu_hosted_foreign_law", "non_eu"]
 
 
 class ProviderSovereignty(WireModel):
-    """One provider's jurisdiction, sourced — never guessed. Every field stays `None` (read as
-    "unknown" by every node/workflow computation) until a dated, cited source sets it; `source`
-    then names it (a research file path, a provider's own compliance page)."""
+    """One provider's jurisdiction TIER at one connection's actual endpoint — the wire shape a
+    CSV-bound registry populates server-side (`server.models.sovereignty`, bound to
+    `~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md` §2's machine-readable table,
+    never hand-copied into this package: interact-core stays provider-independent and ships no
+    real-world compliance data of its own). `tier` is a property of (provider, ENDPOINT) — Mistral
+    on its EU-default endpoint reads `eu_sovereign`, on its opt-in US regional endpoint `non_eu`;
+    OpenAI's default endpoint reads `non_eu`, its `eu.api.openai.com` endpoint
+    `eu_hosted_foreign_law`. Every field stays `None` (read as unknown) until the sourced registry
+    classifies it; `source` then cites it."""
 
     provider: str = Field(min_length=1, max_length=40)
-    #: The routing figure `provider_sovereignty` returns — "vendor_api" for every entry below
-    #: (every one is a remote, vendor-hosted API by construction: `self_hosted`/machine placement
-    #: never reach this registry); "vendor_cli_session" is reserved for a future CLI-session route.
-    sovereignty: Literal["vendor_api", "vendor_cli_session"] | None = None
-    #: The finer jurisdiction figure shown on nodes/the Models area, orthogonal to `sovereignty`
-    #: (a provider can be a definite "vendor_api" route and still be `non_eu` or `eu_sovereign`).
     tier: DataSovereigntyTier | None = None
     #: HQ country/bloc (ISO 3166-1 alpha-2, or a short bloc code like "EU"), when sourced.
     jurisdiction: str | None = Field(default=None, min_length=2, max_length=8)
     source: str | None = Field(default=None, max_length=200)
 
 
-_SOVEREIGNTY_SOURCE = "~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md §2 (EU Cloud Sovereignty Framework v1.2.1 + provider compliance pages, 2026-09-24)"
-
-
-def _provider_sovereignty(provider: str, jurisdiction: str, tier: DataSovereigntyTier) -> ProviderSovereignty:
-    return ProviderSovereignty(provider=provider, sovereignty="vendor_api", tier=tier, jurisdiction=jurisdiction, source=_SOVEREIGNTY_SOURCE)
-
-
-#: Every hosted-API provider this app can reach, by name, bound to the sourced registry above.
-#: fal/Replicate/OpenAI/Anthropic/Gemini/Hugging Face's DEFAULT endpoint have no documented EU
-#: region guarantee ("non_eu"); Mistral and Scaleway (Generative APIs, same FR/Iliad jurisdiction
-#: as `interact_core.cloud.CLOUD_INSTANCE_CATALOG`'s Scaleway rows) are EU-HQ with EU-default
-#: processing and no non-EU parent ("eu_sovereign", SEAL-3/SEAL-2 in the Commission's 2026-04-17
-#: tender award). Roboflow's hosted API is `non_eu` by default; a customer's own EU-region
-#: self-hosted deployment is a SEPARATE `Placement`, not this table. Extend/re-source a row here —
-#: never invent one — when a provider's own tier changes or a new one is added.
-PROVIDER_SOVEREIGNTY: dict[str, ProviderSovereignty] = {
-    "openai": _provider_sovereignty("openai", "US", "non_eu"),
-    "anthropic": _provider_sovereignty("anthropic", "US", "non_eu"),
-    "gemini": _provider_sovereignty("gemini", "US", "non_eu"),
-    "fal": _provider_sovereignty("fal", "US", "non_eu"),
-    "replicate": _provider_sovereignty("replicate", "US", "non_eu"),
-    "roboflow": _provider_sovereignty("roboflow", "US", "non_eu"),
-    "mistral": _provider_sovereignty("mistral", "FR", "eu_sovereign"),
-    "huggingface": _provider_sovereignty("huggingface", "US", "non_eu"),
-    "scaleway": _provider_sovereignty("scaleway", "FR", "eu_sovereign"),
-}
-
-
 def provider_sovereignty(provider: str | None) -> Sovereignty | None:
-    """A node's sovereignty from the provider it reaches alone (no placement/connection
-    involved): `None` for no provider (a builtin, a pure connector) or `self_hosted` (the owner's
-    own endpoint, or an enrolled machine — every OTHER caller already resolves those before
-    reaching here); `"unknown"` for a real vendor `PROVIDER_SOVEREIGNTY` has not classified yet."""
+    """A node's ROUTING figure from the provider it reaches alone — a purely STRUCTURAL fact, no
+    compliance data needed: `None` for no provider (a builtin, a bare connector) or `"self_hosted"`
+    (the owner's own endpoint, or an enrolled machine — every OTHER caller already resolves those
+    before reaching here); any other named provider is a network call to a remote vendor,
+    `"vendor_api"`, whether or not that vendor's JURISDICTION has been sourced yet. The finer
+    question — which `DataSovereigntyTier` that vendor's ACTUAL endpoint lands in — is a SEPARATE,
+    CSV-bound lookup (`server.models.sovereignty.tier_for`, keyed by provider AND
+    endpoint), never this function's job."""
     if provider is None or provider == "self_hosted":
         return None
-    entry = PROVIDER_SOVEREIGNTY.get(provider)
-    return "unknown" if entry is None or entry.sovereignty is None else entry.sovereignty
+    return "vendor_api"
+
+
+#: Rank for the DATA-TIER weakest-link reduction (`workflow_data_tier`): higher = less sovereign.
+_TIER_RANK: dict[DataSovereigntyTier, int] = {"eu_sovereign": 0, "eu_hosted_foreign_law": 1, "non_eu": 2}
+
+
+def workflow_data_tier(values):
+    """The workflow's DATA jurisdiction: the worst `DataSovereigntyTier` among nodes that RECEIVE
+    the workflow's actual data (main, relaying the landed `cloud-compute-and-sovereignty-2026-09-24
+    .md` research) — deliberately a SEPARATE reduction from `workflow_sovereignty`'s routing figure
+    and from a model's WEIGHT-ORIGIN supply-chain question (a Mistral-on-Scaleway pipeline never
+    reads non-sovereign only because its weights file came from huggingface.co — the caller feeds
+    this function ONLY data-receiving nodes' tiers, a model's origin is a separate flag entirely).
+    `None` — never `eu_sovereign` by default — the moment ANY data-receiving node's tier is not
+    fully known (an unsourced provider/endpoint, or a node kind this reduction cannot yet
+    classify): an unknown hop must never be optimistically assumed sovereign. An empty sequence (no
+    data-receiving node at all) reads `"eu_sovereign"`, the identity element."""
+    worst: "DataSovereigntyTier | None" = "eu_sovereign"
+    for value in values:
+        if value is None:
+            return None
+        if _TIER_RANK[value] > _TIER_RANK[worst]:
+            worst = value
+    return worst
 
 
 def workflow_sovereignty(values) -> Sovereignty:
@@ -1450,6 +1452,14 @@ class MachineCommand(WireModel):
     inputs: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
     expires_at: datetime
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+    #: "owner": the machine's own workspace runs its own workflow — today's only shape, the
+    #: runner's direct-subprocess path. "pooled": `workspace_id` is a DIFFERENT (tenant) workspace
+    #: borrowing this machine, signed by the OWNER's key — the runner must route this through its
+    #: gVisor sandbox (`interact.sandbox.run_pooled`), never the direct path a same-workspace
+    #: command gets. A pooled `EgressPolicy` travels inside `config["_pool_egress_allow"]` as a
+    #: plain list of `{host, port}` — not a typed field here, since `interact_core.pool` (which
+    #: owns `EgressPolicy`) imports FROM this module for `MachineRef`; a typed field would cycle.
+    tenancy: Literal["owner", "pooled"] = "owner"
 
     @model_validator(mode="after")
     def runnable(self) -> Self:
@@ -1458,6 +1468,8 @@ class MachineCommand(WireModel):
             raise ValueError("machine model is not in the machine model registry")
         if self.impl.kind == "agent" and not isinstance(self.inputs.get("task"), str):
             raise ValueError("agent commands carry their task")
+        if self.tenancy == "pooled" and self.impl.kind == "agent":
+            raise ValueError("a pooled (cross-workspace) command cannot run an agent step — script, function and model only, for now")
         return self
 
 

@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from interact_core import (
     MACHINE_MODELS, VALUE_TYPES, VISION_MODEL_TASKS, MachineCommand, MachineFunctionSummary, NodeLibraryDefinition, WorkflowBlockAvailability,
     WorkflowNode, model_task_ports, value_type_accepts, provider_sovereignty, workflow_sovereignty,
-    NodeSovereigntyRecord, SovereigntyRequired, actual_workflow_sovereignty, meets_requirement,
+    NodeSovereigntyRecord, SovereigntyRequired, actual_workflow_sovereignty, meets_requirement, workflow_data_tier,
 )
 from interact_core.workflows import ValueType
 
@@ -98,11 +98,14 @@ def test_a_palette_block_is_the_node_it_places() -> None:
         WorkflowBlockAvailability.model_validate({"impl": builtin, "name": "Input", "ports": builtin_ports, "readiness": "executable", "reason": "Holds a constant.", "sovereignty": "vendor_api"})
 
 
-def test_provider_sovereignty_reads_the_sourced_registry_and_unknown_otherwise() -> None:
+def test_provider_sovereignty_is_a_purely_structural_routing_fact() -> None:
+    """No compliance data needed: any named provider is a network call ("vendor_api"), whether or
+    not its jurisdiction has been sourced yet — that finer question is
+    server.models.sovereignty.tier_for's job, CSV-bound, never this function's."""
     assert provider_sovereignty(None) is None  # no vendor reached (builtin, bare connector)
     assert provider_sovereignty("self_hosted") is None  # the owner's own endpoint, resolved elsewhere
-    assert provider_sovereignty("gemini") == "vendor_api"  # sourced in PROVIDER_SOVEREIGNTY
-    assert provider_sovereignty("not_a_real_provider") == "unknown"  # a vendor with no registry entry
+    assert provider_sovereignty("gemini") == "vendor_api"
+    assert provider_sovereignty("some_future_provider_this_app_does_not_adapt_yet") == "vendor_api"
 
 
 def test_workflow_sovereignty_is_the_weakest_node_never_assumed_sovereign() -> None:
@@ -122,6 +125,16 @@ def test_actual_sovereignty_reduces_only_the_nodes_that_ran() -> None:
     )
     assert actual_workflow_sovereignty(ran) == "vendor_api"
     assert actual_workflow_sovereignty(()) == "self_hosted"
+
+
+def test_workflow_data_tier_is_the_worst_of_the_data_receiving_nodes() -> None:
+    """A separate reduction from workflow_sovereignty: 3-tier jurisdiction, never assumed
+    eu_sovereign the moment one data-receiving node's tier is unsourced."""
+    assert workflow_data_tier([]) == "eu_sovereign"  # nothing receives data at all
+    assert workflow_data_tier(["eu_sovereign", "eu_sovereign"]) == "eu_sovereign"
+    assert workflow_data_tier(["eu_sovereign", "eu_hosted_foreign_law"]) == "eu_hosted_foreign_law"
+    assert workflow_data_tier(["eu_hosted_foreign_law", "non_eu"]) == "non_eu"
+    assert workflow_data_tier(["eu_sovereign", None]) is None  # one unsourced hop outranks a sovereign one
 
 
 def test_sovereign_required_is_a_hard_floor_not_a_preference() -> None:

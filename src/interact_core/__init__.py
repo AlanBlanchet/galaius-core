@@ -104,7 +104,7 @@ from .cloud import (
 )
 from .workflows import (
     ValueType,
-    DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, provider_sovereignty, workflow_sovereignty, WorkflowFunctionTool,
+    DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, provider_sovereignty, workflow_sovereignty, workflow_data_tier, WorkflowFunctionTool,
     NodeSovereigntyRecord, actual_workflow_sovereignty, SovereigntyRequired, meets_requirement,
     NodeLibraryRef, NodeLibraryDefinition, NodeLibraryEntry, NodeLibraryUse,
     Effect, Implementation, BuiltinImplementation, AgentImplementation, ModelImplementation, FunctionImplementation, ScriptImplementation, ConnectorImplementation, SubgraphImplementation, MachineImplementation, BuiltinOp, WorkflowNode, 
@@ -132,12 +132,18 @@ from .pool import (
     EgressPolicy,
     GpuResetKind,
     GpuScrubRecord,
+    MachinePoolSettings,
+    MachinePoolSettingsUpdate,
     ModelWeightFormat,
+    PooledMachineCandidate,
+    PooledRunBilling,
     RunBudgetCheck,
     RunBudgetDecision,
     SandboxTier,
     UnsafeModelWeightsError,
     check_budget,
+    choose_pooled_placement,
+    pooled_run_cost,
 )
 
 __all__ = [
@@ -156,7 +162,7 @@ __all__ = [
     "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceMemberRoleUpdate", "WorkspaceRole", "WorkspaceUpdate",
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
-    "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "DataSovereigntyTier", "ProviderSovereignty", "provider_sovereignty", "workflow_sovereignty", "WorkflowFunctionTool",
+    "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "DataSovereigntyTier", "ProviderSovereignty", "provider_sovereignty", "workflow_sovereignty", "workflow_data_tier", "WorkflowFunctionTool",
     "NodeSovereigntyRecord", "actual_workflow_sovereignty", "SovereigntyRequired", "meets_requirement",
     "BudgetOverrun", "CostUnit", "NodeCostActual", "NodeCostEstimate", "NodeCostModel", "NodeUsage", "PlatformPricing", "PLATFORM_PRICING", "PriceSource", "PriceSourceKind", "RunCostActual", "RunCostEstimate", "UnitPrice", "USAGE_FIELD", "priced_cost",
     "MachineCostRate", "MachineCostRateUpdate",
@@ -170,5 +176,5 @@ __all__ = [
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
     "ValuePreview", "VALUE_PREVIEW_MAX_PIXELS", "VALUE_PREVIEW_MAX_BYTES",
     "UserModel", "UserModelOrigin", "UserModelOriginKind", "UserModelRef",
-    "BLOCKED_EGRESS_HOSTS", "POOL_SHARING_ENABLED", "EgressAllowEntry", "EgressPolicy", "GpuResetKind", "GpuScrubRecord", "ModelWeightFormat", "RunBudgetCheck", "RunBudgetDecision", "SandboxTier", "UnsafeModelWeightsError", "check_budget",
+    "BLOCKED_EGRESS_HOSTS", "POOL_SHARING_ENABLED", "EgressAllowEntry", "EgressPolicy", "GpuResetKind", "GpuScrubRecord", "MachinePoolSettings", "MachinePoolSettingsUpdate", "ModelWeightFormat", "PooledMachineCandidate", "PooledRunBilling", "RunBudgetCheck", "RunBudgetDecision", "SandboxTier", "UnsafeModelWeightsError", "check_budget", "choose_pooled_placement", "pooled_run_cost",
 ]
