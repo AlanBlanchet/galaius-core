@@ -504,6 +504,19 @@
           "title": "Max Output Tokens",
           "type": "integer"
         },
+        "monthly_cost_usd_limit": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Monthly Cost Usd Limit"
+        },
         "monthly_token_limit": {
           "anyOf": [
             {
@@ -679,6 +692,10 @@
                 "openai",
                 "anthropic",
                 "gemini",
+                "fal",
+                "replicate",
+                "roboflow",
+                "mistral",
                 "self_hosted",
                 "google_drive",
                 "github",
@@ -903,10 +920,14 @@
           "discriminator": {
             "mapping": {
               "connector": "#/$defs/ConnectorAgentTool",
+              "git": "#/$defs/GitAgentTool",
               "gmail": "#/$defs/GmailAgentTool",
               "http": "#/$defs/HttpAgentTool",
+              "mail_server": "#/$defs/MailAgentTool",
+              "messaging": "#/$defs/MessagingAgentTool",
               "object_storage": "#/$defs/ObjectStorageAgentTool",
-              "ssh": "#/$defs/SshAgentTool"
+              "ssh": "#/$defs/SshAgentTool",
+              "webhook": "#/$defs/WebhookAgentTool"
             },
             "propertyName": "kind"
           },
@@ -925,6 +946,18 @@
             },
             {
               "$ref": "#/$defs/ObjectStorageAgentTool"
+            },
+            {
+              "$ref": "#/$defs/MessagingAgentTool"
+            },
+            {
+              "$ref": "#/$defs/GitAgentTool"
+            },
+            {
+              "$ref": "#/$defs/MailAgentTool"
+            },
+            {
+              "$ref": "#/$defs/WebhookAgentTool"
             }
           ],
           "title": "Tool"
@@ -1457,7 +1490,7 @@
     },
     "GitAgentTool": {
       "additionalProperties": false,
-      "description": "A write-class git-hosting operation, bound to a pinned `service_connector` connection.\nEvery operation here changes something outside this app (a branch, a commit, a pull/merge\nrequest, a comment) and is gated by the same owner-approval ledger SSH writes use.",
+      "description": "A git-hosting operation beyond plain listing, bound to a pinned `service_connector`\nconnection. `read_file` runs directly; the other four each change something outside this app\n(a branch, a commit, a pull/merge request, a comment) and are gated by the same owner-approval\nledger SSH writes use \u2014 the same read-direct/write-approved split `SshAgentTool` draws.",
       "properties": {
         "connection": {
           "$ref": "#/$defs/ConnectionResourceRef"
@@ -1493,6 +1526,7 @@
         },
         "operation": {
           "enum": [
+            "read_file",
             "create_branch",
             "commit_file",
             "open_pull_request",
@@ -2091,7 +2125,10 @@
             "text-to-speech",
             "automatic-speech-recognition",
             "image-to-3d",
-            "text-to-3d"
+            "text-to-3d",
+            "depth-estimation",
+            "keypoint-detection",
+            "image-to-text"
           ],
           "title": "Task",
           "type": "string"
@@ -2157,6 +2194,68 @@
         "percentile"
       ],
       "title": "ModelProperty",
+      "type": "object"
+    },
+    "NodeCostActual": {
+      "additionalProperties": false,
+      "description": "What one node's run actually cost, after it ran \u2014 the provider's own charge (`cost_usd`)\nand the platform's fee on top of it (`fee_usd`), the two lines a metered call always shows.",
+      "properties": {
+        "cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "fee_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fee Usd"
+        },
+        "known": {
+          "title": "Known",
+          "type": "boolean"
+        },
+        "node_id": {
+          "format": "uuid",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PriceSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "usage": {
+          "$ref": "#/$defs/NodeUsage"
+        }
+      },
+      "required": [
+        "node_id",
+        "usage",
+        "known"
+      ],
+      "title": "NodeCostActual",
       "type": "object"
     },
     "NodeLibraryDefinition": {
@@ -2273,6 +2372,131 @@
         "name"
       ],
       "title": "NodeLibraryUse",
+      "type": "object"
+    },
+    "NodeUsage": {
+      "additionalProperties": false,
+      "description": "Metered units for one node's run. Every field independently optional: a unit no meter\nreported for this node stays unset, never a synthetic zero standing in for \"not measured\".",
+      "properties": {
+        "audio_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Seconds"
+        },
+        "bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bytes"
+        },
+        "calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calls"
+        },
+        "cpu_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu Seconds"
+        },
+        "gpu_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Seconds"
+        },
+        "images": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Images"
+        },
+        "token_in": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token In"
+        },
+        "token_out": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Out"
+        },
+        "video_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Video Seconds"
+        }
+      },
+      "title": "NodeUsage",
       "type": "object"
     },
     "ObjectStorageAgentTool": {
@@ -2455,6 +2679,47 @@
       "title": "PortSpec",
       "type": "object"
     },
+    "PriceSource": {
+      "additionalProperties": false,
+      "description": "What a price is bound to, shown verbatim beside the number it justifies.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "model_registry",
+            "research_table",
+            "machine_rate",
+            "builtin_free"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "retrieved": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retrieved"
+        }
+      },
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "title": "PriceSource",
+      "type": "object"
+    },
     "PromptExecutionRef": {
       "additionalProperties": false,
       "description": "Server-verified immutable prompt identity persisted with one execution.",
@@ -2632,6 +2897,42 @@
       "title": "ProviderUsage",
       "type": "object"
     },
+    "RunCostActual": {
+      "additionalProperties": false,
+      "properties": {
+        "fee_usd": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Fee Usd",
+          "type": "number"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/NodeCostActual"
+          },
+          "maxItems": 500,
+          "title": "Nodes",
+          "type": "array"
+        },
+        "total_usd": {
+          "minimum": 0,
+          "title": "Total Usd",
+          "type": "number"
+        },
+        "unknown_node_count": {
+          "minimum": 0,
+          "title": "Unknown Node Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "nodes",
+        "total_usd",
+        "unknown_node_count"
+      ],
+      "title": "RunCostActual",
+      "type": "object"
+    },
     "ScheduleTrigger": {
       "additionalProperties": false,
       "properties": {
@@ -2690,6 +2991,25 @@
         "source_digest"
       ],
       "title": "ScriptImplementation",
+      "type": "object"
+    },
+    "SovereigntyRequired": {
+      "additionalProperties": false,
+      "description": "A workflow's HARD placement constraint (threat-model #6): \"sovereign required\" REFUSES\ndispatch to a node whose PREDICTED figure fails to meet `min_sovereignty`, and REFUSES to\naccept a run whose ACTUAL figure fails it after the fact \u2014 never a soft warning, never a\nsilent autoscaler fallback to a cheaper non-sovereign region. Declared once per\n`WorkflowInterface`; `meets_requirement` is the ONE place both the pre-dispatch scheduler and\nthe post-run auditor check it, so the two can never drift into different rules.",
+      "properties": {
+        "min_sovereignty": {
+          "default": "self_hosted",
+          "enum": [
+            "vendor_api",
+            "vendor_cli_session",
+            "self_hosted",
+            "unknown"
+          ],
+          "title": "Min Sovereignty",
+          "type": "string"
+        }
+      },
+      "title": "SovereigntyRequired",
       "type": "object"
     },
     "SshAgentTool": {
@@ -3792,7 +4112,8 @@
               "enum": [
                 "vendor_api",
                 "vendor_cli_session",
-                "self_hosted"
+                "self_hosted",
+                "unknown"
               ],
               "type": "string"
             },
@@ -4074,6 +4395,17 @@
           "title": "Outputs",
           "type": "array"
         },
+        "require_sovereign": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SovereigntyRequired"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "variables": {
           "default": [],
           "items": {
@@ -4304,6 +4636,17 @@
     "WorkflowRun": {
       "additionalProperties": false,
       "properties": {
+        "cost": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunCostActual"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "created_at": {
           "format": "date-time",
           "title": "Created At",

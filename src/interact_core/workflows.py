@@ -572,6 +572,11 @@ class WorkflowInterface(WireModel):
     inputs: tuple[PortExposure, ...] = ()
     outputs: tuple[PortExposure, ...] = ()
     variables: tuple[VariableSpec, ...] = ()
+    #: Threat-model #6's hard placement constraint — `None` (default) leaves placement
+    #: unconstrained, today's behaviour unchanged. `SovereigntyRequired` is defined further below
+    #: in this module (needs `Sovereignty`, defined after this class); Pydantic resolves the
+    #: forward reference at class-creation time via `model_rebuild()` at the bottom of this file.
+    require_sovereign: "SovereigntyRequired | None" = None
 
 
 class ConnectionResourceRef(WireModel):
@@ -749,7 +754,9 @@ def provider_sovereignty(provider: str | None) -> Sovereignty | None:
 
 
 def workflow_sovereignty(values) -> Sovereignty:
-    """The workflow-wide figure shown on its header and in the Models area: the WEAKEST node.
+    """The weakest-link (logical AND) reduction shared by BOTH a pre-run PREDICTION (declared
+    impl/placement, e.g. `WorkflowRepository.revision_sovereignty`) and a post-run ACTUAL figure
+    (`actual_workflow_sovereignty`, below) — one piece of math, never duplicated per caller.
     `None` (a criteria-routed agent, resolved per run; a node this caller could not classify) ranks
     as `"unknown"` — never assumed sovereign because nobody could prove otherwise. A workflow with
     no externally-reaching node at all (every node `self_hosted` or with no provider) is fully
@@ -760,6 +767,55 @@ def workflow_sovereignty(values) -> Sovereignty:
         if _SOVEREIGNTY_RANK[candidate] > _SOVEREIGNTY_RANK[worst]:
             worst = candidate
     return worst
+
+
+# -- Threat-model #6 (cloud-compute-and-sovereignty-2026-09-24.md): sovereignty from ACTUAL
+# execution, never from the requested/declared placement alone, plus a HARD placement constraint --
+
+class NodeSovereigntyRecord(WireModel):
+    """The sovereignty ACTUALLY observed for one executed node of one run — sourced from what
+    really ran (the cloud provisioning response's region, or which machine/connection really
+    served the call), never assumed from the node's static `Placement`. A scheduler that falls
+    back to a different region under capacity pressure changes what this record says; it can never
+    change a PREDICTED figure computed before the run started. Nodes on an untaken branch never get
+    a record — `actual_workflow_sovereignty` reduces over exactly the nodes that ran."""
+
+    node_id: UUID
+    sovereignty: Sovereignty
+    jurisdiction: str | None = None
+    #: Where this record's figure came from — a citation, not free text: a `MachineRef` (joined
+    #: through `MachineSovereignty` for a self-hosted machine, or `CloudMachine` for a cloud-
+    #: launched one), or a `ConnectionResourceRef` for a hosted-API call. Read by an auditor to
+    #: reconstruct WHY a run was graded the way it was, never trusted on the grade alone.
+    source: Literal["machine_sovereignty", "cloud_machine", "connection"]
+    source_id: UUID
+
+
+def actual_workflow_sovereignty(records) -> Sovereignty:
+    """The workflow's REAL, post-run figure: the same weakest-link reduction as
+    `workflow_sovereignty`, over every `NodeSovereigntyRecord` of the nodes that actually executed
+    this run. Display this ALONGSIDE (never instead of) `revision_sovereignty`'s pre-run figure,
+    the latter always labelled a PREDICTION — the two can legitimately disagree (a fallback
+    placement, a criteria-routed agent resolving to a different provider than usual)."""
+    return workflow_sovereignty(record.sovereignty for record in records)
+
+
+class SovereigntyRequired(WireModel):
+    """A workflow's HARD placement constraint (threat-model #6): "sovereign required" REFUSES
+    dispatch to a node whose PREDICTED figure fails to meet `min_sovereignty`, and REFUSES to
+    accept a run whose ACTUAL figure fails it after the fact — never a soft warning, never a
+    silent autoscaler fallback to a cheaper non-sovereign region. Declared once per
+    `WorkflowInterface`; `meets_requirement` is the ONE place both the pre-dispatch scheduler and
+    the post-run auditor check it, so the two can never drift into different rules."""
+
+    min_sovereignty: Sovereignty = "self_hosted"
+
+
+def meets_requirement(observed: Sovereignty, requirement: SovereigntyRequired | None) -> bool:
+    """Whether `observed` satisfies `requirement` — `True` with no requirement declared (today's
+    unconstrained default). A LOWER rank is MORE sovereign (`_SOVEREIGNTY_RANK`), so "meets" is
+    "at least as sovereign as the floor", never an exact match."""
+    return requirement is None or _SOVEREIGNTY_RANK[observed] <= _SOVEREIGNTY_RANK[requirement.min_sovereignty]
 
 
 class ConnectorAction(WireModel):

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from interact_core import (
     MACHINE_MODELS, VALUE_TYPES, VISION_MODEL_TASKS, MachineCommand, MachineFunctionSummary, NodeLibraryDefinition, WorkflowBlockAvailability,
     WorkflowNode, model_task_ports, value_type_accepts, provider_sovereignty, workflow_sovereignty,
+    NodeSovereigntyRecord, SovereigntyRequired, actual_workflow_sovereignty, meets_requirement,
 )
 from interact_core.workflows import ValueType
 
@@ -110,6 +111,29 @@ def test_workflow_sovereignty_is_the_weakest_node_never_assumed_sovereign() -> N
     assert workflow_sovereignty(["self_hosted", "vendor_api"]) == "vendor_api"
     assert workflow_sovereignty(["vendor_api", None]) == "unknown"  # an undecidable node outranks a known vendor
     assert workflow_sovereignty(["vendor_api", "unknown"]) == "unknown"
+
+
+def test_actual_sovereignty_reduces_only_the_nodes_that_ran() -> None:
+    """Threat-model #6: the ACTUAL figure comes from execution records, never the static graph —
+    an untaken branch contributes nothing."""
+    ran = (
+        NodeSovereigntyRecord(node_id=uuid4(), sovereignty="self_hosted", source="machine_sovereignty", source_id=uuid4()),
+        NodeSovereigntyRecord(node_id=uuid4(), sovereignty="vendor_api", source="connection", source_id=uuid4()),
+    )
+    assert actual_workflow_sovereignty(ran) == "vendor_api"
+    assert actual_workflow_sovereignty(()) == "self_hosted"
+
+
+def test_sovereign_required_is_a_hard_floor_not_a_preference() -> None:
+    """A LOWER rank is MORE sovereign: "meets" means at least as sovereign as the declared floor."""
+    requirement = SovereigntyRequired(min_sovereignty="self_hosted")
+    assert meets_requirement("self_hosted", requirement) is True
+    assert meets_requirement("vendor_api", requirement) is False
+    assert meets_requirement("unknown", requirement) is False
+    assert meets_requirement("vendor_api", None) is True  # no requirement declared: unconstrained
+    looser = SovereigntyRequired(min_sovereignty="vendor_api")
+    assert meets_requirement("vendor_api", looser) is True
+    assert meets_requirement("unknown", looser) is False
 
 
 def command(impl: dict, **fields) -> dict:
