@@ -10,7 +10,7 @@ from typing import Annotated, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, SerializerFunctionWrapHandler, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -1572,14 +1572,24 @@ class _Implementation(WireModel):
     effects: ClassVar[frozenset[str]] = frozenset()
     #: Where it may run (`Placement.target`).
     placements: ClassVar[frozenset[str]] = frozenset({"server"})
+    #: Where the palette files it (`WorkflowBlockAvailability.category`).
+    category: ClassVar["BlockCategory"]
 
-    def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...] | None:
+    def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...] | None:
         """The ports this implementation fixes by itself, or None when they come from outside it
-        (a builtin's chosen value type, a machine's advertised function, a tool's schema, a
+        (an input's chosen value type, a machine's advertised function, a tool's schema, a
         subgraph's interface, an agent). `placement` matters only to `ModelImplementation` (a
-        hosted vs machine-local model of the same task can expose different ports); every other
-        implementation ignores it."""
+        hosted vs machine-local model of the same task can expose different ports), `config` only
+        to a builtin whose ports follow its settings (a switch's cases)."""
         return None
+
+    def check_ports(self, ports: tuple[PortSpec, ...]) -> None:
+        """Rules binding this implementation to ports it does not fix itself; raises ValueError."""
+
+    def described(self) -> dict[str, object]:
+        """What a palette block of it says by default: its category (a builtin adds its summary,
+        search words and settings schema)."""
+        return {"category": self.category}
 
     def required_config(self) -> tuple[str, ...]:
         """Config keys a node needs before it can run (the palette's `required_config_fields`)."""
@@ -1592,29 +1602,113 @@ class _Implementation(WireModel):
     control_ports: ClassVar[tuple[PortSpec, ...]] = ()
 
 
-BuiltinOp = Literal["input", "output", "write_artifact", "read_file", "uppercase", "lowercase", "identity", "http_get"]
+BuiltinOp = Literal[
+    "input", "output", "write_artifact", "read_file", "uppercase", "lowercase", "identity", "http_get",
+    "condition", "switch", "merge", "wait", "approval", "fail",
+    "set_fields", "transform", "filter", "sort", "limit", "dedupe", "aggregate", "sql", "parse", "format", "calculate", "encode",
+    "template", "replace_text", "extract_text", "split_text", "date_time",
+]
+#: Where a palette block sits and what a search for a kind of step finds (`WorkflowBlockAvailability.category`).
+BlockCategory = Literal["input_output", "flow", "data", "text", "files", "time", "people", "web", "agents", "models", "apps", "machines", "code", "workflows"]
+
+
+class NoSettings(BaseModel):
+    """An op with no settings of its own (its config holds only port constants, a connection, a path)."""
+
+    model_config = {"extra": "ignore"}
+
+
+class BuiltinOpSpec:
+    """One builtin operation's contract, declared as data (`interact_core.builtin_ops`): what it
+    is for, its settings model and the ports it fixes. Subclassing with an `op` registers it in
+    `BUILTIN_OPS`; the server keys its runners by the same name. A node's `config` holds these
+    settings AND the constants of its unwired input ports (checked by the port, not here)."""
+
+    op: ClassVar[str]
+    category: ClassVar[BlockCategory]
+    title: ClassVar[str]
+    #: What it does, in one sentence a search reads.
+    summary: ClassVar[str]
+    keywords: ClassVar[tuple[str, ...]] = ()
+    Config: ClassVar[type[BaseModel]] = NoSettings
+    #: Config keys a node needs before it can run.
+    required: ClassVar[tuple[str, ...]] = ()
+    placements: ClassVar[frozenset[str]] = frozenset({"server"})
+    #: False: the editor chooses the ports (`ports` is only the palette's starting shape).
+    fixed_ports: ClassVar[bool] = True
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if "op" in cls.__dict__:
+            if cls.op in BUILTIN_OPS:
+                raise TypeError(f"builtin op {cls.op} is declared twice")
+            BUILTIN_OPS[cls.op] = cls
+
+    @classmethod
+    def ports(cls, config: dict[str, "WorkflowValue"]) -> tuple[PortSpec, ...]:
+        raise NotImplementedError
+
+    @classmethod
+    def defaults(cls) -> dict[str, "WorkflowValue"]:
+        """Every setting's default: the config a new node starts with."""
+        return {name: field.get_default(call_default_factory=True) for name, field in cls.Config.model_fields.items() if not field.is_required()} if cls.fixed_ports else {}
+
+    @classmethod
+    def config_schema(cls) -> dict[str, object]:
+        """The settings as JSON Schema — what the node editor's one generic form renders."""
+        return cls.Config.model_json_schema() if cls.fixed_ports else {}
+
+    @classmethod
+    def settings(cls, config: dict[str, "WorkflowValue"]) -> BaseModel:
+        """The node's settings, validated: its config without the constants of its input ports."""
+        inputs = {port.name for port in cls.ports(config) if port.direction == "input"}
+        try:
+            return cls.Config.model_validate({name: value for name, value in config.items() if name not in inputs})
+        except ValidationError as error:
+            raise ValueError("; ".join(f"{'.'.join(str(part) for part in item['loc']) or cls.op}: {item['msg']}" for item in error.errors())) from None
+
+
+#: Every builtin op's spec, by op (filled by `interact_core.builtin_ops`, imported with the package).
+BUILTIN_OPS: dict[str, type[BuiltinOpSpec]] = {}
 
 
 class BuiltinImplementation(_Implementation):
-    """Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through
-    a configured connection — or a FILE op (`FILE_OPS`), which runs where the file is: on the
-    server against workspace storage (`config.connection`), or on an enrolled machine against its
-    working directory (`artifact_path` relative to it, within the machine's permission ceiling)."""
+    """Runs in the server itself (`BUILTIN_OPS[op]` says what it does and its ports) — or a FILE op
+    (`FILE_OPS`), which runs where the file is: on the server against workspace storage
+    (`config.connection`), or on an enrolled machine against its working directory
+    (`artifact_path` relative to it, within the machine's permission ceiling)."""
 
     kind: Literal["builtin"]
     op: BuiltinOp
-    _REQUIRED: ClassVar[dict[str, tuple[str, ...]]] = {"input": ("value",), "http_get": ("connection",), "write_artifact": ("artifact_path",), "read_file": ("artifact_path",)}
     #: Ops that read or write one file, wherever the node is placed.
     FILE_OPS: ClassVar[frozenset[str]] = frozenset({"write_artifact", "read_file"})
 
     @property
+    def spec(self) -> type[BuiltinOpSpec]:
+        return BUILTIN_OPS[self.op]
+
+    @property
     def placements(self) -> frozenset[str]:
-        return frozenset({"server", "machine"}) if self.op in self.FILE_OPS else frozenset({"server"})
+        return self.spec.placements
+
+    @property
+    def category(self) -> BlockCategory:
+        return self.spec.category
+
+    def described(self) -> dict[str, object]:
+        spec = self.spec
+        return {"category": spec.category, "summary": spec.summary, "keywords": spec.keywords, "config_schema": spec.config_schema()}
+
+    def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...] | None:
+        return self.spec.ports(config or {}) if self.spec.fixed_ports else None
 
     def required_config(self) -> tuple[str, ...]:
-        return self._REQUIRED.get(self.op, ())
+        return self.spec.required
 
     def check(self, config: dict[str, WorkflowValue]) -> None:
+        if self.spec.fixed_ports:
+            self.spec.settings(config)
+            return
         if self.op == "input" and "value" not in config:
             raise ValueError("a workflow input holds its value")
         if config.get("connection") is not None:
@@ -1629,6 +1723,7 @@ class AgentImplementation(_Implementation):
     (`WorkflowNode.tool_schema`); the call runs that node like any other step."""
 
     kind: Literal["agent"]
+    category: ClassVar[BlockCategory] = "agents"
     agent: AgentRevisionRef
     effects: ClassVar[frozenset[str]] = frozenset({"model"})
     placements: ClassVar[frozenset[str]] = frozenset({"server", "machine"})
@@ -1674,6 +1769,7 @@ class ModelImplementation(_Implementation):
     editor shows and prices); every run re-resolves the choice and records its answer in the run."""
 
     kind: Literal["model"]
+    category: ClassVar[BlockCategory] = "models"
     provider: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
     model: str = Field(min_length=1, max_length=160)
     task: ModelTask
@@ -1687,8 +1783,10 @@ class ModelImplementation(_Implementation):
             raise ValueError("a model choice is for the node's own task")
         return self
 
+    # No return annotation: an annotated one would replace this model's own schema with a bare
+    # object in every serialization-mode schema (the generated TypeScript contracts among them).
     @model_serializer(mode="wrap")
-    def _no_empty_choice(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+    def _no_empty_choice(self, handler: SerializerFunctionWrapHandler):
         """No choice, no key: a resolved node sent to a machine serializes exactly as a runner built
         before `choice` existed reads and signs it (its model forbids unknown keys)."""
         data = handler(self)
@@ -1696,7 +1794,7 @@ class ModelImplementation(_Implementation):
             data.pop("choice", None)
         return data
 
-    def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...]:
+    def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...]:
         return model_task_ports(self.task, placement)
 
 
@@ -1706,6 +1804,7 @@ class FunctionImplementation(_Implementation):
     instead of silently running under a different shape."""
 
     kind: Literal["function"]
+    category: ClassVar[BlockCategory] = "machines"
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     version: str = Field(pattern=r"^[0-9a-f]{64}$")
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
@@ -1720,6 +1819,7 @@ class ScriptImplementation(_Implementation):
     that approval."""
 
     kind: Literal["script"]
+    category: ClassVar[BlockCategory] = "code"
     language: Literal["python", "shell"]
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
@@ -1739,10 +1839,11 @@ class ConnectorImplementation(_Implementation):
     Its config holds scalar arguments only (the tool's declared input schema)."""
 
     kind: Literal["connector"]
+    category: ClassVar[BlockCategory] = "apps"
     tool: DirectTool
     effects: ClassVar[frozenset[str]] = frozenset({"connector"})
 
-    def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...] | None:
+    def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...] | None:
         """A send-message node fixes its ports (the envelope); any other tool's come from its
         declared input schema, chosen where the block is built."""
         return self.tool.signature() if isinstance(self.tool, SendMessageTool) else None
@@ -1758,10 +1859,31 @@ class SubgraphImplementation(_Implementation):
     whoever can read them: the server expands it)."""
 
     kind: Literal["subgraph"]
+    category: ClassVar[BlockCategory] = "workflows"
     ref: WorkflowRevisionRef | NodeLibraryRef
+    #: A MAP: the saved workflow runs once per item of this input — ONE list of any items (a JSON
+    #: list, a text list), each item checked against the workflow's own input when it runs — in
+    #: order, one at a time, every other input the same each time; each output is the list of its
+    #: per-item values.
+    each: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+
+    @model_validator(mode="after")
+    def maps_a_workflow(self) -> Self:
+        if self.each is not None and isinstance(self.ref, NodeLibraryRef):
+            raise ValueError("a reusable node runs once where it is placed; map a saved workflow instead")
+        return self
+
+    def check_ports(self, ports: tuple[PortSpec, ...]) -> None:
+        if self.each is None:
+            return
+        if not any(port.direction == "input" and port.name == self.each and port.value_type == "any" and not port.multiple for port in ports):
+            raise ValueError(f"a map runs once per item of its list input {self.each} (one value of type any)")
+        if any(port.direction == "output" and not port.multiple for port in ports):
+            raise ValueError("a map answers one list per output")
 
 
 Implementation = Annotated[BuiltinImplementation | AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation | ConnectorImplementation | SubgraphImplementation, Field(discriminator="kind")]
+_IMPLEMENTATIONS: TypeAdapter[Implementation] = TypeAdapter(Implementation)
 #: What an enrolled machine runs itself (`MachineCommand.impl`).
 MachineImplementation = Annotated[AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation | BuiltinImplementation, Field(discriminator="kind")]
 
@@ -1834,12 +1956,14 @@ class WorkflowNode(WireModel):
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
-        signature = self.impl.signature(self.placement.target)
+        # Settings first: ports that follow them (a switch's cases) are only meaningful once they hold.
+        self.impl.check(self.config)
+        signature = self.impl.signature(self.placement.target, self.config)
         if signature is not None and self.ports != signature:
             raise ValueError("node ports must be its implementation's signature")
+        self.impl.check_ports(self.ports)
         if self.placement.target not in self.impl.placements:
             raise ValueError(f"a {self.impl.kind} node cannot run on the {self.placement.target}")
-        self.impl.check(self.config)
         reserved = {port.name for port in self.control_ports} & {port.name for port in self.ports}
         if reserved:
             raise ValueError(f"port name {sorted(reserved)[0]} is reserved for every node")
@@ -2058,10 +2182,28 @@ class WorkflowBlockAvailability(WireModel):
     #: (a pure server transform has no vendor to name; a subgraph's figure is its contents',
     #: computed by expanding it, never guessed at the collapsed node).
     sovereignty: Sovereignty | None = None
+    #: What a search finds it under; a builtin's comes from its spec, every other kind's from its kind.
+    category: BlockCategory | None = None
+    #: What it does (a builtin's spec summary), and the words a search also matches.
+    summary: str = Field(default="", max_length=400)
+    keywords: tuple[str, ...] = Field(default=(), max_length=32)
+    #: JSON Schema of the node's settings (`config`), rendered by the editor's one generic form;
+    #: empty when the node has none or its kind edits them elsewhere.
+    config_schema: dict[str, object] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def described(cls, data: object) -> object:
+        """Category, summary, search words and settings schema follow the implementation, each
+        unless given (the implementation read once here, whatever form it arrived in)."""
+        if not isinstance(data, dict) or "impl" not in data:
+            return data
+        impl = _IMPLEMENTATIONS.validate_python(data["impl"])
+        return {**impl.described(), **{key: value for key, value in data.items() if value is not None}, "impl": impl}
 
     @model_validator(mode="after")
     def coherent_source(self) -> Self:
-        signature = self.impl.signature(self.placement.target)
+        signature = self.impl.signature(self.placement.target, self.config)
         if signature is not None and self.ports != signature:
             raise ValueError("catalog ports must be its implementation's signature")
         if self.sovereignty is not None and self.impl.kind in ("builtin", "subgraph"):
@@ -2069,6 +2211,25 @@ class WorkflowBlockAvailability(WireModel):
         if len({port.name for port in self.ports}) != len(self.ports):
             raise ValueError("catalog ports must have unique names")
         return self
+
+
+class NodeSignatureRequest(WireModel):
+    """The ports a node of `impl` takes under `config` — what the editor asks after a setting that
+    shapes them changes (a switch's cases). Invalid settings are refused by name."""
+
+    impl: Implementation
+    config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
+    placement: Placement = Field(default_factory=Placement)
+
+    @model_validator(mode="after")
+    def valid_settings(self) -> Self:
+        self.impl.check(self.config)
+        return self
+
+    @property
+    def ports(self) -> tuple[PortSpec, ...] | None:
+        """None: the editor chooses them (an input, a tool, a subgraph's interface)."""
+        return self.impl.signature(self.placement.target, self.config)
 
 
 class ModelProperty(WireModel):

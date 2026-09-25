@@ -537,7 +537,7 @@
     },
     "BuiltinImplementation": {
       "additionalProperties": false,
-      "description": "Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through\na configured connection \u2014 or a FILE op (`FILE_OPS`), which runs where the file is: on the\nserver against workspace storage (`config.connection`), or on an enrolled machine against its\nworking directory (`artifact_path` relative to it, within the machine's permission ceiling).",
+      "description": "Runs in the server itself (`BUILTIN_OPS[op]` says what it does and its ports) \u2014 or a FILE op\n(`FILE_OPS`), which runs where the file is: on the server against workspace storage\n(`config.connection`), or on an enrolled machine against its working directory\n(`artifact_path` relative to it, within the machine's permission ceiling).",
       "properties": {
         "kind": {
           "const": "builtin",
@@ -553,7 +553,30 @@
             "uppercase",
             "lowercase",
             "identity",
-            "http_get"
+            "http_get",
+            "condition",
+            "switch",
+            "merge",
+            "wait",
+            "approval",
+            "fail",
+            "set_fields",
+            "transform",
+            "filter",
+            "sort",
+            "limit",
+            "dedupe",
+            "aggregate",
+            "sql",
+            "parse",
+            "format",
+            "calculate",
+            "encode",
+            "template",
+            "replace_text",
+            "extract_text",
+            "split_text",
+            "date_time"
           ],
           "title": "Op",
           "type": "string"
@@ -3440,6 +3463,65 @@
       "title": "RunCostActual",
       "type": "object"
     },
+    "RunInitiator": {
+      "additionalProperties": false,
+      "description": "Who started a run. `account` is the person it acts for: the signed-in account itself, the\naccount that created the workspace API key, or the account that saved the trigger - None when\nno person can be named (a key or trigger older than this record). A machine checks `account`\nagainst the people its owner lets run file nodes on it.",
+      "properties": {
+        "account": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Account"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Key"
+        },
+        "kind": {
+          "enum": [
+            "account",
+            "api_key",
+            "trigger"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "trigger": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trigger"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "RunInitiator",
+      "type": "object"
+    },
     "ScheduleTrigger": {
       "additionalProperties": false,
       "properties": {
@@ -3672,6 +3754,21 @@
       "additionalProperties": false,
       "description": "Another graph run as one node: a saved workflow pinned to a revision, or a reusable node from\nthe workspace's library (its current definition). Its effects are its contents' (resolved by\nwhoever can read them: the server expands it).",
       "properties": {
+        "each": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Each"
+        },
         "kind": {
           "const": "subgraph",
           "title": "Kind",
@@ -4618,6 +4715,34 @@
       "additionalProperties": false,
       "description": "One block the editor's palette offers: the node it places (implementation, ports, default\nconfig, placement) and whether it runs as placed. The editor copies these four fields onto a\nnew `WorkflowNode`; nothing is per kind.",
       "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "enum": [
+                "input_output",
+                "flow",
+                "data",
+                "text",
+                "files",
+                "time",
+                "people",
+                "web",
+                "agents",
+                "models",
+                "apps",
+                "machines",
+                "code",
+                "workflows"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
         "config": {
           "additionalProperties": {
             "anyOf": [
@@ -4645,6 +4770,11 @@
           },
           "maxProperties": 32,
           "title": "Config",
+          "type": "object"
+        },
+        "config_schema": {
+          "additionalProperties": true,
+          "title": "Config Schema",
           "type": "object"
         },
         "impl": {
@@ -4684,6 +4814,15 @@
             }
           ],
           "title": "Impl"
+        },
+        "keywords": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Keywords",
+          "type": "array"
         },
         "name": {
           "maxLength": 120,
@@ -4743,6 +4882,12 @@
           ],
           "default": null,
           "title": "Sovereignty"
+        },
+        "summary": {
+          "default": "",
+          "maxLength": 400,
+          "title": "Summary",
+          "type": "string"
         }
       },
       "required": [
@@ -5304,6 +5449,17 @@
           "minLength": 1,
           "title": "Idempotency Key",
           "type": "string"
+        },
+        "initiator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunInitiator"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "invocation": {
           "$ref": "#/$defs/TriggerInvocation"
