@@ -1503,6 +1503,18 @@ class ArtifactRef(WireModel):
     media_type: str = Field(min_length=1, max_length=160)
     size: int = Field(ge=0)
 
+    @classmethod
+    def found_in(cls, value: object) -> tuple["ArtifactRef", ...]:
+        """Every file reference anywhere in a JSON value (inside lists and objects too); raises
+        ValueError on a reference-shaped object that is not a valid one."""
+        if isinstance(value, list):
+            return tuple(found for item in value for found in cls.found_in(item))
+        if isinstance(value, dict):
+            if set(value) == set(cls.model_fields):
+                return (cls.model_validate(value),)
+            return tuple(found for item in value.values() for found in cls.found_in(item))
+        return ()
+
 
 class Placement(WireModel):
     """Where a node runs: on the server (hosted APIs), or on one enrolled machine (local
@@ -1906,6 +1918,8 @@ class MachineCommand(WireModel):
     #: plain list of `{host, port}` — not a typed field here, since `interact_core.pool` (which
     #: owns `EgressPolicy`) imports FROM this module for `MachineRef`; a typed field would cycle.
     tenancy: Literal["owner", "pooled"] = "owner"
+    #: The account the run acts for (`RunInitiator.account`): the runner's local audit log names it.
+    initiator_account: UUID | None = None
 
     @model_validator(mode="after")
     def runnable(self) -> Self:
@@ -2218,6 +2232,18 @@ class ConnectionResource(WireModel):
         return self
 
 
+class RunInitiator(WireModel):
+    """Who started a run. `account` is the person it acts for: the signed-in account itself, the
+    account that created the workspace API key, or the account that saved the trigger - None when
+    no person can be named (a key or trigger older than this record). A machine checks `account`
+    against the people its owner lets run file nodes on it."""
+
+    kind: Literal["account", "api_key", "trigger"]
+    account: UUID | None = None
+    api_key: UUID | None = None
+    trigger: UUID | None = None
+
+
 class WorkflowRun(WireModel):
     id: UUID
     workflow: WorkflowRevisionRef
@@ -2233,6 +2259,8 @@ class WorkflowRun(WireModel):
     cost: RunCostActual | None = None
     #: Node failures the run survived (routed to an error path or replaced by defaults), in order.
     recovered: tuple[NodeError, ...] = Field(default=(), max_length=500)
+    #: Who started it (None on a run recorded before initiators were).
+    initiator: RunInitiator | None = None
     #: Each exposed output the run did not produce, with why (the path feeding it was not taken):
     #: a run that succeeded with an absent output says so, instead of a bare `None` result.
     skipped_outputs: dict[str, str] = Field(default_factory=dict, max_length=64)

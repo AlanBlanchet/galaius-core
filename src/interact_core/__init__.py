@@ -141,7 +141,7 @@ from .workflows import (
     MachineCostRate, MachineCostRateUpdate,
     WorkspaceApiKeyCreated, WorkspaceApiKeySummary, ProviderUsage, WorkflowRevisionRef, WorkflowRun,
     ValuePreview, VALUE_PREVIEW_MAX_PIXELS, VALUE_PREVIEW_MAX_BYTES,
-    NodePolicy, NodeError, JoinRule, OnError, CONTROL_PORTS, CONTROL_INPUTS, StepEvent, StepStatus,
+    RunInitiator, NodePolicy, NodeError, JoinRule, OnError, CONTROL_PORTS, CONTROL_INPUTS, StepEvent, StepStatus,
 )
 from .user_models import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
 from .billing import (
@@ -202,7 +202,7 @@ __all__ = [
     "ToolTokenUsage", "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
     "ValueType",
-    "DirectTool", "ModelTask", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "CriteriaClause", "CriteriaWeight", "CriteriaError", "parse_criteria", "parse_criteria_weights", "format_criteria", "format_criteria_weights", "ModelChoice", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "NodePolicy", "NodeError", "JoinRule", "OnError", "CONTROL_PORTS", "CONTROL_INPUTS", "StepEvent", "StepStatus", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
+    "DirectTool", "ModelTask", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "CriteriaClause", "CriteriaWeight", "CriteriaError", "parse_criteria", "parse_criteria_weights", "format_criteria", "format_criteria_weights", "ModelChoice", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "RunInitiator", "NodePolicy", "NodeError", "JoinRule", "OnError", "CONTROL_PORTS", "CONTROL_INPUTS", "StepEvent", "StepStatus", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
     "HarnessToolDescriptor", "MESSAGE_FIELDS", "MESSAGE_PROVIDERS", "MessageAccount", "MessageField", "MessageProvider", "MessageProviderChoice", "MessageProviderSpec", "SendMessageTool", "GitAgentTool", "GitConnector", "GitOperationName", "MailAgentTool", "MailOperationName", "WebhookAgentTool",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",
