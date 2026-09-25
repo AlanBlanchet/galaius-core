@@ -3122,6 +3122,19 @@
           ],
           "default": null,
           "title": "Retrieved"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
         }
       },
       "required": [

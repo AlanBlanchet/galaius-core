@@ -35,6 +35,10 @@ class PriceSource(WireModel):
     #: ISO date the source was retrieved/priced, when the source names one (a research table
     #: entry does; the live model registry and an owner-set rate do not).
     retrieved: str | None = Field(default=None, max_length=40)
+    #: The "provider/model" this price is FOR, when it prices a vendor model — what a usage
+    #: breakdown groups and names its rows by (a research citation is not a model name). None for
+    #: a machine rate or a free builtin.
+    subject: str | None = Field(default=None, max_length=240)
 
 
 class UnitPrice(WireModel):
