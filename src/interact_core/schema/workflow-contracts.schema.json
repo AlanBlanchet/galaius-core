@@ -172,6 +172,7 @@
     },
     "AgentImplementation": {
       "additionalProperties": false,
+      "description": "An agent revision. Every node wired into its `tools` port is a tool it may call\n(`WorkflowNode.tool_schema`); the call runs that node like any other step.",
       "properties": {
         "agent": {
           "$ref": "#/$defs/AgentRevisionRef"
@@ -204,8 +205,8 @@
                 "gmail": "#/$defs/GmailAgentTool",
                 "http": "#/$defs/HttpAgentTool",
                 "mail_server": "#/$defs/MailAgentTool",
-                "messaging": "#/$defs/MessagingAgentTool",
                 "object_storage": "#/$defs/ObjectStorageAgentTool",
+                "send_message": "#/$defs/SendMessageTool",
                 "ssh": "#/$defs/SshAgentTool",
                 "webhook": "#/$defs/WebhookAgentTool"
               },
@@ -231,9 +232,6 @@
                 "$ref": "#/$defs/ObjectStorageAgentTool"
               },
               {
-                "$ref": "#/$defs/MessagingAgentTool"
-              },
-              {
                 "$ref": "#/$defs/GitAgentTool"
               },
               {
@@ -241,6 +239,9 @@
               },
               {
                 "$ref": "#/$defs/WebhookAgentTool"
+              },
+              {
+                "$ref": "#/$defs/SendMessageTool"
               },
               {
                 "$ref": "#/$defs/WorkflowFunctionTool"
@@ -697,6 +698,7 @@
                 "roboflow",
                 "mistral",
                 "self_hosted",
+                "openai_compatible",
                 "google_drive",
                 "github",
                 "slack",
@@ -924,8 +926,8 @@
               "gmail": "#/$defs/GmailAgentTool",
               "http": "#/$defs/HttpAgentTool",
               "mail_server": "#/$defs/MailAgentTool",
-              "messaging": "#/$defs/MessagingAgentTool",
               "object_storage": "#/$defs/ObjectStorageAgentTool",
+              "send_message": "#/$defs/SendMessageTool",
               "ssh": "#/$defs/SshAgentTool",
               "webhook": "#/$defs/WebhookAgentTool"
             },
@@ -948,9 +950,6 @@
               "$ref": "#/$defs/ObjectStorageAgentTool"
             },
             {
-              "$ref": "#/$defs/MessagingAgentTool"
-            },
-            {
               "$ref": "#/$defs/GitAgentTool"
             },
             {
@@ -958,6 +957,9 @@
             },
             {
               "$ref": "#/$defs/WebhookAgentTool"
+            },
+            {
+              "$ref": "#/$defs/SendMessageTool"
             }
           ],
           "title": "Tool"
@@ -1420,6 +1422,102 @@
       "title": "CredentialRef",
       "type": "object"
     },
+    "CriteriaClause": {
+      "additionalProperties": false,
+      "description": "One clause of the shared criteria grammar, parsed. `membership` (`sovereignty in\nself_hosted|eu_sovereign`) is the one clause over a WORD-valued property: its `values` are the\naccepted words, never numbers.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "comparison",
+            "bare",
+            "provider",
+            "membership"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[\\w.-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "operator": {
+          "default": "",
+          "enum": [
+            "",
+            ">",
+            ">=",
+            "<",
+            "<=",
+            "=",
+            "==",
+            "!=",
+            "~",
+            "in"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "percentile": {
+          "default": false,
+          "title": "Percentile",
+          "type": "boolean"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "values": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "title": "CriteriaClause",
+      "type": "object"
+    },
+    "CriteriaWeight": {
+      "additionalProperties": false,
+      "description": "One `name=weight` ranking clause: a weight ORDERS what already passed, never admits.",
+      "properties": {
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[\\w-]+\\.[\\w.-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "weight": {
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "weight"
+      ],
+      "title": "CriteriaWeight",
+      "type": "object"
+    },
     "DelegatedAgentTool": {
       "additionalProperties": false,
       "properties": {
@@ -1668,7 +1766,7 @@
     },
     "MailAgentTool": {
       "additionalProperties": false,
-      "description": "One SMTP send or IMAP read against a pinned `mail_server` connection \u2014 the same\nread-direct / write-approved split SSH and Gmail draw, generalized to any mail server instead\nof only Gmail's OAuth-bound Workspace account.",
+      "description": "One IMAP read against a pinned `mail_server` connection, run directly like Gmail's reads.\nSending is `SendMessageTool` with `provider=\"mail_server\"`.",
       "properties": {
         "connection": {
           "$ref": "#/$defs/ConnectionResourceRef"
@@ -1695,10 +1793,7 @@
           "type": "string"
         },
         "operation": {
-          "enum": [
-            "send_email",
-            "read_inbox"
-          ],
+          "const": "read_inbox",
           "title": "Operation",
           "type": "string"
         }
@@ -1712,6 +1807,83 @@
         "input_schema"
       ],
       "title": "MailAgentTool",
+      "type": "object"
+    },
+    "MailTrigger": {
+      "additionalProperties": false,
+      "description": "A new message in a mailbox starts the workflow. Polled every `every_minutes` (none of the\nthree providers pushes to an app without a public callback), deduplicated per message: a\nmessage starts exactly one run however often it is seen. Reads through a `mail_server`\nconnection's IMAP side (`connection`, read grant) or a connected Gmail / Microsoft 365 account\n(`account`, its selector). Only messages that arrive after the trigger is switched on count.",
+      "properties": {
+        "account": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Account"
+        },
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "every_minutes": {
+          "default": 5,
+          "maximum": 1440,
+          "minimum": 1,
+          "title": "Every Minutes",
+          "type": "integer"
+        },
+        "folder": {
+          "default": "INBOX",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Folder",
+          "type": "string"
+        },
+        "from_contains": {
+          "default": "",
+          "maxLength": 200,
+          "title": "From Contains",
+          "type": "string"
+        },
+        "kind": {
+          "const": "mail",
+          "title": "Kind",
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "mail_server",
+            "gmail",
+            "microsoft"
+          ],
+          "title": "Provider",
+          "type": "string"
+        },
+        "subject_contains": {
+          "default": "",
+          "maxLength": 200,
+          "title": "Subject Contains",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "provider"
+      ],
+      "title": "MailTrigger",
       "type": "object"
     },
     "ManualTrigger": {
@@ -1729,63 +1901,57 @@
       "title": "ManualTrigger",
       "type": "object"
     },
-    "MessagingAgentTool": {
+    "ModelChoice": {
       "additionalProperties": false,
-      "description": "One send or list operation against a bot-token/API-key messaging provider, bound to a\npinned `service_connector` connection. Mirrors `GmailAgentTool`'s shape (one tool kind, an\n`operation` field) generalized across four providers instead of a class per app;\n`send_message` is gated by the same owner-approval ledger Gmail's send and SSH's writes use \u2014\nposting into someone else's channel is the same risk class. Not every provider supports both\noperations (WhatsApp's Cloud API has no read endpoint): the server only ever publishes the\noperations a given connector actually supports.",
+      "description": "A model asked for by what it must DO and how it must SCORE, instead of by id \u2014 re-resolved\nevery run. Written in the ONE criteria grammar agents already use (`interact_core.criteria`):\n`constraints` are hard clauses (a model failing one, or with no known value for it, is out),\n`rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the\ntask's own primary benchmark(s), so the default follows the benchmark registry, not the day\nthe node was saved.",
       "properties": {
-        "connection": {
-          "$ref": "#/$defs/ConnectionResourceRef"
+        "constraints": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CriteriaClause"
+          },
+          "maxItems": 32,
+          "title": "Constraints",
+          "type": "array"
         },
-        "connector": {
+        "pinned": {
+          "default": false,
+          "title": "Pinned",
+          "type": "boolean"
+        },
+        "rank_by": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CriteriaWeight"
+          },
+          "maxItems": 16,
+          "title": "Rank By",
+          "type": "array"
+        },
+        "task": {
           "enum": [
-            "slack",
-            "discord",
-            "telegram",
-            "whatsapp"
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d",
+            "depth-estimation",
+            "keypoint-detection",
+            "image-to-text"
           ],
-          "title": "Connector",
-          "type": "string"
-        },
-        "description": {
-          "maxLength": 240,
-          "minLength": 1,
-          "title": "Description",
-          "type": "string"
-        },
-        "input_schema": {
-          "$ref": "#/$defs/ToolInputSchema"
-        },
-        "kind": {
-          "const": "messaging",
-          "title": "Kind",
-          "type": "string"
-        },
-        "name": {
-          "maxLength": 80,
-          "minLength": 1,
-          "pattern": "^[a-z][a-z0-9_]*$",
-          "title": "Name",
-          "type": "string"
-        },
-        "operation": {
-          "enum": [
-            "send_message",
-            "list_messages"
-          ],
-          "title": "Operation",
+          "title": "Task",
           "type": "string"
         }
       },
       "required": [
-        "kind",
-        "name",
-        "description",
-        "connector",
-        "operation",
-        "connection",
-        "input_schema"
+        "task"
       ],
-      "title": "MessagingAgentTool",
+      "title": "ModelChoice",
       "type": "object"
     },
     "ModelCriteriaCatalog": {
@@ -2094,8 +2260,19 @@
     },
     "ModelImplementation": {
       "additionalProperties": false,
-      "description": "Any model typed by its task (`ModelTask`, Hugging Face pipeline tags).",
+      "description": "Any model typed by its task (`ModelTask`, Hugging Face pipeline tags). With an unpinned\n`choice`, `provider`/`model` are the model that choice resolved to when last edited (what the\neditor shows and prices); every run re-resolves the choice and records its answer in the run.",
       "properties": {
+        "choice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "kind": {
           "const": "model",
           "title": "Kind",
@@ -2145,6 +2322,7 @@
     },
     "ModelProperty": {
       "additionalProperties": false,
+      "description": "One fact a model can be constrained or ranked by. `choice` properties take a word from\n`values` (a sovereignty tier, where it runs) through a membership clause.",
       "properties": {
         "description": {
           "maxLength": 400,
@@ -2152,13 +2330,39 @@
           "title": "Description",
           "type": "string"
         },
+        "higher_is_better": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Higher Is Better"
+        },
         "kind": {
           "enum": [
             "flag",
-            "number"
+            "number",
+            "choice"
           ],
           "title": "Kind",
           "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
         },
         "name": {
           "maxLength": 160,
@@ -2179,6 +2383,43 @@
           "maxLength": 160,
           "title": "Source",
           "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "values": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Values",
+          "type": "array"
         },
         "weightable": {
           "title": "Weightable",
@@ -2249,6 +2490,57 @@
         "known"
       ],
       "title": "NodeCostActual",
+      "type": "object"
+    },
+    "NodeError": {
+      "additionalProperties": false,
+      "description": "One node's failure once its retries are spent: the `error` port's value, and what a run\nrecords about each error it survived (`WorkflowRun.recovered`).",
+      "properties": {
+        "attempt": {
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "code": {
+          "enum": [
+            "failed",
+            "timeout"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 400,
+          "title": "Message",
+          "type": "string"
+        },
+        "node": {
+          "format": "uuid",
+          "title": "Node",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node",
+        "label",
+        "kind",
+        "code",
+        "message",
+        "attempt"
+      ],
+      "title": "NodeError",
       "type": "object"
     },
     "NodeLibraryDefinition": {
@@ -2365,6 +2657,93 @@
         "name"
       ],
       "title": "NodeLibraryUse",
+      "type": "object"
+    },
+    "NodePolicy": {
+      "additionalProperties": false,
+      "description": "How any node runs and fails, whatever it runs. A failed attempt is retried `retries` times,\nthe n-th retry after `backoff_seconds * 2**(n-1)`; `timeout_seconds` bounds each attempt. Once\nevery attempt failed, `on_error` decides: `fail_run` stops the run (the default); `route` sends\na `NodeError` out of the `error` port and skips everything the node's other outputs feed;\n`continue_with_default` emits `defaults` (one per output port) as if the node had succeeded.\n`join` is the fan-in rule of each input port fed by several wires: `all` (the default) waits\nfor every wire and is skipped when one of them was, `any` takes the first value to arrive (a\nlist port: every value that arrived) and is skipped only when every wire was.",
+      "properties": {
+        "backoff_seconds": {
+          "default": 1.0,
+          "maximum": 600,
+          "minimum": 0,
+          "title": "Backoff Seconds",
+          "type": "number"
+        },
+        "defaults": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              }
+            ]
+          },
+          "maxProperties": 64,
+          "title": "Defaults",
+          "type": "object"
+        },
+        "join": {
+          "additionalProperties": {
+            "enum": [
+              "all",
+              "any"
+            ],
+            "type": "string"
+          },
+          "maxProperties": 64,
+          "title": "Join",
+          "type": "object"
+        },
+        "on_error": {
+          "default": "fail_run",
+          "enum": [
+            "fail_run",
+            "route",
+            "continue_with_default"
+          ],
+          "title": "On Error",
+          "type": "string"
+        },
+        "retries": {
+          "default": 0,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 86400,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timeout Seconds"
+        }
+      },
+      "title": "NodePolicy",
       "type": "object"
     },
     "NodeUsage": {
@@ -2695,7 +3074,8 @@
             "mesh",
             "boxes",
             "video",
-            "audio"
+            "audio",
+            "any"
           ],
           "title": "Value Type",
           "type": "string"
@@ -3106,6 +3486,80 @@
       "title": "ScriptImplementation",
       "type": "object"
     },
+    "SendMessageTool": {
+      "additionalProperties": false,
+      "description": "Sends one message through the provider named on it \u2014 an email (SMTP, Gmail, Microsoft\n365) or a chat post (Slack, Discord, Telegram, WhatsApp). A saved connection\n(`connection`) or a connected OAuth account (`account`, its selector) carries the\ncredential, per `MessageProviderSpec.auth`. Always an effect on someone else's inbox: the\nserver gates it behind the owner-approval ledger by default.",
+      "properties": {
+        "account": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Account"
+        },
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionResourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "description": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "$ref": "#/$defs/ToolInputSchema"
+        },
+        "kind": {
+          "const": "send_message",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "mail_server",
+            "gmail",
+            "microsoft",
+            "slack",
+            "discord",
+            "telegram",
+            "whatsapp"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "description",
+        "provider",
+        "input_schema"
+      ],
+      "title": "SendMessageTool",
+      "type": "object"
+    },
     "SovereigntyRequired": {
       "additionalProperties": false,
       "description": "A workflow's HARD placement constraint (threat-model #6): \"sovereign required\" REFUSES\ndispatch to a node whose PREDICTED figure fails to meet `min_sovereignty`, and REFUSES to\naccept a run whose ACTUAL figure fails it after the fact \u2014 never a soft warning, never a\nsilent autoscaler fallback to a cheaper non-sovereign region. Declared once per\n`WorkflowInterface`; `meets_requirement` is the ONE place both the pre-dispatch scheduler and\nthe post-run auditor check it, so the two can never drift into different rules.",
@@ -3336,6 +3790,7 @@
         "configuration": {
           "discriminator": {
             "mapping": {
+              "mail": "#/$defs/MailTrigger",
               "manual": "#/$defs/ManualTrigger",
               "schedule": "#/$defs/ScheduleTrigger",
               "webhook": "#/$defs/WebhookTrigger"
@@ -3351,6 +3806,9 @@
             },
             {
               "$ref": "#/$defs/WebhookTrigger"
+            },
+            {
+              "$ref": "#/$defs/MailTrigger"
             }
           ],
           "title": "Configuration"
@@ -3460,6 +3918,7 @@
         "configuration": {
           "discriminator": {
             "mapping": {
+              "mail": "#/$defs/MailTrigger",
               "manual": "#/$defs/ManualTrigger",
               "schedule": "#/$defs/ScheduleTrigger",
               "webhook": "#/$defs/WebhookTrigger"
@@ -3475,6 +3934,9 @@
             },
             {
               "$ref": "#/$defs/WebhookTrigger"
+            },
+            {
+              "$ref": "#/$defs/MailTrigger"
             }
           ],
           "title": "Configuration"
@@ -3520,6 +3982,7 @@
         "configuration": {
           "discriminator": {
             "mapping": {
+              "mail": "#/$defs/MailTrigger",
               "manual": "#/$defs/ManualTrigger",
               "schedule": "#/$defs/ScheduleTrigger",
               "webhook": "#/$defs/WebhookTrigger"
@@ -3535,6 +3998,9 @@
             },
             {
               "$ref": "#/$defs/WebhookTrigger"
+            },
+            {
+              "$ref": "#/$defs/MailTrigger"
             }
           ],
           "title": "Configuration"
@@ -3685,7 +4151,8 @@
           "enum": [
             "manual",
             "schedule",
-            "webhook"
+            "webhook",
+            "mail"
           ],
           "title": "Source",
           "type": "string"
@@ -3933,7 +4400,8 @@
             "mesh",
             "boxes",
             "video",
-            "audio"
+            "audio",
+            "any"
           ],
           "title": "Value Type",
           "type": "string"
@@ -4548,7 +5016,7 @@
     },
     "WorkflowNode": {
       "additionalProperties": false,
-      "description": "One node, whatever it runs. `config` holds the implementation's settings AND the constant\nvalue of any input port left unwired (a wire, when present, wins).",
+      "description": "One node, whatever it runs. `config` holds the implementation's settings AND the constant\nvalue of any input port left unwired (a wire, when present, wins). `policy` says how it\nretries and where its errors go; `description` tells an agent calling it as a tool what it does.",
       "properties": {
         "config": {
           "additionalProperties": {
@@ -4578,6 +5046,12 @@
           "maxProperties": 32,
           "title": "Config",
           "type": "object"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 1000,
+          "title": "Description",
+          "type": "string"
         },
         "id": {
           "format": "uuid",
@@ -4630,6 +5104,9 @@
         },
         "placement": {
           "$ref": "#/$defs/Placement"
+        },
+        "policy": {
+          "$ref": "#/$defs/NodePolicy"
         },
         "ports": {
           "items": {
@@ -4791,6 +5268,15 @@
         },
         "invocation": {
           "$ref": "#/$defs/TriggerInvocation"
+        },
+        "recovered": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/NodeError"
+          },
+          "maxItems": 500,
+          "title": "Recovered",
+          "type": "array"
         },
         "result": {
           "anyOf": [

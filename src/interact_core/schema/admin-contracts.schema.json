@@ -71,7 +71,16 @@
             "plan.saved",
             "subscription.assigned",
             "usage.recorded",
-            "budget.evaluated"
+            "budget.evaluated",
+            "group.created",
+            "group.renamed",
+            "group.permissions_updated",
+            "group.deleted",
+            "group_member.added",
+            "group_member.removed",
+            "migration.operator_accounts_migrated",
+            "subscription.group_granted",
+            "subscription.group_revoked"
           ],
           "title": "Action",
           "type": "string"
@@ -120,7 +129,10 @@
             "run",
             "plan",
             "subscription",
-            "usage"
+            "usage",
+            "group",
+            "group_member",
+            "migration"
           ],
           "title": "Target Kind",
           "type": "string"
@@ -147,6 +159,27 @@
           "const": true,
           "title": "Authorized",
           "type": "boolean"
+        },
+        "permissions": {
+          "default": [],
+          "items": {
+            "enum": [
+              "admin.access",
+              "admin.groups.manage",
+              "admin.users.view",
+              "admin.plans.manage",
+              "admin.audit.view",
+              "workflows.run",
+              "models.platform_paid",
+              "machines.pool.use",
+              "machines.cloud.launch",
+              "machines.reserve",
+              "credits.auto_topup"
+            ],
+            "type": "string"
+          },
+          "title": "Permissions",
+          "type": "array"
         },
         "provisioned_at": {
           "format": "date-time",
@@ -329,6 +362,19 @@
           "title": "Entitlements",
           "type": "array"
         },
+        "granted_group_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Granted Group Id"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
@@ -361,6 +407,19 @@
           ],
           "default": null,
           "title": "Parent Revision"
+        },
+        "price_usd_monthly": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Price Usd Monthly"
         },
         "revision": {
           "format": "uuid",
@@ -430,6 +489,32 @@
     "UsageRecord": {
       "additionalProperties": false,
       "properties": {
+        "cache_creation_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Creation Input Tokens"
+        },
+        "cache_read_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Read Input Tokens"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
@@ -510,32 +595,6 @@
     "UsageSourceRef": {
       "additionalProperties": false,
       "properties": {
-        "cache_creation_input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cache Creation Input Tokens"
-        },
-        "cache_read_input_tokens": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Cache Read Input Tokens"
-        },
         "id": {
           "format": "uuid",
           "title": "Id",

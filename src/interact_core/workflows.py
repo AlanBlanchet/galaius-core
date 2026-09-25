@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, field_validator, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
+from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
@@ -196,7 +197,9 @@ def model_task_ports(task: ModelTask, placement: Literal["server", "machine"] = 
         segmentation_ports = (image_in, prompt, _port("result", "output", "mask"))
     return {
         "text-generation": (prompt, _port("text", "output", "text")),
-        "text-to-image": (prompt, reference, _port("image", "output", "image")),
+        # The generated image is `result`: `image` is already the optional reference INPUT, and a
+        # node's port names are unique across both directions (`validate_workflow`).
+        "text-to-image": (prompt, reference, _port("result", "output", "image")),
         "text-to-video": (prompt, reference, _port("video", "output", "video")),
         "object-detection": detection_ports,
         "image-segmentation": segmentation_ports,
@@ -366,6 +369,12 @@ class WorkspaceApiKeyCreated(WireModel):
     secret: SecretStr = Field(min_length=32, max_length=256)
 
 
+class ConnectionResourceRef(WireModel):
+    id: UUID
+    revision: UUID
+    capability: Literal["read", "write", "list", "http", "command"]
+
+
 class ManualTrigger(WireModel):
     kind: Literal["manual"]
 
@@ -467,7 +476,46 @@ class WebhookTrigger(WireModel):
     kind: Literal["webhook"]
 
 
-TriggerConfiguration = Annotated[ManualTrigger | ScheduleTrigger | WebhookTrigger, Field(discriminator="kind")]
+#: What an inbound message hands the workflow it starts, one run per message (the trigger's
+#: `input_mapping` sources). Every field is text; `body` is the plain-text part.
+MAIL_TRIGGER_FIELDS: tuple[str, ...] = ("from", "to", "subject", "body", "message_id", "thread", "date")
+
+
+class MailTrigger(WireModel):
+    """A new message in a mailbox starts the workflow. Polled every `every_minutes` (none of the
+    three providers pushes to an app without a public callback), deduplicated per message: a
+    message starts exactly one run however often it is seen. Reads through a `mail_server`
+    connection's IMAP side (`connection`, read grant) or a connected Gmail / Microsoft 365 account
+    (`account`, its selector). Only messages that arrive after the trigger is switched on count."""
+
+    kind: Literal["mail"]
+    provider: Literal["mail_server", "gmail", "microsoft"]
+    connection: ConnectionResourceRef | None = None
+    account: str | None = Field(default=None, min_length=1, max_length=320)
+    folder: str = Field(default="INBOX", min_length=1, max_length=200)
+    #: Plain case-insensitive substrings; empty matches everything.
+    from_contains: str = Field(default="", max_length=200)
+    subject_contains: str = Field(default="", max_length=200)
+    every_minutes: int = Field(default=5, ge=1, le=1440)
+
+    @model_validator(mode="after")
+    def credential_source(self) -> Self:
+        if self.provider == "mail_server":
+            if self.connection is None or self.connection.capability != "read" or self.account is not None:
+                raise ValueError("an IMAP mail trigger reads through a mail connection's read grant")
+        elif self.connection is not None:
+            raise ValueError("a Gmail or Microsoft 365 mail trigger reads a connected account, not a saved connection")
+        return self
+
+    def next_fire_after(self, instant: datetime) -> datetime:
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise ValueError("poll evaluation requires a timezone-aware instant")
+        return instant + timedelta(minutes=self.every_minutes)
+
+
+TriggerConfiguration = Annotated[ManualTrigger | ScheduleTrigger | WebhookTrigger | MailTrigger, Field(discriminator="kind")]
+#: Triggers the server fires on its own clock (`TriggerScheduleState`): a schedule, a mailbox poll.
+POLLED_TRIGGERS = (ScheduleTrigger, MailTrigger)
 
 
 class TriggerInputMapping(WireModel):
@@ -538,6 +586,8 @@ class TriggerBinding(WireModel):
     def coherent_mapping(self) -> Self:
         if isinstance(self.configuration, ScheduleTrigger) and self.input_mapping:
             raise ValueError("schedule triggers cannot map request values")
+        if isinstance(self.configuration, MailTrigger) and any(value.source not in MAIL_TRIGGER_FIELDS for value in self.input_mapping):
+            raise ValueError(f"a mail trigger maps only {', '.join(MAIL_TRIGGER_FIELDS)}")
         constant_targets = {(value.target_kind, value.target) for value in self.constants}
         if len(constant_targets) != len(self.constants):
             raise ValueError("trigger constant targets must be unique")
@@ -577,8 +627,8 @@ class TriggerDefinition(TriggerBinding):
 
     @model_validator(mode="after")
     def coherent_runtime_state(self) -> Self:
-        if (self.schedule is not None) != isinstance(self.configuration, ScheduleTrigger):
-            raise ValueError("schedule state is required only for schedule triggers")
+        if (self.schedule is not None) != isinstance(self.configuration, POLLED_TRIGGERS):
+            raise ValueError("schedule state is required only for schedule and mail triggers")
         if self.webhook_credential is not None and not isinstance(self.configuration, WebhookTrigger):
             raise ValueError("webhook credentials belong only to webhook triggers")
         return self
@@ -587,7 +637,7 @@ class TriggerDefinition(TriggerBinding):
 class TriggerDispatch(WireModel):
     id: UUID
     trigger_id: UUID
-    source: Literal["manual", "schedule", "webhook"]
+    source: Literal["manual", "schedule", "webhook", "mail"]
     idempotency_key: str = Field(min_length=1, max_length=160)
     scheduled_for: datetime | None = None
     request_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -649,12 +699,6 @@ class WorkflowInterface(WireModel):
     #: in this module (needs `Sovereignty`, defined after this class); Pydantic resolves the
     #: forward reference at class-creation time via `model_rebuild()` at the bottom of this file.
     require_sovereign: "SovereigntyRequired | None" = None
-
-
-class ConnectionResourceRef(WireModel):
-    id: UUID
-    revision: UUID
-    capability: Literal["read", "write", "list", "http", "command"]
 
 
 class ConfiguredModelRef(WireModel):
@@ -739,7 +783,7 @@ ConnectorActionName = Literal[
 ]
 #: Read/list-shaped actions only, reached through the generic `ConnectorAgentTool` with no owner
 #: approval — `send_message` and git's write operations run through their own dedicated,
-#: approval-gated tool (`MessagingAgentTool`, `GitAgentTool`), the same split Gmail's read vs send
+#: approval-gated tool (`SendMessageTool`, `GitAgentTool`), the same split Gmail's read vs send
 #: already draws.
 ConnectorBrowseActionName = Literal["list_files", "list_repositories", "list_channels", "search_pages", "list_sites", "list_messages", "read_file"]
 ConnectorAuthKind = Literal["google_oauth", "microsoft_oauth", "access_token"]
@@ -1107,32 +1151,6 @@ class ObjectStorageAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-#: Which bot-token/API-key REST API a `MessagingAgentTool` calls. Microsoft Teams is deliberately
-#: absent: it offers no bot-token send/list API, only incoming webhooks — reached through the
-#: generic `webhook` connection kind and `WebhookAgentTool` instead, alongside Discord's own
-#: webhook mode (Discord supports both; the owner picks bot token or webhook per connection).
-MessagingConnector = Literal["slack", "discord", "telegram", "whatsapp"]
-MessagingOperationName = Literal["send_message", "list_messages"]
-
-
-class MessagingAgentTool(WireModel):
-    """One send or list operation against a bot-token/API-key messaging provider, bound to a
-    pinned `service_connector` connection. Mirrors `GmailAgentTool`'s shape (one tool kind, an
-    `operation` field) generalized across four providers instead of a class per app;
-    `send_message` is gated by the same owner-approval ledger Gmail's send and SSH's writes use —
-    posting into someone else's channel is the same risk class. Not every provider supports both
-    operations (WhatsApp's Cloud API has no read endpoint): the server only ever publishes the
-    operations a given connector actually supports."""
-
-    kind: Literal["messaging"]
-    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
-    connector: MessagingConnector
-    operation: MessagingOperationName
-    connection: ConnectionResourceRef
-    input_schema: ToolInputSchema
-
-
 #: `list_repositories` stays on the existing read-only `ConnectorAgentTool` /
 #: `ConnectorBrowseActionName` path (pure read, no owner approval, fits its query/cursor/limit
 #: shape); `read_file` needs a repository + path + ref together, so it lives here beside the four
@@ -1158,13 +1176,12 @@ class GitAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-MailOperationName = Literal["send_email", "read_inbox"]
+MailOperationName = Literal["read_inbox"]
 
 
 class MailAgentTool(WireModel):
-    """One SMTP send or IMAP read against a pinned `mail_server` connection — the same
-    read-direct / write-approved split SSH and Gmail draw, generalized to any mail server instead
-    of only Gmail's OAuth-bound Workspace account."""
+    """One IMAP read against a pinned `mail_server` connection, run directly like Gmail's reads.
+    Sending is `SendMessageTool` with `provider="mail_server"`."""
 
     kind: Literal["mail_server"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
@@ -1187,7 +1204,149 @@ class WebhookAgentTool(WireModel):
     input_schema: ToolInputSchema
 
 
-AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | MessagingAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | WorkflowFunctionTool, Field(discriminator="kind")]
+# ---- Sending a message: one shape for every channel ----
+#
+# An email and a chat post are the same act: a body to a recipient, through a provider the
+# sender picks. One tool kind carries it; the provider is a field ON the node (not a block per
+# vendor), and every provider reads the same envelope — the fields it cannot carry are refused
+# by name at run time, never silently dropped.
+
+#: Where a message goes out. `mail_server` is any SMTP server (its `mail_server` connection's
+#: `root`); `gmail` / `microsoft` are connected Google / Microsoft 365 accounts; the rest are
+#: bot-token chat APIs on a `service_connector` connection.
+MessageProvider = Literal["mail_server", "gmail", "microsoft", "slack", "discord", "telegram", "whatsapp"]
+#: The envelope every provider reads. `attachments` is a file port (stored artifacts); the rest
+#: are text.
+MessageField = Literal["to", "subject", "body", "cc", "in_reply_to", "attachments"]
+MESSAGE_FIELDS: tuple[MessageField, ...] = get_args(MessageField)
+
+
+class MessageProviderSpec(WireModel):
+    """What one provider needs and carries: where its credential lives (`auth`: a saved
+    connection of `connection_kind`, or a connected OAuth account) and which envelope fields it
+    delivers. A chat provider shows `subject` as the message's first line."""
+
+    provider: MessageProvider
+    name: str = Field(min_length=1, max_length=80)
+    channel: Literal["email", "chat"]
+    auth: Literal["connection", "google_oauth", "microsoft_oauth"]
+    connection_kind: Literal["mail_server", "service_connector"] | None = None
+    fields: tuple[MessageField, ...]
+    #: What `to` means for this provider, shown beside the port.
+    recipient: str = Field(min_length=1, max_length=120)
+
+    @classmethod
+    def of(cls, provider: str) -> "MessageProviderSpec":
+        return _MESSAGE_PROVIDER_SPECS[provider]
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if (self.auth == "connection") != (self.connection_kind is not None):
+            raise ValueError("a connection-backed provider names its connection kind, an OAuth one none")
+        if not {"to", "body"} <= set(self.fields):
+            raise ValueError("every provider carries a recipient and a body")
+        return self
+
+
+_EMAIL: tuple[MessageField, ...] = MESSAGE_FIELDS
+_CHAT: tuple[MessageField, ...] = ("to", "subject", "body")
+MESSAGE_PROVIDERS: tuple[MessageProviderSpec, ...] = (
+    MessageProviderSpec(provider="mail_server", name="SMTP server", channel="email", auth="connection", connection_kind="mail_server", fields=_EMAIL, recipient="Email address(es), comma-separated"),
+    MessageProviderSpec(provider="gmail", name="Gmail", channel="email", auth="google_oauth", fields=_EMAIL, recipient="Email address(es), comma-separated"),
+    MessageProviderSpec(provider="microsoft", name="Microsoft 365 (Outlook)", channel="email", auth="microsoft_oauth", fields=_EMAIL, recipient="Email address(es), comma-separated"),
+    MessageProviderSpec(provider="slack", name="Slack", channel="chat", auth="connection", connection_kind="service_connector", fields=_CHAT, recipient="Channel id or name"),
+    MessageProviderSpec(provider="discord", name="Discord", channel="chat", auth="connection", connection_kind="service_connector", fields=_CHAT, recipient="Channel id"),
+    MessageProviderSpec(provider="telegram", name="Telegram", channel="chat", auth="connection", connection_kind="service_connector", fields=_CHAT, recipient="Chat id"),
+    MessageProviderSpec(provider="whatsapp", name="WhatsApp", channel="chat", auth="connection", connection_kind="service_connector", fields=_CHAT, recipient="Phone number, E.164"),
+)
+_MESSAGE_PROVIDER_SPECS = {spec.provider: spec for spec in MESSAGE_PROVIDERS}
+_MESSAGE_FIELD_WORDS: dict[str, str] = {"to": "Recipient", "subject": "Subject", "body": "Message text", "cc": "Copy recipients, comma-separated", "in_reply_to": "Message id this answers (threads the reply)"}
+
+
+class SendMessageTool(WireModel):
+    """Sends one message through the provider named on it — an email (SMTP, Gmail, Microsoft
+    365) or a chat post (Slack, Discord, Telegram, WhatsApp). A saved connection
+    (`connection`) or a connected OAuth account (`account`, its selector) carries the
+    credential, per `MessageProviderSpec.auth`. Always an effect on someone else's inbox: the
+    server gates it behind the owner-approval ledger by default."""
+
+    kind: Literal["send_message"]
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(min_length=1, max_length=240)
+    provider: MessageProvider
+    connection: ConnectionResourceRef | None = None
+    account: str | None = Field(default=None, min_length=1, max_length=320)
+    #: Derived from the envelope (text fields only; a model passes no stored file); filled in when
+    #: absent, refused when it disagrees.
+    input_schema: ToolInputSchema
+
+    @property
+    def spec(self) -> MessageProviderSpec:
+        return _MESSAGE_PROVIDER_SPECS[self.provider]
+
+    @classmethod
+    def schema_for(cls, provider: MessageProvider) -> ToolInputSchema:
+        spec = _MESSAGE_PROVIDER_SPECS[provider]
+        words = {**_MESSAGE_FIELD_WORDS, "to": spec.recipient}
+        return ToolInputSchema(properties={name: ToolInputProperty(type="string", description=words[name]) for name in spec.fields if name != "attachments"}, required=("to", "body"))
+
+    @model_validator(mode="before")
+    @classmethod
+    def derived_schema(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("input_schema") is None and data.get("provider") in _MESSAGE_PROVIDER_SPECS:
+            return {**data, "input_schema": cls.schema_for(data["provider"])}
+        return data
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if self.input_schema != self.schema_for(self.provider):
+            raise ValueError("a send-message tool's input is its provider's envelope")
+        if self.connection is not None and self.connection.capability != "write":
+            raise ValueError("sending needs the connection's write grant")
+        if self.spec.auth != "connection" and self.connection is not None:
+            raise ValueError(f"{self.spec.name} sends from a connected account, not a saved connection")
+        if self.spec.auth == "connection" and self.account is not None:
+            raise ValueError(f"{self.spec.name} sends through a saved connection, not an account")
+        return self
+
+    def signature(self) -> tuple[PortSpec, ...]:
+        """The node's ports: the WHOLE envelope for every provider, so switching the provider on a
+        placed node never re-wires it; `to` and `body` are required (a wire or a constant)."""
+        inputs = tuple(PortSpec(name=name, direction="input", value_type="artifact" if name == "attachments" else "text", required=name in {"to", "body"}, multiple=name == "attachments") for name in MESSAGE_FIELDS)
+        return (*inputs, PortSpec(name="result", direction="output", value_type="text"))
+
+
+class MessageAccount(WireModel):
+    """One credential a provider can use in this workspace: a saved connection or a connected
+    account, and what it may do. The send node's and the mail trigger's pickers list these."""
+
+    provider: MessageProvider
+    name: str = Field(min_length=1, max_length=320)
+    connection: ConnectionResourceRef | None = None
+    account: str | None = Field(default=None, min_length=1, max_length=320)
+    can_send: bool
+    can_read: bool
+    #: Why it cannot do one of them, in the owner's words (a missing grant, a missing credential).
+    note: str | None = Field(default=None, max_length=240)
+
+
+class MessageProviderChoice(WireModel):
+    spec: MessageProviderSpec
+    accounts: tuple[MessageAccount, ...] = Field(default=(), max_length=256)
+    #: Where to add one when `accounts` is empty (the Connections page section).
+    connect_hint: str = Field(min_length=1, max_length=240)
+
+
+class HarnessToolDescriptor(WireModel):
+    """One tool an agent's harness can be given (`AgentRevision.harness_tools` names), with the
+    category its server declares (interact's tools publish it in MCP `_meta`), for grouping."""
+
+    name: str = Field(min_length=1, max_length=160)
+    category: str = Field(min_length=1, max_length=40)
+    description: str = Field(default="", max_length=600)
+
+
+AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | SendMessageTool | WorkflowFunctionTool, Field(discriminator="kind")]
 
 
 class AgentRevision(WireModel):
@@ -1369,7 +1528,7 @@ class Placement(WireModel):
         return self
 
 
-DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | MessagingAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool, Field(discriminator="kind")]
+DirectTool = Annotated[HttpAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | SendMessageTool, Field(discriminator="kind")]
 
 
 class NodeLibraryRef(WireModel):
@@ -1448,15 +1607,57 @@ class AgentImplementation(_Implementation):
     control_ports: ClassVar[tuple[PortSpec, ...]] = (PortSpec(name="tools", direction="input", value_type="any", required=False, multiple=True),)
 
 
+class ModelChoice(WireModel):
+    """A model asked for by what it must DO and how it must SCORE, instead of by id — re-resolved
+    every run. Written in the ONE criteria grammar agents already use (`interact_core.criteria`):
+    `constraints` are hard clauses (a model failing one, or with no known value for it, is out),
+    `rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the
+    task's own primary benchmark(s), so the default follows the benchmark registry, not the day
+    the node was saved."""
+
+    task: ModelTask
+    rank_by: tuple[CriteriaWeight, ...] = Field(default=(), max_length=16)
+    constraints: tuple[CriteriaClause, ...] = Field(default=(), max_length=32)
+    #: True: the node runs the model it names, whatever today's ranking says — the benchmarks and
+    #: constraints are kept for when the person chooses by them again.
+    pinned: bool = False
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if len({weight.name for weight in self.rank_by}) != len(self.rank_by):
+            raise ValueError("each benchmark ranks once")
+        if any(clause.kind == "provider" for clause in self.constraints):
+            raise ValueError("a model choice constrains properties, not a CLI provider")
+        return self
+
+    @property
+    def criteria(self) -> str:
+        """The constraints as an agent would store them."""
+        return format_criteria(self.constraints)
+
+    @property
+    def weights(self) -> str:
+        return format_criteria_weights(self.rank_by)
+
+
 class ModelImplementation(_Implementation):
-    """Any model typed by its task (`ModelTask`, Hugging Face pipeline tags)."""
+    """Any model typed by its task (`ModelTask`, Hugging Face pipeline tags). With an unpinned
+    `choice`, `provider`/`model` are the model that choice resolved to when last edited (what the
+    editor shows and prices); every run re-resolves the choice and records its answer in the run."""
 
     kind: Literal["model"]
     provider: str = Field(min_length=1, max_length=40, pattern=r"^[a-z][a-z0-9_]*$")
     model: str = Field(min_length=1, max_length=160)
     task: ModelTask
+    choice: ModelChoice | None = None
     effects: ClassVar[frozenset[str]] = frozenset({"model"})
     placements: ClassVar[frozenset[str]] = frozenset({"server", "machine"})
+
+    @model_validator(mode="after")
+    def choice_matches_task(self) -> Self:
+        if self.choice is not None and self.choice.task != self.task:
+            raise ValueError("a model choice is for the node's own task")
+        return self
 
     def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...]:
         return model_task_ports(self.task, placement)
@@ -1503,6 +1704,11 @@ class ConnectorImplementation(_Implementation):
     kind: Literal["connector"]
     tool: DirectTool
     effects: ClassVar[frozenset[str]] = frozenset({"connector"})
+
+    def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...] | None:
+        """A send-message node fixes its ports (the envelope); any other tool's come from its
+        declared input schema, chosen where the block is built."""
+        return self.tool.signature() if isinstance(self.tool, SendMessageTool) else None
 
     def check(self, config: dict[str, WorkflowValue]) -> None:
         if any(not isinstance(value, (str, int, float, bool)) for value in config.values()):
@@ -1812,17 +2018,23 @@ class WorkflowBlockAvailability(WireModel):
         return self
 
 
-ModelComparator = Literal[">", ">=", "<", "<=", "=", "=="]
-
-
 class ModelProperty(WireModel):
+    """One fact a model can be constrained or ranked by. `choice` properties take a word from
+    `values` (a sovereignty tier, where it runs) through a membership clause."""
+
     name: str = Field(min_length=1, max_length=160)
     description: str = Field(min_length=1, max_length=400)
     source: str = Field(max_length=160)
-    kind: Literal["flag", "number"]
+    kind: Literal["flag", "number", "choice"]
     weightable: bool
     rankable: bool = False
     percentile: bool
+    values: tuple[str, ...] = Field(default=(), max_length=32)
+    unit: str | None = Field(default=None, max_length=40)
+    higher_is_better: bool | None = None
+    url: HttpUrl | None = None
+    #: A short human name ("top3d.ai geometry"), when the source publishes one.
+    label: str | None = Field(default=None, max_length=120)
 
 
 class ModelCriteriaCatalog(WireModel):
@@ -1898,6 +2110,16 @@ class WorkflowRevision(WireModel):
         return self
 
 
+#: Model providers reached over the OpenAI HTTP API at the connection's own base URL (`endpoint`,
+#: e.g. `https://host/v1`): their model list is `GET {endpoint}/models`, their text is
+#: `POST {endpoint}/chat/completions`. Hosted OpenAI itself is one; the other two are any server
+#: speaking that API — the owner's own (`self_hosted`, sovereign) or anyone's (`openai_compatible`,
+#: sovereignty unknown until graded).
+OPENAI_WIRE_PROVIDERS: frozenset[str] = frozenset({"openai", "self_hosted", "openai_compatible"})
+#: Of those, the ones whose server may need no key at all.
+OPENAI_WIRE_KEYLESS: frozenset[str] = frozenset({"self_hosted", "openai_compatible"})
+
+
 class ConnectionResource(WireModel):
     id: UUID
     revision: UUID
@@ -1909,7 +2131,7 @@ class ConnectionResource(WireModel):
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted", "openai_compatible", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
     capabilities: tuple[Literal["read", "write", "list", "http", "command"], ...]
     credential_expires_at: datetime | None = None
@@ -1938,12 +2160,13 @@ class ConnectionResource(WireModel):
             raise ValueError("service connector requires a credential, provider, and at least one of list/write")
         # A self-hosted endpoint is the owner's own machine, typically on a trusted/private
         # network with no vendor credential to hold — unlike openai/anthropic/gemini, which
-        # always require one.
-        if self.kind == "provider_api" and self.provider != "self_hosted" and self.credential is None:
+        # always require one. Any other OpenAI-compatible server (`openai_compatible`: a vLLM or
+        # Ollama box, OpenRouter, Groq, Together...) may or may not want a key.
+        if self.kind == "provider_api" and self.provider not in OPENAI_WIRE_KEYLESS and self.credential is None:
             raise ValueError("provider connection requires a credential reference")
         if self.kind not in {"provider_api", "service_connector", "object_storage", "webhook"} and self.provider is not None:
             raise ValueError("provider kind is required only for provider, service, object-storage and webhook connections")
-        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted"}:
+        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted", "openai_compatible"}:
             raise ValueError("provider API kind requires a model provider")
         if self.kind not in {"service_connector", "ssh_server", "object_storage"} and self.credential_expires_at is not None:
             raise ValueError("credential expiry belongs only to connections with vendor-issued expiry")
@@ -2067,6 +2290,43 @@ class ProviderUsage(WireModel):
     cache_creation_input_tokens: int | None = Field(default=None, ge=0)
     cache_read_input_tokens: int | None = Field(default=None, ge=0)
 
+    @property
+    def prompt_tokens(self) -> int:
+        """The whole prompt the model saw: uncached + cache reads + cache writes."""
+        return self.input_tokens + (self.cache_read_input_tokens or 0) + (self.cache_creation_input_tokens or 0)
+
+    @property
+    def counted_tokens(self) -> int:
+        """Prompt + output from the normalized fields — what every total sums. The vendor's own
+        `total_tokens` is kept verbatim but never summed: OpenAI's includes cached tokens, Gemini's
+        includes thinking, Anthropic sends none."""
+        return self.prompt_tokens + self.output_tokens
+
+    def metered(self) -> NodeUsage:
+        """The billable units, each cache kind at its own rate."""
+        return NodeUsage(token_in=self.input_tokens, token_cache_read=self.cache_read_input_tokens, token_cache_write=self.cache_creation_input_tokens, token_out=self.output_tokens)
+
+    @classmethod
+    def from_metered(cls, usage: NodeUsage) -> Self | None:
+        """The token half of a node's metered usage; None for a node not priced per token."""
+        if usage.token_in is None and usage.token_out is None:
+            return None
+        return cls(input_tokens=usage.token_in or 0, output_tokens=usage.token_out or 0, cache_read_input_tokens=usage.token_cache_read, cache_creation_input_tokens=usage.token_cache_write)
+
+    @classmethod
+    def combined(cls, usages: Iterable[Self]) -> Self:
+        """Several responses (an agent's turns) as one; a cache field stays None when no response
+        reported it, never a synthetic zero."""
+        usages = tuple(usages)
+
+        def total(field: str) -> int | None:
+            reported = [value for usage in usages if (value := getattr(usage, field)) is not None]
+            return sum(reported) if reported else None
+
+        return cls(input_tokens=sum(usage.input_tokens for usage in usages), output_tokens=sum(usage.output_tokens for usage in usages),
+                   total_tokens=sum(usage.counted_tokens for usage in usages),
+                   cache_creation_input_tokens=total("cache_creation_input_tokens"), cache_read_input_tokens=total("cache_read_input_tokens"))
+
 
 class WorkflowAgentActivity(WireModel):
     id: UUID
@@ -2110,43 +2370,6 @@ class WorkflowCapabilityActivity(WireModel):
         if self.type == "delegation" and self.child_run_id is None:
             raise ValueError("delegation activity requires a child run")
         return self
-
-    @property
-    def prompt_tokens(self) -> int:
-        """The whole prompt the model saw: uncached + cache reads + cache writes."""
-        return self.input_tokens + (self.cache_read_input_tokens or 0) + (self.cache_creation_input_tokens or 0)
-
-    @property
-    def counted_tokens(self) -> int:
-        """Prompt + output from the normalized fields — what every total sums. The vendor's own
-        `total_tokens` is kept verbatim but never summed: OpenAI's includes cached tokens, Gemini's
-        includes thinking, Anthropic sends none."""
-        return self.prompt_tokens + self.output_tokens
-
-    def metered(self) -> NodeUsage:
-        """The billable units, each cache kind at its own rate."""
-        return NodeUsage(token_in=self.input_tokens, token_cache_read=self.cache_read_input_tokens, token_cache_write=self.cache_creation_input_tokens, token_out=self.output_tokens)
-
-    @classmethod
-    def from_metered(cls, usage: NodeUsage) -> Self | None:
-        """The token half of a node's metered usage; None for a node not priced per token."""
-        if usage.token_in is None and usage.token_out is None:
-            return None
-        return cls(input_tokens=usage.token_in or 0, output_tokens=usage.token_out or 0, cache_read_input_tokens=usage.token_cache_read, cache_creation_input_tokens=usage.token_cache_write)
-
-    @classmethod
-    def combined(cls, usages: Iterable[Self]) -> Self:
-        """Several responses (an agent's turns) as one; a cache field stays None when no response
-        reported it, never a synthetic zero."""
-        usages = tuple(usages)
-
-        def total(field: str) -> int | None:
-            reported = [value for usage in usages if (value := getattr(usage, field)) is not None]
-            return sum(reported) if reported else None
-
-        return cls(input_tokens=sum(usage.input_tokens for usage in usages), output_tokens=sum(usage.output_tokens for usage in usages),
-                   total_tokens=sum(usage.counted_tokens for usage in usages),
-                   cache_creation_input_tokens=total("cache_creation_input_tokens"), cache_read_input_tokens=total("cache_read_input_tokens"))
 
 
 class ConversationMessage(WireModel):

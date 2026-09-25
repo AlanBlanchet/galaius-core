@@ -8,6 +8,9 @@ from typing import get_args
 from uuid import uuid4
 
 import pytest
+from typing import get_args
+
+from interact_core import ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 
 from interact_core import (
@@ -332,3 +335,23 @@ def test_workflow_function_tool_is_a_named_agent_capability() -> None:
         prompt=PromptExecutionRef(key=PromptKey(namespace="test", slug="caller"), channel="stable", digest="1" * 64, revision=uuid4()),
         resources=(), capabilities=(tool,), created_at=datetime.now(UTC),
     ).capabilities == (tool,)
+
+
+@pytest.mark.parametrize("text", ["cost_per_call_usd <= 1", "sovereignty in self_hosted|eu_sovereign", "ready", "top3d.texture >= 90%"])
+def test_criteria_grammar_reads_back_what_it_writes(text: str) -> None:
+    assert format_criteria(parse_criteria(text)) == text
+
+
+def test_model_choice_is_for_its_node_task() -> None:
+    choice = ModelChoice(task="image-to-3d", constraints=parse_criteria("cost_per_call_usd <= 1"))
+    with pytest.raises(ValueError):
+        ModelImplementation(kind="model", provider="fal", model="m", task="text-to-image", choice=choice)
+    with pytest.raises(ValueError):
+        ModelChoice(task="image-to-3d", constraints=parse_criteria("provider = fal"))
+
+
+@pytest.mark.parametrize("placement", ["server", "machine"])
+def test_every_model_task_names_each_port_once(placement: str) -> None:
+    for task in get_args(ModelTask):
+        names = [port.name for port in model_task_ports(task, placement)]
+        assert len(names) == len(set(names)), task

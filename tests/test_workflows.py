@@ -20,7 +20,11 @@ from interact_core import (
     CredentialRef,
     GitAgentTool,
     MailAgentTool,
-    MessagingAgentTool,
+    MailTrigger,
+    SendMessageTool,
+    TriggerBinding,
+    WorkflowRevisionRef,
+    WorkflowKey,
     PromptExecutionRef,
     PromptKey,
     ToolInputSchema,
@@ -76,9 +80,10 @@ def test_webhook_connection_requires_https_endpoint_and_write_only() -> None:
 
 
 @pytest.mark.parametrize("tool", [
-    MessagingAgentTool(kind="messaging", name="send_discord", description="Send a Discord message.", connector="discord", operation="send_message", connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="write"), input_schema=ToolInputSchema(properties={"channel_id": {"type": "string"}, "content": {"type": "string"}}, required=("channel_id", "content"))),
+    SendMessageTool(kind="send_message", name="send_discord", description="Send a Discord message.", provider="discord", connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="write")),
+    SendMessageTool(kind="send_message", name="send_gmail", description="Send from Gmail.", provider="gmail", account="alan"),
     GitAgentTool(kind="git", name="commit_readme", description="Commit a file on GitHub.", connector="github", operation="commit_file", connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="write"), input_schema=ToolInputSchema(properties={"repository": {"type": "string"}, "branch": {"type": "string"}, "path": {"type": "string"}, "content": {"type": "string"}, "message": {"type": "string"}}, required=("repository", "branch", "path", "content", "message"))),
-    MailAgentTool(kind="mail_server", name="send_mail", description="Send an email.", operation="send_email", connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="write"), input_schema=ToolInputSchema(properties={"to": {"type": "string"}, "subject": {"type": "string"}, "text": {"type": "string"}}, required=("to", "subject", "text"))),
+    MailAgentTool(kind="mail_server", name="read_mail", description="Read the inbox.", operation="read_inbox", connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="read"), input_schema=ToolInputSchema(properties={"limit": {"type": "integer"}}, required=())),
     WebhookAgentTool(kind="webhook", name="post_hook", description="Post to a webhook.", connection=ConnectionResourceRef(id=uuid4(), revision=uuid4(), capability="write"), input_schema=ToolInputSchema(properties={"text": {"type": "string"}}, required=())),
 ])
 def test_new_tool_kinds_are_valid_agent_capabilities_and_direct_tools(tool) -> None:
@@ -88,6 +93,38 @@ def test_new_tool_kinds_are_valid_agent_capabilities_and_direct_tools(tool) -> N
     bug `ConnectorImplementation`'s narrower `DirectTool` union would otherwise hide)."""
     assert _agent((tool,)).capabilities == (tool,)
     assert ConnectorImplementation(kind="connector", tool=tool).tool == tool
+
+
+@pytest.mark.parametrize(("fields", "error"), [
+    ({"provider": "mail_server", "account": "alan"}, "saved connection, not an account"),
+    ({"provider": "gmail", "connection": {"id": str(uuid4()), "revision": str(uuid4()), "capability": "write"}}, "connected account, not a saved connection"),
+    ({"provider": "slack", "connection": {"id": str(uuid4()), "revision": str(uuid4()), "capability": "list"}}, "write grant"),
+    ({"provider": "slack", "input_schema": {"properties": {"to": {"type": "string"}}, "required": ["to"]}}, "provider's envelope"),
+])
+def test_send_message_tool_refuses_a_credential_or_input_its_provider_does_not_take(fields, error) -> None:
+    with pytest.raises(ValidationError, match=error):
+        SendMessageTool(kind="send_message", name="send", description="Send.", **fields)
+
+
+def test_send_message_node_ports_are_the_envelope_whatever_the_provider() -> None:
+    """Switching the provider on a placed node must never re-wire it: every provider exposes the
+    same ports, and a chat provider's input schema is the envelope subset it carries."""
+    email = SendMessageTool(kind="send_message", name="send", description="Send.", provider="microsoft", account="me")
+    chat = SendMessageTool(kind="send_message", name="send", description="Send.", provider="telegram")
+    assert email.signature() == chat.signature()
+    assert [port.name for port in email.signature() if port.required and port.direction == "input"] == ["to", "body"]
+    assert set(chat.input_schema.properties) == {"to", "subject", "body"}
+    assert set(email.input_schema.properties) == {"to", "subject", "body", "cc", "in_reply_to"}
+
+
+def test_mail_trigger_maps_only_message_fields() -> None:
+    workflow = WorkflowRevisionRef(key=WorkflowKey(id=uuid4()), revision=uuid4())
+    mail = MailTrigger(kind="mail", provider="gmail", account="alan")
+    assert TriggerBinding(workflow=workflow, configuration=mail, input_mapping=({"source": "body", "target_kind": "input", "target": "mail"},)).configuration == mail
+    with pytest.raises(ValidationError, match="maps only"):
+        TriggerBinding(workflow=workflow, configuration=mail, input_mapping=({"source": "headers", "target_kind": "input", "target": "mail"},))
+    with pytest.raises(ValidationError, match="read grant"):
+        MailTrigger(kind="mail", provider="mail_server", connection={"id": str(uuid4()), "revision": str(uuid4()), "capability": "write"})
 
 
 def test_value_preview_image_accepts_a_larger_pre_existing_thumbnail() -> None:

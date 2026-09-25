@@ -617,6 +617,7 @@
             "link_expired",
             "not_found",
             "not_linked",
+            "permission_denied",
             "rate_limited",
             "verification_failed",
             "recovery_failed",
