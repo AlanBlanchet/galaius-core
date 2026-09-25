@@ -1572,16 +1572,24 @@ class _Implementation(WireModel):
     control_ports: ClassVar[tuple[PortSpec, ...]] = ()
 
 
-BuiltinOp = Literal["input", "output", "write_artifact", "uppercase", "lowercase", "identity", "http_get"]
+BuiltinOp = Literal["input", "output", "write_artifact", "read_file", "uppercase", "lowercase", "identity", "http_get"]
 
 
 class BuiltinImplementation(_Implementation):
     """Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through
-    a configured connection, or an artifact write to workspace storage."""
+    a configured connection — or a FILE op (`FILE_OPS`), which runs where the file is: on the
+    server against workspace storage (`config.connection`), or on an enrolled machine against its
+    working directory (`artifact_path` relative to it, within the machine's permission ceiling)."""
 
     kind: Literal["builtin"]
     op: BuiltinOp
-    _REQUIRED: ClassVar[dict[str, tuple[str, ...]]] = {"input": ("value",), "http_get": ("connection",), "write_artifact": ("connection", "artifact_path")}
+    _REQUIRED: ClassVar[dict[str, tuple[str, ...]]] = {"input": ("value",), "http_get": ("connection",), "write_artifact": ("artifact_path",), "read_file": ("artifact_path",)}
+    #: Ops that read or write one file, wherever the node is placed.
+    FILE_OPS: ClassVar[frozenset[str]] = frozenset({"write_artifact", "read_file"})
+
+    @property
+    def placements(self) -> frozenset[str]:
+        return frozenset({"server", "machine"}) if self.op in self.FILE_OPS else frozenset({"server"})
 
     def required_config(self) -> tuple[str, ...]:
         return self._REQUIRED.get(self.op, ())
@@ -1726,7 +1734,7 @@ class SubgraphImplementation(_Implementation):
 
 Implementation = Annotated[BuiltinImplementation | AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation | ConnectorImplementation | SubgraphImplementation, Field(discriminator="kind")]
 #: What an enrolled machine runs itself (`MachineCommand.impl`).
-MachineImplementation = Annotated[AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation, Field(discriminator="kind")]
+MachineImplementation = Annotated[AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation | BuiltinImplementation, Field(discriminator="kind")]
 
 
 #: Ports every node has without declaring them (never stored in `WorkflowNode.ports`; their names
@@ -1913,7 +1921,21 @@ class MachineCommand(WireModel):
             raise ValueError("agent commands carry their task")
         if self.tenancy == "pooled" and self.impl.kind == "agent":
             raise ValueError("a pooled (cross-workspace) command cannot run an agent step — script, function and model only, for now")
+        if self.impl.kind == "builtin" and (self.impl.op not in BuiltinImplementation.FILE_OPS or self.tenancy == "pooled"):
+            raise ValueError("a machine runs a builtin only to read or write one of its own files")
         return self
+
+    # A file crosses machines through the server, over HTTP authenticated by the machine's own
+    # token and scoped to THIS command while it is in flight: an input file (an `ArtifactRef`
+    # value) is downloaded by the machine that runs the command, a file the command produces is
+    # uploaded and comes back as an `ArtifactRef`. Both sides check its sha256 and size limit.
+
+    def input_file_path(self, port: str, index: int = 0) -> str:
+        return f"/v1/machine-channel/commands/{self.id}/inputs/{port}?index={index}"
+
+    @property
+    def upload_path(self) -> str:
+        return f"/v1/machine-channel/commands/{self.id}/files"
 
 
 def _port_slug(label: str) -> str:
