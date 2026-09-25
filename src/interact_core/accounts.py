@@ -144,7 +144,7 @@ class WorkspaceMemberRoleUpdate(WireModel):
 
 PlatformErrorCode = Literal[
     "authentication_failed", "csrf_failed", "invalid_origin", "invalid_request",
-    "last_sign_in_method", "link_expired", "not_found", "not_linked", "rate_limited",
+    "last_sign_in_method", "link_expired", "not_found", "not_linked", "permission_denied", "rate_limited",
     "verification_failed", "recovery_failed", "unavailable",
 ]
 """The wire's complete failure vocabulary, and the single source the server's own raisable set
@@ -155,7 +155,10 @@ same link can fix — distinct from `authentication_failed`, where the CREDENTIA
 retrying is exactly the right move. `last_sign_in_method`: disconnecting a linked Google
 identity was refused because the account has no password and this is its last one — the only
 door out, so it is never removed silently. `not_linked`: the email named in a disconnect
-request is not one of the caller's own linked Google identities."""
+request is not one of the caller's own linked Google identities. `permission_denied`: the caller
+is authenticated and (where applicable) a workspace member, but lacks the specific permission the
+route requires — distinct from `not_found`, which this codebase uses to obscure a resource's
+existence from a caller with no relationship to it at all."""
 
 
 class PlatformError(WireModel):

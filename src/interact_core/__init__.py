@@ -56,6 +56,19 @@ from .admin import (
     WorkspaceSubscription,
     WorkspaceSubscriptionUpdate,
 )
+from .permissions import (
+    EffectivePermissions,
+    GroupCreate,
+    GroupMembership,
+    GroupMemberView,
+    GroupUpdate,
+    MemberKind,
+    MembershipSource,
+    Permission,
+    PERMISSION_CATALOG,
+    PermissionGroup,
+    PermissionInfo,
+)
 
 from .prompts import (
     PromptCatalogPage,
@@ -104,12 +117,13 @@ from .cloud import (
     node_sovereignty_record,
     resources_fit,
 )
+from .criteria import CriteriaClause, CriteriaWeight, CriteriaError, parse_criteria, parse_criteria_weights, format_criteria, format_criteria_weights
 from .workflows import (
     ValueType,
     DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, provider_sovereignty, workflow_sovereignty, workflow_data_tier, WorkflowFunctionTool,
     NodeSovereigntyRecord, actual_workflow_sovereignty, SovereigntyRequired, meets_requirement, NodeSovereigntyEntry, WorkflowSovereigntySummary,
     NodeLibraryRef, NodeLibraryDefinition, NodeLibraryEntry, NodeLibraryUse,
-    Effect, Implementation, BuiltinImplementation, AgentImplementation, ModelImplementation, FunctionImplementation, ScriptImplementation, ConnectorImplementation, SubgraphImplementation, MachineImplementation, BuiltinOp, WorkflowNode, 
+    Effect, Implementation, BuiltinImplementation, AgentImplementation, ModelChoice, ModelImplementation, FunctionImplementation, ScriptImplementation, ConnectorImplementation, SubgraphImplementation, MachineImplementation, BuiltinOp, WorkflowNode, 
     ValueTypeSpec, VALUE_TYPES, FILE_VALUE_TYPES, value_type_accepts, value_type_widening, MachineModelSpec, MACHINE_MODELS,
     SshAgentTool, SshOperationName, ObjectStorageAgentTool, ObjectStorageOperationName,
     MessagingAgentTool, MessagingConnector, MessagingOperationName, GitAgentTool, GitConnector, GitOperationName, MailAgentTool, MailOperationName, WebhookAgentTool,
@@ -185,13 +199,14 @@ __all__ = [
     "ToolTokenUsage", "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
     "ValueType",
-    "DirectTool", "ModelTask", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
+    "DirectTool", "ModelTask", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "CriteriaClause", "CriteriaWeight", "CriteriaError", "parse_criteria", "parse_criteria_weights", "format_criteria", "format_criteria_weights", "ModelChoice", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
     "MessagingAgentTool", "MessagingConnector", "MessagingOperationName", "GitAgentTool", "GitConnector", "GitOperationName", "MailAgentTool", "MailOperationName", "WebhookAgentTool",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",
     "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
     "BudgetDecision", "OperatorAuditEvent", "OperatorAuthority", "OperatorRunFailure", "OperatorServiceSummary", "OperatorWorkspaceSummary",
     "SubscriptionLimit", "SubscriptionPlanDefinition", "SubscriptionPlanRef", "UsageProvenanceSummary", "UsageRecord", "UsageSourceRef", "UsageTotals", "WorkspaceSubscription", "WorkspaceSubscriptionUpdate",
+    "EffectivePermissions", "GroupCreate", "GroupMembership", "GroupMemberView", "GroupUpdate", "MemberKind", "MembershipSource", "Permission", "PERMISSION_CATALOG", "PermissionGroup", "PermissionInfo",
     "Account", "AccountUpdate", "Bootstrap", "LoginRequest", "PasswordResetRequest", "RecoveryRequest",
     "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceDeleteRequest", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceMemberRoleUpdate", "WorkspaceRole", "WorkspaceUpdate",
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",

@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .wire import WireModel
+from .permissions import Permission
 
 
 class SubscriptionLimit(WireModel):
@@ -26,6 +27,11 @@ class SubscriptionPlanDefinition(WireModel):
     name: str = Field(min_length=1, max_length=120)
     entitlements: tuple[str, ...] = Field(default=(), max_length=64)
     limits: tuple[SubscriptionLimit, ...] = Field(default=(), max_length=64)
+    granted_group_id: UUID | None = None
+    """The permission group an ACTIVE assignment of this plan grants (source="subscription") to
+    the assigned workspace, and removes when the assignment leaves `active` — `None` means this
+    plan carries no permission grant (only its token/output limits apply)."""
+    price_usd_monthly: float | None = Field(default=None, ge=0)
     created_at: datetime
 
     @model_validator(mode="after")
@@ -120,6 +126,10 @@ class OperatorAuthority(WireModel):
     account_id: UUID
     authorized: Literal[True]
     provisioned_at: datetime
+    permissions: tuple[Permission, ...] = Field(default=())
+    """This account's effective admin permissions (union of every group it belongs to) — the
+    admin UI gates each tab (Groups/Users/Plans/Audit) on its own entry here, never on a blanket
+    `authorized` flag."""
 
 
 class OperatorWorkspaceSummary(WireModel):
@@ -153,7 +163,10 @@ class OperatorAuditEvent(WireModel):
         "operator.provisioned", "account.listed", "workspace.listed", "service.inspected",
         "run_failures.listed", "usage.inspected", "plan.saved", "subscription.assigned",
         "usage.recorded", "budget.evaluated",
+        "group.created", "group.renamed", "group.permissions_updated", "group.deleted",
+        "group_member.added", "group_member.removed",
+        "migration.operator_accounts_migrated", "subscription.group_granted", "subscription.group_revoked",
     ]
-    target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage"]
+    target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration"]
     target_id: UUID | None = None
     created_at: datetime
