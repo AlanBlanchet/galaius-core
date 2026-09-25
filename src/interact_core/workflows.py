@@ -10,7 +10,7 @@ from typing import Annotated, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, field_validator, model_validator
+from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, SerializerFunctionWrapHandler, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -1678,6 +1678,15 @@ class ModelImplementation(_Implementation):
         if self.choice is not None and self.choice.task != self.task:
             raise ValueError("a model choice is for the node's own task")
         return self
+
+    @model_serializer(mode="wrap")
+    def _no_empty_choice(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        """No choice, no key: a resolved node sent to a machine serializes exactly as a runner built
+        before `choice` existed reads and signs it (its model forbids unknown keys)."""
+        data = handler(self)
+        if self.choice is None:
+            data.pop("choice", None)
+        return data
 
     def signature(self, placement: Literal["server", "machine"] = "machine") -> tuple[PortSpec, ...]:
         return model_task_ports(self.task, placement)
