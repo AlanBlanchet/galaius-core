@@ -166,6 +166,14 @@ def test_a_machine_command_carries_the_node_impl_config_and_inputs() -> None:
         MachineCommand.model_validate(command(NODES["script"][0], config={"source": "rm -rf ."}))
     with pytest.raises(ValidationError, match="registry"):
         MachineCommand.model_validate(command({"kind": "model", "provider": "huggingface", "model": "someone/else", "task": "object-detection"}, inputs={"images": ["a.png"]}))
+    # A workspace's own registered model (`interact_core.UserModel`) is never a `MACHINE_MODELS`
+    # key — its id is a UUID the SERVER already validated at registration/save time
+    # (`server`'s `OwnModels.validate_node`); the vendor-catalog registry check must
+    # never fire for it, or no `MachineCommand` for a workspace model could ever be constructed.
+    own_model = MachineCommand.model_validate(command({"kind": "model", "provider": "workspace", "model": str(uuid4()), "task": "object-detection"},
+                                                       config={"_user_model": {"origin": {"kind": "huggingface_repo", "repo_id": "org/name", "weight_files": ["model.safetensors"]}, "licence": "Apache-2.0"}},
+                                                       inputs={"images": ["a.png"]}))
+    assert own_model.impl.provider == "workspace"
     with pytest.raises(ValidationError, match="task"):
         MachineCommand.model_validate(command(NODES["agent"][0]))
     with pytest.raises(ValidationError):
