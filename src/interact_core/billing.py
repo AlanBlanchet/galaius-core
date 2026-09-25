@@ -32,16 +32,21 @@ def micros_to_usd(micros: int) -> float:
 
 LedgerEntryKind = Literal[
     # Money in
-    "topup", "auto_topup", "subscription_credit", "reservation_release", "refund",
+    "topup", "auto_topup", "subscription_credit", "reservation_release", "refund", "pooled_payout",
     # Money out
-    "run_debit", "reservation_hold", "reservation_charge", "adjustment",
+    "run_debit", "reservation_hold", "reservation_charge", "adjustment", "pooled_run_debit",
 ]
 
 #: Which kinds ever carry a positive (credit) amount vs a negative (debit) one — the ONE mapping
 #: `WalletStore` and any caller validate an entry against, so a debit kind can never be posted
 #: with a positive amount by a future call site that forgets to negate it.
-CREDIT_KINDS: frozenset[LedgerEntryKind] = frozenset({"topup", "auto_topup", "subscription_credit", "reservation_release", "refund"})
-DEBIT_KINDS: frozenset[LedgerEntryKind] = frozenset({"run_debit", "reservation_hold", "reservation_charge", "adjustment"})
+#: `pooled_run_debit`/`pooled_payout`: a run dispatched onto ANOTHER workspace's shared machine
+#: (`interact_core.pool`) — the tenant is debited cost+fee (the SAME two-line surface every other
+#: metered surface shows, the "vendor" here being the owner workspace's own hardware), the owner
+#: is credited the cost portion only (their price; the platform's fee is its own cut, never paid
+#: out) — Alan, 2026-09-25: "machines reserved/shared cost credits."
+CREDIT_KINDS: frozenset[LedgerEntryKind] = frozenset({"topup", "auto_topup", "subscription_credit", "reservation_release", "refund", "pooled_payout"})
+DEBIT_KINDS: frozenset[LedgerEntryKind] = frozenset({"run_debit", "reservation_hold", "reservation_charge", "adjustment", "pooled_run_debit"})
 
 
 class WalletLedgerEntry(WireModel):
