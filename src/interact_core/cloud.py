@@ -17,7 +17,8 @@ from pydantic import Field
 from .wire import WireModel
 from .workflows import (
     AcceleratorKind, DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources,
-    NodeSovereigntyRecord, Sovereignty, SovereigntyRequired, meets_requirement,
+    NodeSovereigntyRecord, ResourceRequirement, Sovereignty, SovereigntyRequired, meets_requirement,
+    resources_fit,
 )
 
 CloudProviderKind = Literal["scaleway"]
@@ -33,37 +34,6 @@ _TIER_RANK: dict[DataSovereigntyTier, int] = {"eu_sovereign": 0, "eu_hosted_fore
 def meets_tier(observed: DataSovereigntyTier, floor: DataSovereigntyTier | None) -> bool:
     """Whether `observed` is at least as sovereign as `floor` — `True` with no floor declared."""
     return floor is None or _TIER_RANK[observed] <= _TIER_RANK[floor]
-
-
-class ResourceRequirement(WireModel):
-    """What one workflow node needs to run, derived from the model registry / the user's model
-    record. Every field optional: unset means "no constraint from this axis", never zero — a node
-    with no declared requirement places on any connected machine, today's behaviour unchanged."""
-
-    cpu_count: int | None = Field(default=None, ge=1, le=256)
-    ram_mb: int | None = Field(default=None, ge=1, le=1 << 22)
-    gpu_kind: AcceleratorKind | None = None
-    vram_mb: int | None = Field(default=None, ge=1, le=1 << 20)
-    disk_gb: int | None = Field(default=None, ge=1, le=1 << 16)
-
-
-def resources_fit(requirement: ResourceRequirement, resources: MachineResources | None, accelerators: tuple[MachineAccelerator, ...]) -> bool:
-    """Whether a machine reporting `resources`/`accelerators` satisfies `requirement`. A machine
-    that never reported `resources` (older runner) only fits a requirement with no CPU/RAM/disk
-    axis — never silently assumed to fit an unknown size."""
-    if requirement.cpu_count is not None and (resources is None or resources.cpu_count < requirement.cpu_count):
-        return False
-    if requirement.ram_mb is not None and (resources is None or resources.ram_mb < requirement.ram_mb):
-        return False
-    if requirement.disk_gb is not None and (resources is None or resources.disk_free_gb < requirement.disk_gb):
-        return False
-    if requirement.gpu_kind is not None and requirement.gpu_kind != "none":
-        matching = [item for item in accelerators if item.kind == requirement.gpu_kind]
-        if not matching:
-            return False
-        if requirement.vram_mb is not None and max(item.memory_mb for item in matching) < requirement.vram_mb:
-            return False
-    return True
 
 
 class CloudInstanceType(WireModel):

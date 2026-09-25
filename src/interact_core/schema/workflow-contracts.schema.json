@@ -2214,17 +2214,10 @@
           "title": "Cost Usd"
         },
         "fee_usd": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Fee Usd"
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Fee Usd",
+          "type": "number"
         },
         "known": {
           "title": "Known",
@@ -2557,12 +2550,23 @@
     },
     "Placement": {
       "additionalProperties": false,
-      "description": "Where a node runs: on the server (hosted APIs), or on one enrolled machine (local\ncheckpoints, the owner's own GPU \u2014 data stays on it).",
+      "description": "Where a node runs: on the server (hosted APIs), or on one enrolled machine (local\ncheckpoints, the owner's own GPU \u2014 data stays on it). A machine placement is either PINNED\n(`machine` set: the owner or the graph editor named an exact machine) or AUTO (`requirement`\nset, `machine` unset: the run-time placement scheduler \u2014 `MachineChannel.dispatch`, server-\nside \u2014 resolves the cheapest fit at dispatch time instead: the workspace's own online\nhardware first, then a pooled peer machine, then an on-demand cloud launch, or a named refusal\nwhen nothing fits). Never both, never neither, for `target == \"machine\"`.",
       "properties": {
         "machine": {
           "anyOf": [
             {
               "$ref": "#/$defs/MachineRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "requirement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceRequirement"
             },
             {
               "type": "null"
@@ -2895,6 +2899,88 @@
         "output_tokens"
       ],
       "title": "ProviderUsage",
+      "type": "object"
+    },
+    "ResourceRequirement": {
+      "additionalProperties": false,
+      "description": "What one workflow node needs to run, derived from the model registry / the user's model\nrecord. Every field optional: unset means \"no constraint from this axis\", never zero \u2014 a node\nwith no declared requirement places on any connected machine, today's behaviour unchanged.\n\nDefined here (not in `.cloud`, which uses it) because `Placement` (below) carries one for an\nAUTO machine placement, and `Placement` predates `.cloud` in the dependency order \u2014 `.cloud`\nimports this and `resources_fit` from here rather than the reverse, so the placement contract\nnever needs a cross-module forward reference.",
+      "properties": {
+        "cpu_count": {
+          "anyOf": [
+            {
+              "maximum": 256,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu Count"
+        },
+        "disk_gb": {
+          "anyOf": [
+            {
+              "maximum": 65536,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disk Gb"
+        },
+        "gpu_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "cuda",
+                "mps",
+                "rocm",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Kind"
+        },
+        "ram_mb": {
+          "anyOf": [
+            {
+              "maximum": 4194304,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ram Mb"
+        },
+        "vram_mb": {
+          "anyOf": [
+            {
+              "maximum": 1048576,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vram Mb"
+        }
+      },
+      "title": "ResourceRequirement",
       "type": "object"
     },
     "RunCostActual": {

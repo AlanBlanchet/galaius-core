@@ -197,11 +197,47 @@ class MachineAccelerator(WireModel):
 
 class MachineResources(WireModel):
     """CPU/RAM/free-disk a runner reports next to its accelerators at hello/heartbeat — the other
-    half of a placement fit check (`interact_core.cloud.resources_fit`)."""
+    half of a placement fit check (`resources_fit`, below)."""
 
     cpu_count: int = Field(ge=1, le=256)
     ram_mb: int = Field(ge=1, le=1 << 22)
     disk_free_gb: int = Field(ge=0, le=1 << 16)
+
+
+class ResourceRequirement(WireModel):
+    """What one workflow node needs to run, derived from the model registry / the user's model
+    record. Every field optional: unset means "no constraint from this axis", never zero — a node
+    with no declared requirement places on any connected machine, today's behaviour unchanged.
+
+    Defined here (not in `.cloud`, which uses it) because `Placement` (below) carries one for an
+    AUTO machine placement, and `Placement` predates `.cloud` in the dependency order — `.cloud`
+    imports this and `resources_fit` from here rather than the reverse, so the placement contract
+    never needs a cross-module forward reference."""
+
+    cpu_count: int | None = Field(default=None, ge=1, le=256)
+    ram_mb: int | None = Field(default=None, ge=1, le=1 << 22)
+    gpu_kind: AcceleratorKind | None = None
+    vram_mb: int | None = Field(default=None, ge=1, le=1 << 20)
+    disk_gb: int | None = Field(default=None, ge=1, le=1 << 16)
+
+
+def resources_fit(requirement: ResourceRequirement, resources: MachineResources | None, accelerators: tuple[MachineAccelerator, ...]) -> bool:
+    """Whether a machine reporting `resources`/`accelerators` satisfies `requirement`. A machine
+    that never reported `resources` (older runner) only fits a requirement with no CPU/RAM/disk
+    axis — never silently assumed to fit an unknown size."""
+    if requirement.cpu_count is not None and (resources is None or resources.cpu_count < requirement.cpu_count):
+        return False
+    if requirement.ram_mb is not None and (resources is None or resources.ram_mb < requirement.ram_mb):
+        return False
+    if requirement.disk_gb is not None and (resources is None or resources.disk_free_gb < requirement.disk_gb):
+        return False
+    if requirement.gpu_kind is not None and requirement.gpu_kind != "none":
+        matching = [item for item in accelerators if item.kind == requirement.gpu_kind]
+        if not matching:
+            return False
+        if requirement.vram_mb is not None and max(item.memory_mb for item in matching) < requirement.vram_mb:
+            return False
+    return True
 
 
 class MachineFunctionSummary(WireModel):
@@ -1275,15 +1311,25 @@ class ArtifactRef(WireModel):
 
 class Placement(WireModel):
     """Where a node runs: on the server (hosted APIs), or on one enrolled machine (local
-    checkpoints, the owner's own GPU — data stays on it)."""
+    checkpoints, the owner's own GPU — data stays on it). A machine placement is either PINNED
+    (`machine` set: the owner or the graph editor named an exact machine) or AUTO (`requirement`
+    set, `machine` unset: the run-time placement scheduler — `MachineChannel.dispatch`, server-
+    side — resolves the cheapest fit at dispatch time instead: the workspace's own online
+    hardware first, then a pooled peer machine, then an on-demand cloud launch, or a named refusal
+    when nothing fits). Never both, never neither, for `target == "machine"`."""
 
     target: Literal["server", "machine"] = "server"
     machine: MachineRef | None = None
+    requirement: ResourceRequirement | None = None
 
     @model_validator(mode="after")
     def machine_named(self) -> Self:
-        if (self.target == "machine") != (self.machine is not None):
-            raise ValueError("a machine placement names its machine, and only it")
+        if self.target != "machine":
+            if self.machine is not None or self.requirement is not None:
+                raise ValueError("a server placement names no machine and no resource requirement")
+            return self
+        if (self.machine is not None) == (self.requirement is not None):
+            raise ValueError("a machine placement names its machine (pinned) or its resource requirement (auto), and only one")
         return self
 
 
@@ -1498,7 +1544,12 @@ class MachineCommand(WireModel):
     @model_validator(mode="after")
     def runnable(self) -> Self:
         self.impl.check(self.config)
-        if self.impl.kind == "model" and self.impl.model not in MACHINE_MODELS:
+        # The vendor catalog (`MACHINE_MODELS`, `provider == "huggingface"`) is the only model
+        # source this contract can check by a fixed registry — a workspace's OWN registered model
+        # (`provider == "workspace"`) is a `UserModel` UUID the SERVER already validated at
+        # save/registration time (`server`'s `OwnModels.validate_node`); this wire
+        # contract has no workspace database to check it against and must never reject it.
+        if self.impl.kind == "model" and self.impl.provider != "workspace" and self.impl.model not in MACHINE_MODELS:
             raise ValueError("machine model is not in the machine model registry")
         if self.impl.kind == "agent" and not isinstance(self.inputs.get("task"), str):
             raise ValueError("agent commands carry their task")

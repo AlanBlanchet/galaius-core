@@ -72,6 +72,14 @@ class WorkspaceUpdate(WireModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+class WorkspaceDeleteRequest(WireModel):
+    """The confirmation an owner-only, irreversible workspace delete requires: the workspace's
+    OWN current name, typed back — checked server-side against the real row, never trusted from
+    an earlier client read."""
+
+    confirm_name: str = Field(min_length=1, max_length=120)
+
+
 class CompanyDetails(WireModel):
     """Optional legal identity for an existing workspace, never a membership grant."""
 

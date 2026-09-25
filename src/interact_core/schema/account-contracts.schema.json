@@ -613,8 +613,10 @@
             "csrf_failed",
             "invalid_origin",
             "invalid_request",
+            "last_sign_in_method",
             "link_expired",
             "not_found",
+            "not_linked",
             "rate_limited",
             "verification_failed",
             "recovery_failed",
@@ -1133,6 +1135,23 @@
       "title": "WorkspaceCreate",
       "type": "object"
     },
+    "WorkspaceDeleteRequest": {
+      "additionalProperties": false,
+      "description": "The confirmation an owner-only, irreversible workspace delete requires: the workspace's\nOWN current name, typed back \u2014 checked server-side against the real row, never trusted from\nan earlier client read.",
+      "properties": {
+        "confirm_name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Confirm Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "confirm_name"
+      ],
+      "title": "WorkspaceDeleteRequest",
+      "type": "object"
+    },
     "WorkspaceInvitation": {
       "additionalProperties": false,
       "properties": {
@@ -1357,6 +1376,9 @@
     },
     {
       "$ref": "#/$defs/WorkspaceCreate"
+    },
+    {
+      "$ref": "#/$defs/WorkspaceDeleteRequest"
     },
     {
       "$ref": "#/$defs/WorkspaceInvitation"
