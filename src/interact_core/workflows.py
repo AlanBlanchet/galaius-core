@@ -6,18 +6,18 @@ import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
 from collections.abc import Iterable
-from typing import Annotated, ClassVar, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, field_validator, model_validator
 
-from .cost import NodeUsage, RunCostActual
+from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
 
-ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio"]
+ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio", "any"]
 WorkflowValue = str | int | float | bool | dict[str, object] | list[object]
 WorkspaceApiKeyScope = Literal["read", "write", "execute"]
 
@@ -32,21 +32,27 @@ class ValueTypeSpec(WireModel):
     file: bool = False
     widens: tuple[ValueType, ...] = ()
     accepts_from: tuple[ValueType, ...] = ()
+    #: How a tool-calling agent passes a value of this type (`PortSpec.tool_property`): a JSON
+    #: scalar of that type, "json" = JSON text in a string argument, decoded on arrival; None = an
+    #: agent cannot produce one (a stored file it never saw).
+    argument: Literal["string", "number", "boolean", "json"] | None = None
 
 
 VALUE_TYPES: tuple[ValueTypeSpec, ...] = (
-    ValueTypeSpec(name="text"),
-    ValueTypeSpec(name="number"),
-    ValueTypeSpec(name="boolean"),
-    ValueTypeSpec(name="json"),
+    ValueTypeSpec(name="text", argument="string"),
+    ValueTypeSpec(name="number", argument="number"),
+    ValueTypeSpec(name="boolean", argument="boolean"),
+    ValueTypeSpec(name="json", argument="json"),
     ValueTypeSpec(name="artifact", file=True),
-    ValueTypeSpec(name="image", file=True, widens=("artifact",), accepts_from=("text",)),
+    ValueTypeSpec(name="image", file=True, widens=("artifact",), accepts_from=("text",), argument="string"),
     ValueTypeSpec(name="mask", file=True, widens=("image", "json")),
     #: Structured JSON (label, score, box per item), not a file.
-    ValueTypeSpec(name="boxes", widens=("json",)),
+    ValueTypeSpec(name="boxes", widens=("json",), argument="json"),
     ValueTypeSpec(name="mesh", file=True, widens=("artifact",)),
     ValueTypeSpec(name="video", file=True, widens=("artifact",)),
     ValueTypeSpec(name="audio", file=True, widens=("artifact",)),
+    #: Takes a value of every type, never reads it as one: the control inputs (`CONTROL_PORTS`).
+    ValueTypeSpec(name="any", accepts_from=tuple(name for name in get_args(ValueType) if name != "any"), argument="json"),
 )
 _VALUE_TYPE_SPECS = {spec.name: spec for spec in VALUE_TYPES}
 #: Value types carried as a stored file (an `ArtifactRef` at run time).
@@ -80,6 +86,7 @@ class PortSpec(WireModel):
         if self.multiple and not isinstance(value, list):
             return False
         return all(
+            True if self.value_type == "any" else
             isinstance(item, str) if self.value_type == "text" else
             isinstance(item, bool) if self.value_type == "boolean" else
             isinstance(item, (int, float)) and not isinstance(item, bool) if self.value_type == "number" else
@@ -87,6 +94,34 @@ class PortSpec(WireModel):
             isinstance(item, (dict, list))
             for item in values
         )
+
+    @property
+    def argument(self) -> Literal["string", "number", "boolean", "json"] | None:
+        """How an agent passes this port's value when it calls the node as a tool; a list port
+        always travels as JSON text."""
+        kind = _VALUE_TYPE_SPECS[self.value_type].argument
+        return "json" if kind is not None and self.multiple else kind
+
+    def tool_property(self) -> "ToolInputProperty | None":
+        """This input as one tool argument, None when an agent cannot supply it."""
+        kind = self.argument
+        if kind is None:
+            return None
+        shape = f"{self.value_type} list" if self.multiple else self.value_type
+        description = f"{self.name.replace('_', ' ')} ({shape}{', as JSON text' if kind == 'json' else ', a file path' if _VALUE_TYPE_SPECS[self.value_type].file else ''})"
+        return ToolInputProperty(type="string" if kind == "json" else kind, description=description[:240])
+
+    def from_argument(self, value: object) -> "WorkflowValue":
+        """A tool argument as this port's value: JSON text decoded, then checked against the port
+        (a file-typed port takes its path as text, `ValueTypeSpec.accepts_from`)."""
+        if self.argument == "json":
+            try:
+                value = json.loads(value) if isinstance(value, str) else value
+            except json.JSONDecodeError:
+                raise ValueError(f"{self.name} must be JSON text") from None
+        if not (self.accepts(value) or isinstance(value, str) and value_type_accepts("text", self.value_type)):
+            raise ValueError(f"{self.name} does not take that value")
+        return value
 
 
 class PortAddress(WireModel):
@@ -1374,6 +1409,9 @@ class _Implementation(WireModel):
     def check(self, config: dict[str, WorkflowValue]) -> None:
         """Rules binding this implementation to its config; raises ValueError."""
 
+    #: Control ports this kind adds to `CONTROL_PORTS` (an agent's `tools`).
+    control_ports: ClassVar[tuple[PortSpec, ...]] = ()
+
 
 BuiltinOp = Literal["input", "output", "write_artifact", "uppercase", "lowercase", "identity", "http_get"]
 
@@ -1400,10 +1438,14 @@ class BuiltinImplementation(_Implementation):
 
 
 class AgentImplementation(_Implementation):
+    """An agent revision. Every node wired into its `tools` port is a tool it may call
+    (`WorkflowNode.tool_schema`); the call runs that node like any other step."""
+
     kind: Literal["agent"]
     agent: AgentRevisionRef
     effects: ClassVar[frozenset[str]] = frozenset({"model"})
     placements: ClassVar[frozenset[str]] = frozenset({"server", "machine"})
+    control_ports: ClassVar[tuple[PortSpec, ...]] = (PortSpec(name="tools", direction="input", value_type="any", required=False, multiple=True),)
 
 
 class ModelImplementation(_Implementation):
@@ -1481,9 +1523,60 @@ Implementation = Annotated[BuiltinImplementation | AgentImplementation | ModelIm
 MachineImplementation = Annotated[AgentImplementation | ModelImplementation | FunctionImplementation | ScriptImplementation, Field(discriminator="kind")]
 
 
+#: Ports every node has without declaring them (never stored in `WorkflowNode.ports`; their names
+#: are reserved). `when`: wires into it gate the node — it runs once they deliver, their values are
+#: never read — so a fallback node waits on a failure. `error`: the node's failure as a
+#: `NodeError`, carried only under `NodePolicy.on_error == "route"`. An agent adds `tools`.
+CONTROL_PORTS: tuple[PortSpec, ...] = (
+    PortSpec(name="when", direction="input", value_type="any", required=False, multiple=True),
+    PortSpec(name="error", direction="output", value_type="json", required=False),
+)
+#: A wire into one of these delivers no value to the runner.
+CONTROL_INPUTS = frozenset({"when", "tools"})
+
+JoinRule = Literal["all", "any"]
+OnError = Literal["fail_run", "route", "continue_with_default"]
+
+
+class NodePolicy(WireModel):
+    """How any node runs and fails, whatever it runs. A failed attempt is retried `retries` times,
+    the n-th retry after `backoff_seconds * 2**(n-1)`; `timeout_seconds` bounds each attempt. Once
+    every attempt failed, `on_error` decides: `fail_run` stops the run (the default); `route` sends
+    a `NodeError` out of the `error` port and skips everything the node's other outputs feed;
+    `continue_with_default` emits `defaults` (one per output port) as if the node had succeeded.
+    `join` is the fan-in rule of each input port fed by several wires: `all` (the default) waits
+    for every wire and is skipped when one of them was, `any` takes the first value to arrive (a
+    list port: every value that arrived) and is skipped only when every wire was."""
+
+    retries: int = Field(default=0, ge=0, le=10)
+    backoff_seconds: float = Field(default=1.0, ge=0, le=600)
+    timeout_seconds: float | None = Field(default=None, gt=0, le=86400)
+    on_error: OnError = "fail_run"
+    defaults: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=64)
+    join: dict[str, JoinRule] = Field(default_factory=dict, max_length=64)
+
+    def delay(self, retry: int) -> float:
+        """Seconds before the `retry`-th retry (1-based)."""
+        return self.backoff_seconds * 2 ** (retry - 1)
+
+
+class NodeError(WireModel):
+    """One node's failure once its retries are spent: the `error` port's value, and what a run
+    records about each error it survived (`WorkflowRun.recovered`)."""
+
+    node: UUID
+    label: str = Field(min_length=1, max_length=120)
+    kind: str = Field(min_length=1, max_length=40)
+    code: Literal["failed", "timeout"]
+    message: str = Field(max_length=400)
+    #: The attempt that failed last (1 = no retry happened).
+    attempt: int = Field(ge=1)
+
+
 class WorkflowNode(WireModel):
     """One node, whatever it runs. `config` holds the implementation's settings AND the constant
-    value of any input port left unwired (a wire, when present, wins)."""
+    value of any input port left unwired (a wire, when present, wins). `policy` says how it
+    retries and where its errors go; `description` tells an agent calling it as a tool what it does."""
 
     id: UUID
     label: str = Field(min_length=1, max_length=120)
@@ -1493,6 +1586,8 @@ class WorkflowNode(WireModel):
     ports: tuple[PortSpec, ...] = Field(max_length=64)
     config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
     placement: Placement = Field(default_factory=Placement)
+    policy: NodePolicy = Field(default_factory=NodePolicy)
+    description: str = Field(default="", max_length=1000)
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
@@ -1502,7 +1597,63 @@ class WorkflowNode(WireModel):
         if self.placement.target not in self.impl.placements:
             raise ValueError(f"a {self.impl.kind} node cannot run on the {self.placement.target}")
         self.impl.check(self.config)
+        reserved = {port.name for port in self.control_ports} & {port.name for port in self.ports}
+        if reserved:
+            raise ValueError(f"port name {sorted(reserved)[0]} is reserved for every node")
+        inputs = {port.name for port in self.all_ports if port.direction == "input"}
+        if set(self.policy.join) - inputs:
+            raise ValueError("a join rule names one of the node's input ports")
+        outputs = {port.name: port for port in self.ports if port.direction == "output"}
+        if self.policy.on_error == "continue_with_default":
+            if set(self.policy.defaults) != set(outputs):
+                raise ValueError("continuing with defaults needs one default per output port")
+            if any(not outputs[name].accepts(value) for name, value in self.policy.defaults.items()):
+                raise ValueError("a default must be a value of its output port's type (a file port has none)")
+        elif self.policy.defaults:
+            raise ValueError("defaults are only read when the node continues with defaults")
         return self
+
+    @property
+    def control_ports(self) -> tuple[PortSpec, ...]:
+        return (*CONTROL_PORTS, *self.impl.control_ports)
+
+    @property
+    def all_ports(self) -> tuple[PortSpec, ...]:
+        """Declared ports, then control ports: what a wire may attach to."""
+        return (*self.ports, *self.control_ports)
+
+    def join(self, port: str) -> JoinRule:
+        return self.policy.join.get(port, "all")
+
+    @property
+    def tool_name(self) -> str:
+        """The name an agent calls this node by (its label, slugged; the caller de-duplicates)."""
+        return _port_slug(self.label)[:64]
+
+    def tool_schema(self, bound: Iterable[str] = ()) -> "ToolInputSchema":
+        """This node's inputs as one tool's arguments: every declared input except the `bound`
+        ones (wired in the graph), required unless the port is optional or holds a constant.
+        Raises ValueError naming an input an agent could never supply (a file it never saw)."""
+        bound = set(bound)
+        properties: dict[str, ToolInputProperty] = {}
+        required: list[str] = []
+        for port in self.ports:
+            if port.direction != "input" or port.name in bound:
+                continue
+            argument = port.tool_property()
+            if argument is None:
+                if port.required and self.constant(port.name) is None:
+                    raise ValueError(f"{self.label}: input {port.name} ({port.value_type}) cannot be passed by an agent; wire it")
+                continue
+            properties[port.name] = argument
+            if port.required and self.constant(port.name) is None:
+                required.append(port.name)
+        return ToolInputSchema(properties=properties, required=tuple(required))
+
+    @property
+    def tool_description(self) -> str:
+        outputs = ", ".join(f"{port.name} ({port.value_type})" for port in self.ports if port.direction == "output")
+        return (self.description or f"Runs the {self.impl.kind} node '{self.label}'.") + (f" Returns {outputs}." if outputs else "")
 
     @property
     def effects(self) -> frozenset[str]:
@@ -1835,6 +1986,8 @@ class WorkflowRun(WireModel):
     #: What this run actually cost, per node and in total — set once the run leaves "running";
     #: `None` on a run still queued/running, or one this server version never metered.
     cost: RunCostActual | None = None
+    #: Node failures the run survived (routed to an error path or replaced by defaults), in order.
+    recovered: tuple[NodeError, ...] = Field(default=(), max_length=500)
 
 
 class WorkflowEvent(WireModel):
@@ -1871,6 +2024,34 @@ class ValuePreview(WireModel):
     #: this type never rejects a value its own producer already promised to bound. Set only for
     #: `kind == "image"`.
     image: str | None = None
+
+
+StepStatus = Literal["started", "retrying", "succeeded", "failed", "skipped"]
+
+
+class StepEvent(WireModel):
+    """One node step's progress, the payload of a run's step `WorkflowEvent` (`type == "step"`).
+    `failed` + `handled` = the node failed and its policy kept the run going (`route`: the error
+    path ran, `continue_with_default`: its defaults flowed on); `retrying` = an attempt failed and
+    another starts in `retry_in_seconds`; `skipped` = the node did not run because a path it waits
+    on was not taken (`skipped_because` names it). `called_by` = the agent node that ran this node
+    as a tool."""
+
+    type: Literal["step"] = "step"
+    node_id: UUID
+    status: StepStatus
+    duration_ms: int | None = Field(default=None, ge=0)
+    preview: ValuePreview | None = None
+    error: str | None = Field(default=None, max_length=400)
+    failure: NodeError | None = None
+    handled: Literal["route", "continue_with_default"] | None = None
+    attempt: int | None = Field(default=None, ge=1)
+    retry_in_seconds: float | None = Field(default=None, ge=0)
+    skipped_because: str | None = Field(default=None, max_length=400)
+    called_by: UUID | None = None
+    cost: NodeCostActual | None = None
+    #: The model a model choice resolved to for this step (the server's `ModelPin`).
+    model: dict[str, object] | None = None
 
 
 class ProviderUsage(WireModel):
