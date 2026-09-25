@@ -537,7 +537,7 @@
     },
     "BuiltinImplementation": {
       "additionalProperties": false,
-      "description": "Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through\na configured connection, or an artifact write to workspace storage.",
+      "description": "Runs in the server itself: a workflow input or output, a text transform, an HTTP GET through\na configured connection \u2014 or a FILE op (`FILE_OPS`), which runs where the file is: on the\nserver against workspace storage (`config.connection`), or on an enrolled machine against its\nworking directory (`artifact_path` relative to it, within the machine's permission ceiling).",
       "properties": {
         "kind": {
           "const": "builtin",
@@ -549,6 +549,7 @@
             "input",
             "output",
             "write_artifact",
+            "read_file",
             "uppercase",
             "lowercase",
             "identity",
@@ -5309,6 +5310,14 @@
           ],
           "default": null,
           "title": "Result"
+        },
+        "skipped_outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 64,
+          "title": "Skipped Outputs",
+          "type": "object"
         },
         "status": {
           "enum": [
