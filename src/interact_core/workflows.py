@@ -2211,6 +2211,9 @@ class WorkflowRun(WireModel):
     cost: RunCostActual | None = None
     #: Node failures the run survived (routed to an error path or replaced by defaults), in order.
     recovered: tuple[NodeError, ...] = Field(default=(), max_length=500)
+    #: Each exposed output the run did not produce, with why (the path feeding it was not taken):
+    #: a run that succeeded with an absent output says so, instead of a bare `None` result.
+    skipped_outputs: dict[str, str] = Field(default_factory=dict, max_length=64)
 
 
 class WorkflowEvent(WireModel):
