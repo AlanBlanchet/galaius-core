@@ -2422,6 +2422,36 @@ class RunInitiator(WireModel):
     trigger: UUID | None = None
 
 
+#: What a run is doing when no step result says so. The run's own stage (`WorkflowRun.phase`):
+#: `queued` (its record exists, it waits for a run slot: `ahead` runs of its workspace hold them),
+#: `preparing` (the server resolves its agents, tools and models before the first step),
+#: `running` (steps execute). A step waiting on something outside the server (`WorkflowRun.waits`):
+#: `waiting_for_machine` (sent to a machine that has not started it), `running_on_machine`,
+#: `installing` / `loading_model` / `running_model` (the machine says so), `retrying` (the step
+#: failed and its next attempt starts at `until`), `waiting_for_approval` (the owner decides).
+RunPhaseKind = Literal["queued", "preparing", "running", "waiting_for_machine", "running_on_machine", "installing", "loading_model", "running_model", "retrying", "waiting_for_approval"]
+#: The kinds a machine runner may report for the step it runs (`MachineEvent` progress payload
+#: `{"kind": "phase", "phase": <kind>, "detail": <text>}`).
+MACHINE_PHASES: tuple[RunPhaseKind, ...] = ("installing", "loading_model", "running_model")
+
+
+class RunPhase(WireModel):
+    """Why a run (or one of its steps) is where it is, since when. `reason` is the sentence a
+    reader is shown ("Queued behind 3 runs of this workspace (8 run at once)"); the other fields
+    are the same facts, typed, for a client that words or links them itself."""
+
+    kind: RunPhaseKind
+    since: datetime
+    reason: str = Field(max_length=300)
+    node_id: UUID | None = None
+    machine_id: UUID | None = None
+    machine_name: str | None = Field(default=None, max_length=200)
+    #: `queued`: runs of this workspace holding or waiting for a slot before this one.
+    ahead: int | None = Field(default=None, ge=0)
+    #: `retrying`: when the next attempt starts.
+    until: datetime | None = None
+
+
 class WorkflowRun(WireModel):
     id: UUID
     workflow: WorkflowRevisionRef
@@ -2442,6 +2472,22 @@ class WorkflowRun(WireModel):
     #: Each exposed output the run did not produce, with why (the path feeding it was not taken):
     #: a run that succeeded with an absent output says so, instead of a bare `None` result.
     skipped_outputs: dict[str, str] = Field(default_factory=dict, max_length=64)
+    #: The run's stage now; None once it ended (or recorded before phases were).
+    phase: RunPhase | None = None
+    #: Each step waiting now on something outside the server, oldest first. The timeline: the
+    #: run's `queued` / `started` events begin those phases; every other change to `phase` or
+    #: `waits` is a `progress` event whose payload is a `PhaseEvent`.
+    waits: tuple[RunPhase, ...] = Field(default=(), max_length=64)
+
+
+class PhaseEvent(WireModel):
+    """A run `progress` event's payload when `phase` or `waits` changed: the phase that began, or
+    (`ended`) the step wait that ended, at the event's timestamp. A step's new wait supersedes its
+    previous one (no `ended` for that one): a wait lasts until its node's next phase event."""
+
+    type: Literal["phase"] = "phase"
+    phase: RunPhase
+    ended: bool = False
 
 
 class WorkflowEvent(WireModel):
