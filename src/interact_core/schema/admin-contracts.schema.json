@@ -174,7 +174,19 @@
               "machines.pool.use",
               "machines.cloud.launch",
               "machines.reserve",
-              "credits.auto_topup"
+              "credits.auto_topup",
+              "company.members.manage",
+              "company.groups.manage",
+              "company.settings.manage",
+              "company.delete",
+              "api_keys.manage",
+              "approvals.manage",
+              "billing.view",
+              "billing.manage",
+              "workflows.edit",
+              "connections.manage",
+              "agents.edit",
+              "machines.manage"
             ],
             "type": "string"
           },

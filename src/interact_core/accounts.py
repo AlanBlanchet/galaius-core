@@ -180,6 +180,6 @@ existence from a caller with no relationship to it at all."""
 
 class PlatformError(WireModel):
     code: PlatformErrorCode
-    detail: str | None = Field(default=None, max_length=500)
+    detail: str | MISSING = MISSING
     """Why, in words a person can act on, when the code alone cannot say it (e.g. which
     permission a refused group change would have needed)."""

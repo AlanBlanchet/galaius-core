@@ -150,6 +150,63 @@
       "title": "ChangelogEntry",
       "type": "object"
     },
+    "CompanyAccess": {
+      "additionalProperties": false,
+      "description": "What the signed-in account may do in one company: the union of its company groups \u2014 the\nSAME set the server enforces, so a client shows only controls that will be accepted.",
+      "properties": {
+        "groups": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
+        "permissions": {
+          "items": {
+            "enum": [
+              "admin.access",
+              "admin.groups.manage",
+              "admin.users.view",
+              "admin.plans.manage",
+              "admin.audit.view",
+              "workflows.run",
+              "models.platform_paid",
+              "machines.pool.use",
+              "machines.cloud.launch",
+              "machines.reserve",
+              "credits.auto_topup",
+              "company.members.manage",
+              "company.groups.manage",
+              "company.settings.manage",
+              "company.delete",
+              "api_keys.manage",
+              "approvals.manage",
+              "billing.view",
+              "billing.manage",
+              "workflows.edit",
+              "connections.manage",
+              "agents.edit",
+              "machines.manage"
+            ],
+            "type": "string"
+          },
+          "title": "Permissions",
+          "type": "array"
+        },
+        "workspace_id": {
+          "format": "uuid",
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "permissions",
+        "groups"
+      ],
+      "title": "CompanyAccess",
+      "type": "object"
+    },
     "CompanyDetails": {
       "additionalProperties": false,
       "description": "Optional legal identity for an existing workspace, never a membership grant.",
@@ -624,6 +681,10 @@
             "unavailable"
           ],
           "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "title": "Detail",
           "type": "string"
         }
       },
@@ -1172,18 +1233,17 @@
           "title": "Expires At",
           "type": "string"
         },
+        "group_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Group Ids",
+          "type": "array"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
-          "type": "string"
-        },
-        "role": {
-          "enum": [
-            "admin",
-            "member",
-            "viewer"
-          ],
-          "title": "Role",
           "type": "string"
         },
         "status": {
@@ -1200,7 +1260,7 @@
       "required": [
         "id",
         "email",
-        "role",
+        "group_ids",
         "status",
         "created_at",
         "expires_at"
@@ -1217,19 +1277,18 @@
           "title": "Email",
           "type": "string"
         },
-        "role": {
-          "enum": [
-            "admin",
-            "member",
-            "viewer"
-          ],
-          "title": "Role",
-          "type": "string"
+        "group_ids": {
+          "default": [],
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Group Ids",
+          "type": "array"
         }
       },
       "required": [
-        "email",
-        "role"
+        "email"
       ],
       "title": "WorkspaceInvite",
       "type": "object"
@@ -1240,42 +1299,20 @@
         "account": {
           "$ref": "#/$defs/Account"
         },
-        "role": {
-          "enum": [
-            "owner",
-            "admin",
-            "member",
-            "viewer"
-          ],
-          "title": "Role",
-          "type": "string"
+        "group_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Group Ids",
+          "type": "array"
         }
       },
       "required": [
         "account",
-        "role"
+        "group_ids"
       ],
       "title": "WorkspaceMember",
-      "type": "object"
-    },
-    "WorkspaceMemberRoleUpdate": {
-      "additionalProperties": false,
-      "properties": {
-        "role": {
-          "enum": [
-            "owner",
-            "admin",
-            "member",
-            "viewer"
-          ],
-          "title": "Role",
-          "type": "string"
-        }
-      },
-      "required": [
-        "role"
-      ],
-      "title": "WorkspaceMemberRoleUpdate",
       "type": "object"
     },
     "WorkspaceMembership": {
@@ -1394,7 +1431,7 @@
       "$ref": "#/$defs/WorkspaceMembership"
     },
     {
-      "$ref": "#/$defs/WorkspaceMemberRoleUpdate"
+      "$ref": "#/$defs/CompanyAccess"
     },
     {
       "$ref": "#/$defs/WorkspaceUpdate"
