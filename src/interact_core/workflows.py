@@ -5,13 +5,14 @@ import json
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
+from collections.abc import Iterable
 from typing import Annotated, ClassVar, Literal, Self
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, FiniteFloat, HttpUrl, SecretStr, field_validator, model_validator
 
-from .cost import RunCostActual
+from .cost import NodeUsage, RunCostActual
 from .prompts import PromptExecutionRef, PromptRevision
 
 from .wire import WireModel
@@ -1873,6 +1874,12 @@ class ValuePreview(WireModel):
 
 
 class ProviderUsage(WireModel):
+    """One provider response's tokens in ONE additive shape, whatever the vendor — normalized at
+    the edge that parses the response: `input_tokens` = prompt tokens neither read from nor
+    written to a cache, the two cache fields = the cached rest of the prompt, `output_tokens`
+    includes reasoning. Anthropic reports this shape natively; OpenAI and Gemini count cached
+    tokens INSIDE their prompt figure, so they are carved out on the way in, never counted twice."""
+
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
@@ -1922,6 +1929,43 @@ class WorkflowCapabilityActivity(WireModel):
         if self.type == "delegation" and self.child_run_id is None:
             raise ValueError("delegation activity requires a child run")
         return self
+
+    @property
+    def prompt_tokens(self) -> int:
+        """The whole prompt the model saw: uncached + cache reads + cache writes."""
+        return self.input_tokens + (self.cache_read_input_tokens or 0) + (self.cache_creation_input_tokens or 0)
+
+    @property
+    def counted_tokens(self) -> int:
+        """Prompt + output from the normalized fields — what every total sums. The vendor's own
+        `total_tokens` is kept verbatim but never summed: OpenAI's includes cached tokens, Gemini's
+        includes thinking, Anthropic sends none."""
+        return self.prompt_tokens + self.output_tokens
+
+    def metered(self) -> NodeUsage:
+        """The billable units, each cache kind at its own rate."""
+        return NodeUsage(token_in=self.input_tokens, token_cache_read=self.cache_read_input_tokens, token_cache_write=self.cache_creation_input_tokens, token_out=self.output_tokens)
+
+    @classmethod
+    def from_metered(cls, usage: NodeUsage) -> Self | None:
+        """The token half of a node's metered usage; None for a node not priced per token."""
+        if usage.token_in is None and usage.token_out is None:
+            return None
+        return cls(input_tokens=usage.token_in or 0, output_tokens=usage.token_out or 0, cache_read_input_tokens=usage.token_cache_read, cache_creation_input_tokens=usage.token_cache_write)
+
+    @classmethod
+    def combined(cls, usages: Iterable[Self]) -> Self:
+        """Several responses (an agent's turns) as one; a cache field stays None when no response
+        reported it, never a synthetic zero."""
+        usages = tuple(usages)
+
+        def total(field: str) -> int | None:
+            reported = [value for usage in usages if (value := getattr(usage, field)) is not None]
+            return sum(reported) if reported else None
+
+        return cls(input_tokens=sum(usage.input_tokens for usage in usages), output_tokens=sum(usage.output_tokens for usage in usages),
+                   total_tokens=sum(usage.counted_tokens for usage in usages),
+                   cache_creation_input_tokens=total("cache_creation_input_tokens"), cache_read_input_tokens=total("cache_read_input_tokens"))
 
 
 class ConversationMessage(WireModel):

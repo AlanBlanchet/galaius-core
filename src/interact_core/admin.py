@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .wire import WireModel
+from .workflows import ProviderUsage
 from .permissions import Permission
 
 
@@ -80,10 +81,21 @@ class UsageRecord(WireModel):
     workspace_id: UUID
     source: UsageSourceRef
     provenance: Literal["measured", "estimated", "unknown"]
+    #: The whole prompt, cache reads and writes included; the two cache fields are the parts of it
+    #: read from / written to the provider's cache (None when the provider reported no cache).
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
+    cache_read_input_tokens: int | None = Field(default=None, ge=0)
+    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
     recorded_at: datetime
+
+    @classmethod
+    def measured(cls, usage: ProviderUsage, **identity) -> Self:
+        """A provider-reported usage as a measured record: the whole prompt as input (cache reads
+        and writes included, and named apart), so `total = input + output` holds for every vendor."""
+        return cls(provenance="measured", input_tokens=usage.prompt_tokens, output_tokens=usage.output_tokens, total_tokens=usage.counted_tokens,
+                   cache_read_input_tokens=usage.cache_read_input_tokens, cache_creation_input_tokens=usage.cache_creation_input_tokens, **identity)
 
     @model_validator(mode="after")
     def coherent_usage(self) -> Self:
@@ -105,6 +117,9 @@ class UsageTotals(WireModel):
     output_tokens: int = Field(ge=0)
     total_tokens: int = Field(ge=0)
     calls: int = Field(ge=0)
+    #: Parts of `input_tokens` read from / written to the provider's cache.
+    cache_read_input_tokens: int = Field(default=0, ge=0)
+    cache_creation_input_tokens: int = Field(default=0, ge=0)
 
 
 class UsageProvenanceSummary(WireModel):

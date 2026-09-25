@@ -2449,6 +2449,32 @@
           "default": null,
           "title": "Images"
         },
+        "token_cache_read": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Cache Read"
+        },
+        "token_cache_write": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token Cache Write"
+        },
         "token_in": {
           "anyOf": [
             {
@@ -2843,6 +2869,7 @@
     },
     "ProviderUsage": {
       "additionalProperties": false,
+      "description": "One provider response's tokens in ONE additive shape, whatever the vendor \u2014 normalized at\nthe edge that parses the response: `input_tokens` = prompt tokens neither read from nor\nwritten to a cache, the two cache fields = the cached rest of the prompt, `output_tokens`\nincludes reasoning. Anthropic reports this shape natively; OpenAI and Gemini count cached\ntokens INSIDE their prompt figure, so they are carved out on the way in, never counted twice.",
       "properties": {
         "cache_creation_input_tokens": {
           "anyOf": [

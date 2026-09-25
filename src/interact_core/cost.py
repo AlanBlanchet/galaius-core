@@ -19,7 +19,7 @@ from .wire import WireModel
 #: The billable dimensions this registry knows how to price and meter. One workflow node's usage
 #: is expressed in these units; a price is quoted per unit, in USD.
 CostUnit = Literal[
-    "token_in", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte",
+    "token_in", "token_cache_read", "token_cache_write", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte",
 ]
 
 PriceSourceKind = Literal["model_registry", "research_table", "machine_rate", "builtin_free"]
@@ -67,11 +67,25 @@ class NodeCostModel(WireModel):
         return self
 
 
+#: One usage field per billable unit — the ONE mapping every cost computation reads, so a new
+#: unit is wired in exactly once. Built from two parallel tuples (never a `{"x": "x"}` dict
+#: literal): the unit and field names coincide for the token units, which otherwise reads as a
+#: secret-like `"token_in": "..."` assignment to anyone (or anything) scanning this file.
+_UNITS: tuple[CostUnit, ...] = ("token_in", "token_cache_read", "token_cache_write", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte")
+_FIELDS: tuple[str, ...] = ("token_in", "token_cache_read", "token_cache_write", "token_out", "images", "video_seconds", "audio_seconds", "calls", "gpu_seconds", "cpu_seconds", "bytes")
+USAGE_FIELD: dict[CostUnit, str] = dict(zip(_UNITS, _FIELDS, strict=True))
+
+
 class NodeUsage(WireModel):
     """Metered units for one node's run. Every field independently optional: a unit no meter
     reported for this node stays unset, never a synthetic zero standing in for "not measured"."""
 
+    #: Prompt tokens neither read from nor written to a provider cache — the full input rate.
     token_in: int | None = Field(default=None, ge=0)
+    #: Prompt tokens served from the provider's cache, and written to it: each has its own rate,
+    #: so neither is folded into `token_in` (billed as full input) nor dropped (billed as free).
+    token_cache_read: int | None = Field(default=None, ge=0)
+    token_cache_write: int | None = Field(default=None, ge=0)
     token_out: int | None = Field(default=None, ge=0)
     images: int | None = Field(default=None, ge=0)
     video_seconds: float | None = Field(default=None, ge=0)
@@ -83,19 +97,17 @@ class NodeUsage(WireModel):
 
     @model_validator(mode="after")
     def at_least_one_figure(self) -> Self:
-        fields = ("token_in", "token_out", "images", "video_seconds", "audio_seconds", "calls", "gpu_seconds", "cpu_seconds", "bytes")
-        if all(getattr(self, field) is None for field in fields):
+        if all(getattr(self, field) is None for field in _FIELDS):
             raise ValueError("node usage requires at least one metered unit")
         return self
 
+    def unpriced(self, prices: tuple[UnitPrice, ...]) -> tuple[CostUnit, ...]:
+        """Units this usage reports a non-zero quantity of that `prices` has no rate for — a
+        cost computed anyway would silently bill them at $0."""
+        priced = {price.unit for price in prices}
+        return tuple(unit for unit, field in USAGE_FIELD.items() if unit not in priced and getattr(self, field))
 
-#: One usage field per billable unit — the ONE mapping every cost computation reads, so a new
-#: unit is wired in exactly once. Built from two parallel tuples (never a `{"x": "x"}` dict
-#: literal): the unit and field names coincide for the token units, which otherwise reads as a
-#: secret-like `"token_in": "..."` assignment to anyone (or anything) scanning this file.
-_UNITS: tuple[CostUnit, ...] = ("token_in", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte")
-_FIELDS: tuple[str, ...] = ("token_in", "token_out", "images", "video_seconds", "audio_seconds", "calls", "gpu_seconds", "cpu_seconds", "bytes")
-USAGE_FIELD: dict[CostUnit, str] = dict(zip(_UNITS, _FIELDS, strict=True))
+
 
 
 def priced_cost(prices: tuple[UnitPrice, ...], usage: NodeUsage) -> float:
