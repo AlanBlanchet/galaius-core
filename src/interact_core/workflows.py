@@ -2427,9 +2427,10 @@ class RunInitiator(WireModel):
 #: `preparing` (the server resolves its agents, tools and models before the first step),
 #: `running` (steps execute). A step waiting on something outside the server (`WorkflowRun.waits`):
 #: `waiting_for_machine` (sent to a machine that has not started it), `running_on_machine`,
-#: `installing` / `loading_model` / `running_model` (the machine says so), `retrying` (the step
-#: failed and its next attempt starts at `until`), `waiting_for_approval` (the owner decides).
-RunPhaseKind = Literal["queued", "preparing", "running", "waiting_for_machine", "running_on_machine", "installing", "loading_model", "running_model", "retrying", "waiting_for_approval"]
+#: `installing` / `loading_model` / `running_model` (the machine says so), `waiting_for_model` (a
+#: model or agent step waits on its provider's answer), `pausing` (a Wait node, until `until`),
+#: `retrying` (the step failed and its next attempt starts at `until`), `waiting_for_approval`.
+RunPhaseKind = Literal["queued", "preparing", "running", "waiting_for_machine", "running_on_machine", "installing", "loading_model", "running_model", "waiting_for_model", "pausing", "retrying", "waiting_for_approval"]
 #: The kinds a machine runner may report for the step it runs (`MachineEvent` progress payload
 #: `{"kind": "phase", "phase": <kind>, "detail": <text>}`).
 MACHINE_PHASES: tuple[RunPhaseKind, ...] = ("installing", "loading_model", "running_model")
@@ -2446,9 +2447,10 @@ class RunPhase(WireModel):
     node_id: UUID | None = None
     machine_id: UUID | None = None
     machine_name: str | None = Field(default=None, max_length=200)
-    #: `queued`: runs of this workspace holding or waiting for a slot before this one.
+    #: `queued`: runs of this workspace holding or waiting for a slot when this one began waiting.
     ahead: int | None = Field(default=None, ge=0)
-    #: `retrying`: when the next attempt starts.
+    #: `retrying`: when the next attempt starts; `waiting_for_machine` on a machine not connected:
+    #: when the step stops waiting for it and fails.
     until: datetime | None = None
 
 
