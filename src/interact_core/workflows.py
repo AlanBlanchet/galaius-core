@@ -1268,7 +1268,10 @@ class SendMessageTool(WireModel):
     365) or a chat post (Slack, Discord, Telegram, WhatsApp). A saved connection
     (`connection`) or a connected OAuth account (`account`, its selector) carries the
     credential, per `MessageProviderSpec.auth`. Always an effect on someone else's inbox: the
-    server gates it behind the owner-approval ledger by default."""
+    server gates it behind the owner-approval ledger by default (`send_mode="approval"`); a
+    workflow the owner switched to `"auto"` sends without asking, within `auto_per_hour` sends and
+    to `auto_recipients` only when that list is set — past either, the send waits for approval
+    again. Every automatic send is recorded in the same ledger (the audit trail)."""
 
     kind: Literal["send_message"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
@@ -1276,6 +1279,11 @@ class SendMessageTool(WireModel):
     provider: MessageProvider
     connection: ConnectionResourceRef | None = None
     account: str | None = Field(default=None, min_length=1, max_length=320)
+    send_mode: Literal["approval", "auto"] = "approval"
+    #: Automatic sends allowed per rolling hour from this node's principal; beyond it, approval.
+    auto_per_hour: int = Field(default=10, ge=1, le=1000)
+    #: When set, automatic sends go only to these addresses / chat ids, or `@domain` suffixes.
+    auto_recipients: tuple[str, ...] = Field(default=(), max_length=100)
     #: Derived from the envelope (text fields only; a model passes no stored file); filled in when
     #: absent, refused when it disagrees.
     input_schema: ToolInputSchema

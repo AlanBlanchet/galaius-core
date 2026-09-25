@@ -3502,7 +3502,7 @@
     },
     "SendMessageTool": {
       "additionalProperties": false,
-      "description": "Sends one message through the provider named on it \u2014 an email (SMTP, Gmail, Microsoft\n365) or a chat post (Slack, Discord, Telegram, WhatsApp). A saved connection\n(`connection`) or a connected OAuth account (`account`, its selector) carries the\ncredential, per `MessageProviderSpec.auth`. Always an effect on someone else's inbox: the\nserver gates it behind the owner-approval ledger by default.",
+      "description": "Sends one message through the provider named on it \u2014 an email (SMTP, Gmail, Microsoft\n365) or a chat post (Slack, Discord, Telegram, WhatsApp). A saved connection\n(`connection`) or a connected OAuth account (`account`, its selector) carries the\ncredential, per `MessageProviderSpec.auth`. Always an effect on someone else's inbox: the\nserver gates it behind the owner-approval ledger by default (`send_mode=\"approval\"`); a\nworkflow the owner switched to `\"auto\"` sends without asking, within `auto_per_hour` sends and\nto `auto_recipients` only when that list is set \u2014 past either, the send waits for approval\nagain. Every automatic send is recorded in the same ledger (the audit trail).",
       "properties": {
         "account": {
           "anyOf": [
@@ -3517,6 +3517,22 @@
           ],
           "default": null,
           "title": "Account"
+        },
+        "auto_per_hour": {
+          "default": 10,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Auto Per Hour",
+          "type": "integer"
+        },
+        "auto_recipients": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Auto Recipients",
+          "type": "array"
         },
         "connection": {
           "anyOf": [
@@ -3561,6 +3577,15 @@
             "whatsapp"
           ],
           "title": "Provider",
+          "type": "string"
+        },
+        "send_mode": {
+          "default": "approval",
+          "enum": [
+            "approval",
+            "auto"
+          ],
+          "title": "Send Mode",
           "type": "string"
         }
       },
