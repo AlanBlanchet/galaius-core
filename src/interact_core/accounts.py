@@ -7,11 +7,12 @@ from uuid import UUID
 from pydantic import Field, SecretStr
 from pydantic.experimental.missing_sentinel import MISSING
 
+from .permissions import Permission
 from .wire import WireModel
 
-_EMAIL = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 WorkspaceRole = Literal["owner", "admin", "member", "viewer"]
-InvitableWorkspaceRole = Literal["admin", "member", "viewer"]
+
+_EMAIL = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 
 
 class Account(WireModel):
@@ -62,6 +63,24 @@ class Workspace(WireModel):
     workspace_id: UUID
     name: str = Field(min_length=1, max_length=120)
     role: WorkspaceRole
+    """A coarse label DERIVED from the member's company permissions (`CompanyAccess.role`), kept
+    exactly as released clients parse it (`extra="forbid"`): rights themselves are
+    `CompanyAccess.permissions`, never this label."""
+
+
+class CompanyAccess(WireModel):
+    """What the signed-in account may do in one company: the union of its company groups — the
+    SAME set the server enforces, so a client shows only controls that will be accepted."""
+
+    workspace_id: UUID
+    permissions: tuple[Permission, ...]
+    groups: tuple[str, ...]
+    """Names of the company groups the account is in, for display ("Owners", "Billing")."""
+
+    @property
+    def role(self) -> WorkspaceRole:
+        held = set(self.permissions)
+        return "owner" if "company.delete" in held else "admin" if "company.members.manage" in held else "member" if "workflows.edit" in held else "viewer"
 
 
 class WorkspaceCreate(WireModel):
@@ -116,13 +135,15 @@ class CompanyLookupResult(WireModel):
 
 class WorkspaceMember(WireModel):
     account: Account
-    role: WorkspaceRole
+    group_ids: tuple[UUID, ...]
+    """This company's groups the member is in (ids into the company's own group list)."""
 
 
 class WorkspaceInvitation(WireModel):
     id: UUID
     email: str = Field(pattern=_EMAIL, max_length=320)
-    role: InvitableWorkspaceRole
+    group_ids: tuple[UUID, ...]
+    """Groups the invitee joins on acceptance; empty = a read-only member."""
     status: Literal["pending", "accepted", "cancelled", "expired"]
     created_at: datetime
     expires_at: datetime
@@ -135,11 +156,7 @@ class WorkspaceMembership(WireModel):
 
 class WorkspaceInvite(WireModel):
     email: str = Field(pattern=_EMAIL, max_length=320)
-    role: InvitableWorkspaceRole
-
-
-class WorkspaceMemberRoleUpdate(WireModel):
-    role: WorkspaceRole
+    group_ids: tuple[UUID, ...] = ()
 
 
 PlatformErrorCode = Literal[
@@ -163,3 +180,6 @@ existence from a caller with no relationship to it at all."""
 
 class PlatformError(WireModel):
     code: PlatformErrorCode
+    detail: str | None = Field(default=None, max_length=500)
+    """Why, in words a person can act on, when the code alone cannot say it (e.g. which
+    permission a refused group change would have needed)."""

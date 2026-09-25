@@ -35,8 +35,8 @@ from .accounts import (
     WorkspaceInvite,
     WorkspaceMember,
     WorkspaceMembership,
-    WorkspaceMemberRoleUpdate,
     WorkspaceRole,
+    CompanyAccess,
     WorkspaceUpdate,
 )
 from .admin import (
@@ -57,6 +57,7 @@ from .admin import (
     WorkspaceSubscriptionUpdate,
 )
 from .permissions import (
+    DEFAULT_COMPANY_GROUPS,
     EffectivePermissions,
     GroupCreate,
     GroupMembership,
@@ -68,6 +69,7 @@ from .permissions import (
     PERMISSION_CATALOG,
     PermissionGroup,
     PermissionInfo,
+    PermissionScope,
 )
 
 from .prompts import (
@@ -207,9 +209,9 @@ __all__ = [
     "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
     "BudgetDecision", "OperatorAuditEvent", "OperatorAuthority", "OperatorRunFailure", "OperatorServiceSummary", "OperatorWorkspaceSummary",
     "SubscriptionLimit", "SubscriptionPlanDefinition", "SubscriptionPlanRef", "UsageProvenanceSummary", "UsageRecord", "UsageSourceRef", "UsageTotals", "WorkspaceSubscription", "WorkspaceSubscriptionUpdate",
-    "EffectivePermissions", "GroupCreate", "GroupMembership", "GroupMemberView", "GroupUpdate", "MemberKind", "MembershipSource", "Permission", "PERMISSION_CATALOG", "PermissionGroup", "PermissionInfo",
+    "DEFAULT_COMPANY_GROUPS", "EffectivePermissions", "GroupCreate", "GroupMembership", "GroupMemberView", "GroupUpdate", "MemberKind", "MembershipSource", "Permission", "PERMISSION_CATALOG", "PermissionGroup", "PermissionInfo", "PermissionScope",
     "Account", "AccountUpdate", "Bootstrap", "LoginRequest", "PasswordResetRequest", "RecoveryRequest",
-    "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceDeleteRequest", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceMemberRoleUpdate", "WorkspaceRole", "WorkspaceUpdate",
+    "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceDeleteRequest", "WorkspaceInvitation", "WorkspaceInvite", "WorkspaceMember", "WorkspaceMembership", "WorkspaceRole", "CompanyAccess", "WorkspaceUpdate",
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",
     "PromptPublicationRequest", "PromptSelection", "PromptSyncStatus",
     "GeminiConnectionConfiguration", "GmailAgentTool", "GoogleConnectionStatus", "GoogleOAuthAuthorization", "GoogleOAuthCallback", "GoogleOAuthStart", "MicrosoftOAuthStart", "Sovereignty", "DataSovereigntyTier", "ProviderSovereignty", "provider_sovereignty", "workflow_sovereignty", "workflow_data_tier", "WorkflowFunctionTool",
