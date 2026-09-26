@@ -106,3 +106,11 @@ def test_a_write_from_an_older_release_names_what_it_would_reset() -> None:
     update = AgentGraphUpdate(expected_revision="0" * 64, agents=(lead,))
     assert view.unexpressed(update) == ("AgentRevision.summary", "AgentRevision.summary_fr")
     assert view.unexpressed(AgentGraphUpdate(expected_revision="0" * 64, root_agent=None)) == ()
+
+
+def test_a_catalog_from_a_writer_without_a_defaulted_field_verifies() -> None:
+    lead, prompt = agent(summary="Checks every claim.")
+    snapshot = AgentCatalogSnapshot.create((lead,), (prompt,))
+    older_writer = json.loads(snapshot.model_dump_json(exclude_defaults=True))
+    assert "summary_fr" not in older_writer["agents"][0]
+    assert AgentCatalogSnapshot.model_validate(older_writer) == snapshot

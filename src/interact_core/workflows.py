@@ -10,7 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -1476,19 +1476,17 @@ class AgentCatalogSnapshot(WireModel):
                prompt_heads: tuple[PromptExecutionRef, ...] = ()):
         agents = tuple(sorted(agents, key=lambda item: str(item.id)))
         paradigms = tuple(sorted(paradigms, key=lambda item: (item.key.namespace, item.key.slug, item.digest)))
-        payload = {"agents": [item.model_dump(mode="json") for item in agents], "paradigms": [item.model_dump(mode="json") for item in paradigms]}
-        if root_agent is not None:
-            payload["root_agent"] = root_agent.model_dump(mode="json")
         prompt_heads = tuple(sorted(prompt_heads, key=lambda item: (item.key.namespace, item.key.slug)))
-        if prompt_heads:
-            payload["prompt_heads"] = [item.model_dump(mode="json") for item in prompt_heads]
-        return cls(agents=agents, paradigms=paradigms, root_agent=root_agent,
-                   prompt_heads=prompt_heads, cursor=cls.content_cursor(payload))
+        content = {"agents": agents, "paradigms": paradigms, "root_agent": root_agent, "prompt_heads": prompt_heads}
+        sealed = cls.model_construct(**content, cursor="").model_dump(mode="json", exclude_defaults=True)
+        return cls(**content, cursor=cls.content_cursor(sealed))
 
     @staticmethod
     def content_cursor(content: dict[str, Any]) -> str:
         """The cursor sealing a JSON dump: canonical JSON of everything but the cursor, an absent
-        root and empty prompt heads left out."""
+        root and empty prompt heads left out. The catalog is sealed over its dump WITHOUT default
+        values, so a reader whose release added a defaulted field hashes what the writer hashed;
+        `projected` reseals a full dump, the rule releases before that one check."""
         payload = {key: value for key, value in content.items() if key != "cursor"
                    and not (key == "root_agent" and value is None) and not (key == "prompt_heads" and not value)}
         return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
@@ -1499,7 +1497,7 @@ class AgentCatalogSnapshot(WireModel):
 
     @model_validator(mode="after")
     def coherent_snapshot(self) -> Self:
-        if self.content_cursor(self.model_dump(mode="json")) != self.cursor:
+        if self.content_cursor(self.model_dump(mode="json", exclude_defaults=True)) != self.cursor:
             raise ValueError("agent catalog cursor does not match its content")
         agents = {agent.id: agent for agent in self.agents}
         if self.root_agent is not None:
@@ -1841,15 +1839,12 @@ class FunctionImplementation(_Implementation):
     placements: ClassVar[frozenset[str]] = frozenset({"machine"})
 
 
-class ScriptFile(WireModel):
+class ScriptFile(WireRequest):
     """A script that already lives on its machine (`ScriptImplementation.origin == "machine_file"`):
     its path inside the machine owner's script folders (`interact machine script-roots`, never
     where workflow file steps write), the sha256 of the file's bytes when it was picked, and how it
     is started. Paths are relative to the machine's working directory; the machine re-checks the
     folders and the file's digest before every run."""
-
-    #: Settings a client authors: an unknown key is refused, never carried into the approved digest.
-    model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: str = Field(min_length=1, max_length=1024)
     file_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
