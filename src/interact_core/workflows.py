@@ -2470,6 +2470,58 @@ class ModelEligibility(WireModel):
         return self
 
 
+class CanvasPoint(WireModel):
+    x: float = Field(ge=-1e7, le=1e7)
+    y: float = Field(ge=-1e7, le=1e7)
+
+
+class CanvasGroupPort(WireModel):
+    """A port a collapsed group shows on its edge, standing for a member's port."""
+
+    name: str = Field(min_length=1, max_length=80)
+    direction: Literal["input", "output"]
+    target: PortAddress | None = None
+
+
+class CanvasGroup(CanvasPoint):
+    """A frame drawn around steps on the board: its members move and fold with it."""
+
+    id: str = Field(min_length=1, max_length=120)
+    label: str = Field(default="", max_length=120)
+    width: float = Field(gt=0, le=1e6)
+    height: float = Field(gt=0, le=1e6)
+    collapsed: bool = False
+    ports: tuple[CanvasGroupPort, ...] = Field(default=(), max_length=128)
+
+
+class CanvasNote(CanvasPoint):
+    """A note written on the board; it never runs."""
+
+    id: str = Field(min_length=1, max_length=120)
+    text: str = Field(default="", max_length=10_000)
+
+
+class WorkflowCanvas(WireModel):
+    """How the editor draws the board beside the graph it runs — frames around steps (`groups`,
+    with `members`: node id -> group id), where the run block and each trigger sit (`placements`,
+    keyed by the editor's own ids), and notes. Saved with the revision so every browser and device
+    shows the same board; the engine never reads it."""
+
+    groups: tuple[CanvasGroup, ...] = Field(default=(), max_length=500)
+    members: dict[str, str] = Field(default_factory=dict, max_length=5000)
+    placements: dict[str, CanvasPoint] = Field(default_factory=dict, max_length=1000)
+    notes: tuple[CanvasNote, ...] = Field(default=(), max_length=500)
+
+    @model_validator(mode="after")
+    def known_groups(self) -> Self:
+        ids = [group.id for group in self.groups]
+        if len(set(ids)) != len(ids):
+            raise ValueError("canvas group identifiers must be unique")
+        if not set(self.members.values()) <= set(ids):
+            raise ValueError("a canvas member names a group the canvas does not have")
+        return self
+
+
 class WorkflowRevision(WireModel):
     key: WorkflowKey
     revision: UUID
@@ -2479,6 +2531,9 @@ class WorkflowRevision(WireModel):
     edges: tuple[WorkflowEdge, ...] = Field(max_length=1500)
     interface: WorkflowInterface
     created_at: datetime
+    #: The board as drawn (groups, notes, run block / trigger places); absent on revisions saved
+    #: before it existed and on those no editor drew.
+    canvas: WorkflowCanvas | None = None
 
     @model_validator(mode="after")
     def unique_nodes(self) -> Self:
