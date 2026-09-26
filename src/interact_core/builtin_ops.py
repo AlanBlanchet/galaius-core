@@ -49,6 +49,7 @@ class HeldValue(BaseModel):
 class InputOp(_Free):
     op, category, title = "input", "input_output", "Input"
     summary = "A workflow input: a constant, or the value a run is started with."
+    summary_fr = "Une entrée du workflow : une constante, ou la valeur donnée au lancement."
     keywords = ("constant", "parameter", "value", "start")
     required = ("value",)
     Config = HeldValue
@@ -61,6 +62,7 @@ class InputOp(_Free):
 class OutputOp(_Free):
     op, category, title = "output", "input_output", "Result"
     summary = "A workflow result: what the run answers."
+    summary_fr = "Un résultat du workflow : ce que l’exécution renvoie."
     keywords = ("return", "answer", "end")
 
     @classmethod
@@ -77,6 +79,7 @@ class _FileOp(_Free):
 class WriteArtifactOp(_FileOp):
     op, title = "write_artifact", "Write file"
     summary = "Writes a value or a file to workspace storage or a machine's folder."
+    summary_fr = "Écrit une valeur ou un fichier dans le stockage de l’espace ou le dossier d’une machine."
     keywords = ("save", "store", "export", "file", "artifact")
 
     @classmethod
@@ -87,6 +90,7 @@ class WriteArtifactOp(_FileOp):
 class ReadFileOp(_FileOp):
     op, title = "read_file", "Read file"
     summary = "Reads a file from workspace storage or a machine's folder."
+    summary_fr = "Lit un fichier du stockage de l’espace ou du dossier d’une machine."
     keywords = ("load", "open", "import", "file")
 
     @classmethod
@@ -117,6 +121,7 @@ class IdentityOp(_TextMap):
 class HttpGetOp(_TextMap):
     op, category, title = "http_get", "web", "HTTP GET"
     summary = "GETs a path on a configured HTTP connection."
+    summary_fr = "Lit (GET) une adresse sur une connexion HTTP configurée."
     keywords = ("fetch", "api", "url", "download", "request")
     required = ("connection",)
 
@@ -133,6 +138,7 @@ class PredicateSettings(_Settings):
 class ConditionOp(BuiltinOpSpec):
     op, category, title = "condition", "flow", "If"
     summary = "Sends its value down 'true' or 'false' after one test (equals, contains, greater, empty, regex...)."
+    summary_fr = "Envoie sa valeur vers « true » ou « false » après un test (égal, contient, plus grand, vide, regex…)."
     keywords = ("if", "branch", "when", "test", "compare", "check", "else")
     Config = PredicateSettings
 
@@ -167,6 +173,7 @@ def switch_cases(config: dict[str, WorkflowValue]) -> tuple[tuple[str, str], ...
 class SwitchOp(BuiltinOpSpec):
     op, category, title = "switch", "flow", "Switch"
     summary = "Routes its value to the output of the first case it matches, else to 'other'."
+    summary_fr = "Envoie sa valeur vers la sortie du premier cas qui correspond, sinon vers « other »."
     keywords = ("router", "route", "case", "paths", "branch", "classify")
     Config = SwitchSettings
 
@@ -184,6 +191,7 @@ class MergeSettings(_Settings):
 class MergeOp(BuiltinOpSpec):
     op, category, title = "merge", "flow", "Merge"
     summary = "Waits for every wire into 'inputs' and merges them: append lists, combine objects, zip by position, or join on a key."
+    summary_fr = "Attend chaque fil arrivant dans « inputs » et les fusionne : listes ajoutées, objets combinés, appariés par position ou joints par clé."
     keywords = ("join", "combine", "concat", "zip", "wait for all", "gather", "union")
     Config = MergeSettings
 
@@ -199,6 +207,7 @@ class WaitSettings(_Settings):
 class WaitOp(BuiltinOpSpec):
     op, category, title = "wait", "time", "Wait"
     summary = "Waits a number of seconds, then passes its value on. Cancelling the run stops the wait."
+    summary_fr = "Attend quelques secondes, puis transmet sa valeur. Annuler l’exécution arrête l’attente."
     keywords = ("delay", "sleep", "pause", "throttle")
     Config = WaitSettings
 
@@ -215,6 +224,7 @@ class ApprovalSettings(_Settings):
 class ApprovalOp(BuiltinOpSpec):
     op, category, title = "approval", "people", "Ask for approval"
     summary = "Pauses the run until a person approves or rejects it in Approvals; the value goes down 'approved' or 'rejected'."
+    summary_fr = "Met l’exécution en pause jusqu’à ce qu’une personne valide ou refuse dans Validations ; la valeur part vers « approved » ou « rejected »."
     keywords = ("human in the loop", "review", "confirm", "sign off", "validate", "manual")
     Config = ApprovalSettings
 
@@ -230,6 +240,7 @@ class FailSettings(_Settings):
 class FailOp(BuiltinOpSpec):
     op, category, title = "fail", "flow", "Stop with error"
     summary = "Fails on purpose with a message; its error path or the run's failure shows it."
+    summary_fr = "Échoue exprès avec un message ; son chemin d’erreur ou l’échec de l’exécution l’affiche."
     keywords = ("error", "abort", "raise", "throw", "stop")
     Config = FailSettings
 
@@ -258,6 +269,7 @@ class FilterSettings(PredicateSettings):
 class FilterOp(BuiltinOpSpec):
     op, category, title = "filter", "data", "Filter"
     summary = "Keeps the list items that pass one test; the others go to 'dropped'."
+    summary_fr = "Garde les éléments de la liste qui passent un test ; les autres vont vers « dropped »."
     keywords = ("where", "keep", "remove", "select", "exclude")
     Config = FilterSettings
 
@@ -274,6 +286,7 @@ class SortSettings(_Settings):
 class SortOp(_ListOp):
     op, title = "sort", "Sort"
     summary = "Sorts a list by a field (numbers as numbers, text alphabetically, empty last)."
+    summary_fr = "Trie une liste selon un champ (nombres comme nombres, texte par ordre alphabétique, vides à la fin)."
     keywords = ("order", "rank", "arrange")
     Config = SortSettings
 
@@ -286,6 +299,7 @@ class LimitSettings(_Settings):
 class LimitOp(_ListOp):
     op, title = "limit", "Limit"
     summary = "Keeps the first (or last) N items of a list."
+    summary_fr = "Garde les N premiers (ou derniers) éléments d’une liste."
     keywords = ("top", "head", "tail", "first", "take", "max items")
     Config = LimitSettings
 
@@ -297,6 +311,7 @@ class DedupeSettings(_Settings):
 class DedupeOp(_ListOp):
     op, title = "dedupe", "Remove duplicates"
     summary = "Drops list items whose key was already seen (the first one stays)."
+    summary_fr = "Retire les éléments dont la clé a déjà été vue (le premier reste)."
     keywords = ("unique", "distinct", "duplicates", "dedup")
     Config = DedupeSettings
 
@@ -310,6 +325,7 @@ class AggregateSettings(_Settings):
 class AggregateOp(BuiltinOpSpec):
     op, category, title = "aggregate", "data", "Aggregate"
     summary = "Reduces a list to one value: count, sum, average, min, max, joined text, a field's values, or groups by key."
+    summary_fr = "Réduit une liste à une valeur : nombre, somme, moyenne, min, max, texte joint, valeurs d’un champ, ou groupes par clé."
     keywords = ("summarize", "total", "sum", "count", "group by", "reduce", "pluck", "gather")
     Config = AggregateSettings
 
@@ -327,6 +343,7 @@ class SetFieldsSettings(_Settings):
 class SetFieldsOp(BuiltinOpSpec):
     op, category, title = "set_fields", "data", "Set fields"
     summary = "Adds, overwrites or removes fields of an object (each item of a list)."
+    summary_fr = "Ajoute, remplace ou retire des champs d’un objet (de chaque élément d’une liste)."
     keywords = ("edit fields", "assign", "rename", "map", "variable", "set", "object")
     Config = SetFieldsSettings
 
@@ -342,6 +359,7 @@ class TransformSettings(_Settings):
 class TransformOp(BuiltinOpSpec):
     op, category, title = "transform", "data", "Transform JSON"
     summary = "Reshapes JSON with a JMESPath expression: pick, filter, project, flatten."
+    summary_fr = "Remodèle du JSON avec une expression JMESPath : choisir, filtrer, projeter, aplatir."
     keywords = ("jmespath", "jq", "jsonata", "query", "select", "reshape", "extract", "pick field")
     Config = TransformSettings
 
@@ -357,6 +375,7 @@ class SqlSettings(_Settings):
 class SqlOp(BuiltinOpSpec):
     op, category, title = "sql", "data", "SQL query"
     summary = "Runs SQL (SQLite) over JSON tables: a list is table 'input'; an object of lists is one table per key."
+    summary_fr = "Exécute du SQL (SQLite) sur des tables JSON : une liste est la table « input » ; un objet de listes, une table par clé."
     keywords = ("select", "join tables", "group by", "database", "query", "sqlite")
     Config = SqlSettings
 
@@ -374,6 +393,7 @@ class ParseSettings(_Settings):
 class ParseOp(BuiltinOpSpec):
     op, category, title = "parse", "data", "Parse"
     summary = "Turns text or a file into JSON: JSON, CSV, TSV, XML, YAML, lines, or an Excel sheet."
+    summary_fr = "Transforme un texte ou un fichier en JSON : JSON, CSV, TSV, XML, YAML, lignes ou feuille Excel."
     keywords = ("read csv", "read xml", "spreadsheet", "excel", "xlsx", "decode", "extract from file", "yaml")
     Config = ParseSettings
 
@@ -390,6 +410,7 @@ class FormatSettings(_Settings):
 class FormatOp(BuiltinOpSpec):
     op, category, title = "format", "data", "Convert to text"
     summary = "Writes JSON as text: JSON, CSV, TSV, XML, YAML, lines or a Markdown table ('Write file' then saves it)."
+    summary_fr = "Écrit du JSON en texte : JSON, CSV, TSV, XML, YAML, lignes ou tableau Markdown (« Écrire un fichier » l’enregistre ensuite)."
     keywords = ("serialize", "to csv", "to json", "to xml", "export", "stringify", "table")
     Config = FormatSettings
 
@@ -405,6 +426,7 @@ class CalculateSettings(_Settings):
 class CalculateOp(BuiltinOpSpec):
     op, category, title = "calculate", "data", "Calculate"
     summary = "Computes a number from a formula over the value's fields."
+    summary_fr = "Calcule un nombre avec une formule sur les champs de la valeur."
     keywords = ("math", "formula", "arithmetic", "number", "compute", "expression")
     Config = CalculateSettings
 
@@ -420,6 +442,7 @@ class EncodeSettings(_Settings):
 class EncodeOp(BuiltinOpSpec):
     op, category, title = "encode", "data", "Hash or encode"
     summary = "Hashes (SHA-256, SHA-512, SHA-1, MD5) or encodes / decodes (Base64, URL, hex) text."
+    summary_fr = "Calcule une empreinte (SHA-256, SHA-512, SHA-1, MD5) ou encode / décode (Base64, URL, hex) un texte."
     keywords = ("crypto", "hash", "checksum", "base64", "digest", "url encode")
     Config = EncodeSettings
 
@@ -439,6 +462,7 @@ class TemplateSettings(_Settings):
 class TemplateOp(BuiltinOpSpec):
     op, category, title = "template", "text", "Text template"
     summary = "Builds text from a template filled with the fields of its input."
+    summary_fr = "Compose un texte à partir d’un modèle rempli avec les champs de son entrée."
     keywords = ("format", "compose", "prompt", "message", "interpolate", "string")
     Config = TemplateSettings
 
@@ -465,6 +489,7 @@ class ReplaceSettings(_Settings):
 class ReplaceOp(_TextOp):
     op, title = "replace_text", "Replace text"
     summary = "Replaces every occurrence of a text or regular expression."
+    summary_fr = "Remplace chaque occurrence d’un texte ou d’une expression régulière."
     keywords = ("substitute", "regex", "sed", "clean")
     Config = ReplaceSettings
 
@@ -478,6 +503,7 @@ class ExtractSettings(_Settings):
 class ExtractOp(BuiltinOpSpec):
     op, category, title = "extract_text", "text", "Extract with regex"
     summary = "Pulls matches of a regular expression out of text (emails, numbers, ids...)."
+    summary_fr = "Extrait d’un texte ce qui correspond à une expression régulière (e-mails, nombres, identifiants…)."
     keywords = ("regex", "match", "find", "scrape", "pattern")
     Config = ExtractSettings
 
@@ -500,6 +526,7 @@ class SplitSettings(_Settings):
 class SplitOp(BuiltinOpSpec):
     op, category, title = "split_text", "text", "Split text"
     summary = "Splits text into a list (by line, comma or any separator) to loop or filter over."
+    summary_fr = "Découpe un texte en liste (par ligne, virgule ou tout séparateur) pour la parcourir ou la filtrer."
     keywords = ("lines", "tokenize", "explode", "split out", "list")
     Config = SplitSettings
 
@@ -522,6 +549,7 @@ class DateTimeSettings(_Settings):
 class DateTimeOp(BuiltinOpSpec):
     op, category, title = "date_time", "time", "Date & time"
     summary = "Current time, reformat a date, add a duration, the time between two dates, or a date's parts."
+    summary_fr = "Heure actuelle, date reformatée, durée ajoutée, temps entre deux dates, ou parties d’une date."
     keywords = ("date", "time", "timestamp", "now", "format date", "timezone", "duration")
     Config = DateTimeSettings
 

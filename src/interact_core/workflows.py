@@ -1657,6 +1657,8 @@ class BuiltinOpSpec:
     title: ClassVar[str]
     #: What it does, in one sentence a search reads.
     summary: ClassVar[str]
+    #: The same sentence in French (the editor shows the reader's language).
+    summary_fr: ClassVar[str] = ""
     keywords: ClassVar[tuple[str, ...]] = ()
     Config: ClassVar[type[BaseModel]] = NoSettings
     #: Config keys a node needs before it can run.
@@ -1725,7 +1727,7 @@ class BuiltinImplementation(_Implementation):
 
     def described(self) -> dict[str, object]:
         spec = self.spec
-        return {"category": spec.category, "summary": spec.summary, "keywords": spec.keywords, "config_schema": spec.config_schema()}
+        return {"category": spec.category, "summary": spec.summary, "summary_fr": spec.summary_fr, "keywords": spec.keywords, "config_schema": spec.config_schema()}
 
     def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...] | None:
         return self.spec.ports(config or {}) if self.spec.fixed_ports else None
@@ -2342,6 +2344,7 @@ class WorkflowBlockAvailability(WireModel):
     category: BlockCategory | None = None
     #: What it does (a builtin's spec summary), and the words a search also matches.
     summary: str = Field(default="", max_length=400)
+    summary_fr: str = Field(default="", max_length=400)
     keywords: tuple[str, ...] = Field(default=(), max_length=32)
     #: JSON Schema of the node's settings (`config`), rendered by the editor's one generic form;
     #: empty when the node has none or its kind edits them elsewhere.
