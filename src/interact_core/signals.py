@@ -27,7 +27,8 @@ SignalScreenshotType = Literal["image/png", "image/jpeg", "image/webp"]
 class SignalRedaction:
     """The one redaction pass every captured string goes through. `secrets` removes credentials
     and URL query values (kept: the parameter NAMES, which say what failed); `anonymous` also
-    removes email addresses. UUIDs and paths survive: they point at the run / workflow at fault."""
+    removes email addresses; `route` keeps an in-app address's view state. UUIDs and paths
+    survive: they point at the run / workflow at fault."""
 
     MARK: ClassVar[str] = "[redacted]"
     _SECRETS: ClassVar[tuple[tuple[re.Pattern[str], str], ...]] = (
@@ -35,21 +36,32 @@ class SignalRedaction:
         (re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"), "[redacted]"),
         (re.compile(r"\b(?:sk|pk|rk|iwk|ghp|gho|ghs|github_pat|xox[abprs]|AIza|ya29|glpat)[-_][A-Za-z0-9._-]{6,}"), "[redacted]"),
         (re.compile(r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|token|secret|password|passwd|authorization|cookie)[\"']?\s*[:=]\s*[\"']?)[^\s\"'&,;}#]+"), r"\1[redacted]"),
-        (re.compile(r"([?&])([^=&#\s?]{1,64})=[^&#\s]*"), r"\1\2=[redacted]"),
     )
+    _QUERY: ClassVar[re.Pattern[str]] = re.compile(r"([?&])([^=&#\s?]{1,64})=[^&#\s]*")
+    _SECRET_QUERY: ClassVar[re.Pattern[str]] = re.compile(r"(?i)([?&])((?:[a-z_]*token|code|state|[a-z_]*key|secret|password|sig|signature|auth[a-z_]*|session)=)[^&#\s]*")
     _EMAIL: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
     _BLOB: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9+/_=-]{32,}")
     _UUID: ClassVar[re.Pattern[str]] = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
     @classmethod
     def secrets(cls, value: str) -> str:
-        for pattern, replacement in cls._SECRETS:
-            value = pattern.sub(replacement, value)
-        return cls._BLOB.sub(cls._blob, value)
+        return cls._QUERY.sub(r"\1\2=[redacted]", cls._credentials(value))
 
     @classmethod
     def anonymous(cls, value: str) -> str:
         return cls._EMAIL.sub("[email]", cls.secrets(value))
+
+    @classmethod
+    def route(cls, value: str) -> str:
+        """An app address keeps its query values (`#runs?project=<name>`: the deep link reopens
+        the same view); only secret-named ones (`token`, `code`, `state`, ...) and emails go."""
+        return cls._EMAIL.sub("[email]", cls._SECRET_QUERY.sub(r"\1\2[redacted]", cls._credentials(value)))
+
+    @classmethod
+    def _credentials(cls, value: str) -> str:
+        for pattern, replacement in cls._SECRETS:
+            value = pattern.sub(replacement, value)
+        return cls._BLOB.sub(cls._blob, value)
 
     @classmethod
     def _blob(cls, match: re.Match[str]) -> str:
@@ -63,6 +75,7 @@ class SignalRedaction:
 _LINE = r"^[^\x00-\x1f\x7f]*$"
 _TEXT = r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*$"
 Captured = Annotated[str, AfterValidator(SignalRedaction.anonymous)]
+Route = Annotated[str, AfterValidator(SignalRedaction.route)]
 """Text the browser captured on its own (labels, console lines, paths): secrets and emails removed."""
 Written = Annotated[str, AfterValidator(SignalRedaction.secrets)]
 """Text the user typed: kept as written, except anything shaped like a credential."""
@@ -119,7 +132,7 @@ class SignalViewport(WireModel):
 class SignalContext(WireModel):
     """What the browser knew when the user signalled: nothing here is typed by the user."""
 
-    route: Captured = Field(min_length=1, max_length=600, pattern=r"^/([^/\\\x00-\x20\x7f][^\\\x00-\x20\x7f]*)?$")
+    route: Route = Field(min_length=1, max_length=600, pattern=r"^/([^/\\\x00-\x20\x7f][^\\\x00-\x20\x7f]*)?$")
     """Path + hash of the screen, same origin only (`/#workflows/<id>`): the admin's deep link."""
     screen: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,79}$")
     """The app's view name (`workflows`, `runs`, `admin`, ...)."""

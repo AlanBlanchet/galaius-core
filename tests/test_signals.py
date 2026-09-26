@@ -41,11 +41,11 @@ def test_typed_description_keeps_emails_but_drops_keys() -> None:
 
 def test_context_strings_are_redacted_on_validation() -> None:
     value = SignalSubmission.model_validate({"id": RUN, "description": "broken", "context": {
-        **CONTEXT, "route": "/?token=s3cr3t#data",
+        **CONTEXT, "route": "/?token=s3cr3t#runs?project=workspace&state=xyz",
         "console": [{"level": "error", "message": "ann@corp.fr: 500", "at": "2026-09-26T10:00:00Z"}],
         "requests": [{"method": "GET", "path": "/v1/x?code=zzz", "status": 500, "at": "2026-09-26T10:00:00Z"}],
     }})
-    assert value.context.route == "/?token=[redacted]#data"
+    assert value.context.route == "/?token=[redacted]#runs?project=workspace&state=[redacted]"
     assert value.context.console[0].message == "[email]: 500"
     assert "zzz" not in value.context.requests[0].path
 
