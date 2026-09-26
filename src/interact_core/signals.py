@@ -71,13 +71,29 @@ class SignalRedaction:
         opaque = any(len(piece) >= 32 and re.search(r"\d", piece) and re.search(r"[A-Za-z]", piece) for piece in pieces)
         return cls.MARK if opaque else match.group(0)
 
+    @classmethod
+    def bounded(cls, clean: str, limit: int, pattern: str) -> object:
+        """A string field bounded on the way in AND after `clean` (`anonymous`, `secrets`, `route`)
+        ran: a replacement can be longer than what it replaced (`a@b.cc` -> `[email]`), so the
+        result is cut back to `limit` and a stored value always validates again on read."""
+        redact = getattr(cls, clean)
+        return Annotated[str, Field(max_length=limit, pattern=pattern), AfterValidator(lambda value: redact(value)[:limit])]
+
 
 _LINE = r"^[^\x00-\x1f\x7f]*$"
 _TEXT = r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*$"
-Captured = Annotated[str, AfterValidator(SignalRedaction.anonymous)]
-Route = Annotated[str, AfterValidator(SignalRedaction.route)]
-"""Text the browser captured on its own (labels, console lines, paths): secrets and emails removed."""
-Written = Annotated[str, AfterValidator(SignalRedaction.secrets)]
+_ROUTE = r"^/([?#][^\\\x00-\x20\x7f]*)?$"
+"""The app's own address only: `/` then its query and hash (`/#runs?project=x`), never another path
+(`/v1/...`, `//host`): it becomes the admin's "Open the screen" link."""
+Captured600 = SignalRedaction.bounded("anonymous", 600, _LINE)
+Captured400 = SignalRedaction.bounded("anonymous", 400, _LINE)
+Captured200 = SignalRedaction.bounded("anonymous", 200, _LINE)
+Captured160 = SignalRedaction.bounded("anonymous", 160, _LINE)
+"""Text the browser captured on its own (labels, paths, ...): secrets and emails removed."""
+CapturedLines = SignalRedaction.bounded("anonymous", 500, _TEXT)
+Route = SignalRedaction.bounded("route", 600, _ROUTE)
+"""An in-app address: kept whole but for secret-named query values and emails."""
+Written = SignalRedaction.bounded("secrets", 4000, _TEXT)
 """Text the user typed: kept as written, except anything shaped like a credential."""
 
 
@@ -94,15 +110,15 @@ class SignalElement(WireModel):
     """The element the user pointed at: a CSS selector that finds it again, the named area it sits
     in, and the words it shows (its label, never a form value)."""
 
-    selector: Captured = Field(min_length=1, max_length=600, pattern=_LINE)
-    area: Captured | None = Field(default=None, max_length=160, pattern=_LINE)
-    label: Captured | None = Field(default=None, max_length=160, pattern=_LINE)
+    selector: Captured600 = Field(min_length=1)
+    area: Captured160 | None = None
+    label: Captured160 | None = None
     box: SignalBox | None = None
 
 
 class SignalConsoleLine(WireModel):
     level: Literal["error", "warning"]
-    message: Captured = Field(max_length=500, pattern=_TEXT)
+    message: CapturedLines
     at: datetime
 
 
@@ -111,7 +127,7 @@ class SignalFailedRequest(WireModel):
     answer at all). Bodies are never captured."""
 
     method: str = Field(pattern=r"^[A-Z]{3,7}$")
-    path: Captured = Field(min_length=1, max_length=400, pattern=_LINE)
+    path: Captured400 = Field(min_length=1)
     status: int = Field(ge=0, le=599)
     at: datetime
 
@@ -132,20 +148,20 @@ class SignalViewport(WireModel):
 class SignalContext(WireModel):
     """What the browser knew when the user signalled: nothing here is typed by the user."""
 
-    route: Route = Field(min_length=1, max_length=600, pattern=r"^/([^/\\\x00-\x20\x7f][^\\\x00-\x20\x7f]*)?$")
+    route: Route = Field(min_length=1)
     """Path + hash of the screen, same origin only (`/#workflows/<id>`): the admin's deep link."""
     screen: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,79}$")
     """The app's view name (`workflows`, `runs`, `admin`, ...)."""
-    area: Captured | None = Field(default=None, max_length=160, pattern=_LINE)
+    area: Captured160 | None = None
     """The named part of the screen: the pointed element's area, else the open panel / dialog."""
-    title: Captured | None = Field(default=None, max_length=200, pattern=_LINE)
+    title: Captured200 | None = None
     """The screen's heading as the user read it."""
     element: SignalElement | None = None
     workspace_id: UUID | None = None
     refs: tuple[SignalRef, ...] = Field(default=(), max_length=40)
     locale: str = Field(pattern=r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
     viewport: SignalViewport
-    user_agent: Captured = Field(max_length=400, pattern=_LINE)
+    user_agent: Captured400
     client_build: str | None = Field(default=None, max_length=80, pattern=r"^[A-Za-z0-9._+:-]+$")
     """The server build this browser tab loaded with; differs from the stored `server_build` when
     the tab is stale."""
@@ -183,7 +199,7 @@ class SignalSubmission(WireModel):
     same submission answers the stored signal, never a second one."""
 
     id: UUID
-    description: Written = Field(min_length=1, max_length=4000, pattern=_TEXT)
+    description: Written = Field(min_length=1)
     context: SignalContext
     screenshot: SignalScreenshot | None = None
 

@@ -50,7 +50,7 @@ def test_context_strings_are_redacted_on_validation() -> None:
     assert "zzz" not in value.context.requests[0].path
 
 
-@pytest.mark.parametrize("route", ["//evil.example/#x", "https://evil.example/", "/\\evil", "workflows"])
+@pytest.mark.parametrize("route", ["//evil.example/#x", "https://evil.example/", "/\\evil", "workflows", "/v1/operator/accounts", "javascript:alert(1)"])
 def test_route_is_same_origin_only(route: str) -> None:
     with pytest.raises(ValidationError):
         SignalSubmission.model_validate({"id": RUN, "description": "x", "context": {**CONTEXT, "route": route}})
@@ -70,3 +70,18 @@ def test_screenshot_bytes_must_be_the_declared_image(media_type: str, data: byte
     else:
         with pytest.raises(ValidationError):
             SignalScreenshot.model_validate(payload)
+
+
+def test_redaction_that_grows_a_value_is_cut_to_its_bound_and_reads_back() -> None:
+    path = "/p?" + "&a=" * 130
+    value = SignalSubmission.model_validate({"id": RUN, "description": "x", "context": {
+        **CONTEXT, "element": {"selector": "a@b.cc " * 85},
+        "requests": [{"method": "GET", "path": path, "status": 500, "at": "2026-09-26T10:00:00Z"}],
+    }})
+    assert len(value.context.requests[0].path) <= 400 and len(value.context.element.selector) <= 600
+    assert SignalSubmission.model_validate_json(value.model_dump_json()) == value
+
+
+@pytest.mark.parametrize("route", ["/", "/?enter#login", "/#runs?project=x"])
+def test_route_accepts_the_app_address(route: str) -> None:
+    assert SignalSubmission.model_validate({"id": RUN, "description": "x", "context": {**CONTEXT, "route": route}}).context.route == route
