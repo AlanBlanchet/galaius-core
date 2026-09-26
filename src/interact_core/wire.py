@@ -8,15 +8,18 @@ A model only a client AUTHORS and sends (`WireRequest`) refuses an unknown field
 typo. A server validates every inbound body with `extra="forbid"`, whatever its model.
 
 A server that still answers clients released before this rule applies the older release's
-`ContractView` around such a request and renders each response through `ContractView.render`.
+`ContractView` around such a request, renders each response through `ContractView.render`, and
+stores such a client's write through `ContractView.carry`.
 """
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar
 
 from pydantic import BaseModel, ConfigDict
+
+M = TypeVar("M")
 
 
 class ContractDump(dict[str, Any]):
@@ -94,25 +97,60 @@ class ContractView(BaseModel):
                 projected[key] = self._project_value(getattr(model, name), value)
         return model.projected(projected) if isinstance(model, WireModel) else projected
 
-    def unexpressed(self, value: object) -> tuple[str, ...]:
-        """`Class.field` for every hidden field reachable in `value`: what a sender on this
-        release could not have set, so writing its body over a stored record would reset them."""
-        found: list[str] = []
-        self._collect(value, found)
-        return tuple(dict.fromkeys(found))
+    def carry(self, value: M, parents: Mapping[type[BaseModel], Callable[[Any], BaseModel | None]]) -> tuple[M, tuple[str, ...]]:
+        """A write from a sender on this release as the server stores it, and `Class.field` for
+        each field that write would still reset.
 
-    def _collect(self, value: object, found: list[str]) -> None:
+        The sender cannot express a hidden field, so one it did not send (absent from
+        `model_fields_set`) is taken from the record the write replaces: for a revision whose type
+        `parents` names, the stored parent revision its resolver returns; below it, at every depth,
+        the same field, the sequence item with the same `id` (lacking one, the item this release
+        sees as equal), the same mapping key. Inside such a revision a field with no stored
+        counterpart keeps its default: a new record or item holds nothing to reset. Outside one
+        the field is named: writing it would reset what the server holds."""
+        missed: list[str] = []
+        return self._carry(value, None, False, parents, missed), tuple(dict.fromkeys(missed))
+
+    def _carry(self, value: Any, stored: Any, covered: bool, parents: Mapping[type[BaseModel], Callable[[Any], BaseModel | None]], missed: list[str]) -> Any:
         if isinstance(value, BaseModel):
-            carried = type(value).carried if isinstance(value, WireModel) else frozenset()
-            found.extend(f"{type(value).__name__}.{name}" for name in sorted(self.hidden(type(value)) - carried))
-            for name in type(value).model_fields:
-                self._collect(getattr(value, name), found)
-        elif isinstance(value, (tuple, list, set, frozenset)):
+            model = type(value)
+            if (resolve := parents.get(model)) is not None:
+                covered, stored = True, None if getattr(value, "parent_revision", None) is None else resolve(value)
+            if type(stored) is not model:
+                stored = None
+            update: dict[str, Any] = {}
+            for name in sorted(self.hidden(model) - value.model_fields_set):
+                if stored is not None:
+                    update[name] = getattr(stored, name)
+                elif not covered:
+                    missed.append(f"{model.__name__}.{name}")
+            for name in model.model_fields:
+                if name not in update and (carried := self._carry(child := getattr(value, name), getattr(stored, name, None), covered, parents, missed)) is not child:
+                    update[name] = carried
+            return value.model_copy(update=update) if update else value
+        if isinstance(value, (tuple, list)):
+            pool = stored if isinstance(stored, (tuple, list)) else ()
+            items = [self._carry(item, self._counterpart(item, pool), covered, parents, missed) for item in value]
+            return value if all(new is old for new, old in zip(items, value)) else type(value)(items)
+        if isinstance(value, dict):
+            pool = stored if isinstance(stored, dict) else {}
+            entries = {key: self._carry(item, pool.get(key), covered, parents, missed) for key, item in value.items()}
+            return value if all(entries[key] is item for key, item in value.items()) else entries
+        if isinstance(value, (set, frozenset)):  # unordered, no identity to match: only named
             for item in value:
-                self._collect(item, found)
-        elif isinstance(value, dict):
-            for item in value.values():
-                self._collect(item, found)
+                self._carry(item, None, covered, parents, missed)
+        return value
+
+    def _counterpart(self, item: Any, pool: Sequence[Any]) -> Any:
+        """The stored item `item` replaces: the one with its `id`, else the one this release sees
+        as equal (its hidden fields dropped)."""
+        if not isinstance(item, BaseModel):
+            return None
+        candidates = [stored for stored in pool if type(stored) is type(item)]
+        if "id" in type(item).model_fields:
+            return next((stored for stored in candidates if stored.id == item.id), None)  # type: ignore[attr-defined]
+        seen = self.project(item, item.model_dump(mode="json"))
+        return next((stored for stored in candidates if self.project(stored, stored.model_dump(mode="json")) == seen), None)
 
     def _project_value(self, value: object, data: Any) -> Any:
         if isinstance(value, BaseModel) and isinstance(data, dict):
@@ -128,10 +166,6 @@ class WireModel(BaseModel):
     """A contract read from the other side: unknown fields are kept (see module docstring)."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
-    #: Fields the SERVER carries over from the stored record when a released client's write cannot
-    #: express them (it copies them from what it holds): such a write resets nothing, so it is never
-    #: refused for them (`ContractView.unexpressed`).
-    carried: ClassVar[frozenset[str]] = frozenset()
 
     def model_dump(self, **options: Any) -> dict[str, Any]:
         data = super().model_dump(**options)

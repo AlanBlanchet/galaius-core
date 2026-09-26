@@ -2534,8 +2534,6 @@ class WorkflowRevision(WireModel):
     #: The board as drawn (groups, notes, run block / trigger places); absent on revisions saved
     #: before it existed and on those no editor drew.
     canvas: WorkflowCanvas | None = None
-    #: A write without a board (a released client cannot send one) keeps its parent revision's.
-    carried: ClassVar[frozenset[str]] = frozenset({"canvas"})
 
     @model_validator(mode="after")
     def unique_nodes(self) -> Self:

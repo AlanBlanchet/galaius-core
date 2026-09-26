@@ -100,12 +100,24 @@ def test_a_projected_catalog_is_resealed_for_the_older_reader() -> None:
     assert body["cursor"] == AgentCatalogSnapshot.content_cursor(body)
 
 
-def test_a_write_from_an_older_release_names_what_it_would_reset() -> None:
-    lead, _ = agent(summary="Checks every claim.")
+def test_a_write_from_an_older_release_keeps_what_it_cannot_express_from_its_parent() -> None:
+    stored, _ = agent(summary="Checks every claim.", summary_fr="Vérifie chaque affirmation.")
     view = older("AgentRevision.summary", "AgentRevision.summary_fr")
-    update = AgentGraphUpdate(expected_revision="0" * 64, agents=(lead,))
-    assert view.unexpressed(update) == ("AgentRevision.summary", "AgentRevision.summary_fr")
-    assert view.unexpressed(AgentGraphUpdate(expected_revision="0" * 64, root_agent=None)) == ()
+    released = view.project(stored, stored.model_dump(mode="json"))
+    edit = AgentRevision.model_validate({**released, "revision": str(uuid4()), "parent_revision": str(stored.revision), "reasoning": "low"})
+    fresh = AgentRevision.model_validate({**released, "id": str(uuid4())})
+    cleared = edit.model_copy(update={"summary": ""})
+    update = AgentGraphUpdate(expected_revision="0" * 64, agents=(edit, fresh))
+    parents = {AgentRevision: lambda value: stored if value.parent_revision == stored.revision else None}
+    # No stored parent to read: the write would reset both fields of the edit, so it is named.
+    assert view.carry(update, {})[1] == ("AgentRevision.summary", "AgentRevision.summary_fr")
+    carried, missed = view.carry(update, parents)
+    assert missed == ()
+    assert (carried.agents[0].summary, carried.agents[0].summary_fr, carried.agents[0].reasoning) == (stored.summary, stored.summary_fr, "low")
+    assert (carried.agents[1].summary, carried.agents[1].summary_fr) == ("", "")  # a new agent holds nothing to reset
+    own = view.carry(cleared, parents)[0]
+    assert (own.summary, own.summary_fr) == ("", stored.summary_fr)  # a field the sender sent is its own
+    assert view.carry(AgentGraphUpdate(expected_revision="0" * 64, root_agent=None), {}) == (AgentGraphUpdate(expected_revision="0" * 64, root_agent=None), ())
 
 
 def test_a_catalog_from_a_writer_without_a_defaulted_field_verifies() -> None:
