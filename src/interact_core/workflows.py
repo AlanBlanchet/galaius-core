@@ -302,6 +302,13 @@ class MachineFunctionSummary(WireModel):
         return self
 
 
+def plain_file_roots(value: object) -> bool:
+    """`value` is a list of machine file roots as a runner reports them: at most 32 relative,
+    '/'-separated folder paths, none empty, absolute or climbing ('..')."""
+    return isinstance(value, (list, tuple)) and len(value) <= 32 and all(
+        isinstance(root, str) and 0 < len(root) <= 240 and not root.startswith("/") and ".." not in root.split("/") for root in value)
+
+
 class MachineSummary(WireModel):
     id: UUID
     name: str = Field(min_length=1, max_length=120)
@@ -312,7 +319,19 @@ class MachineSummary(WireModel):
     #: CPU/RAM/disk the runner reported at hello/heartbeat; `None` for an older runner that has
     #: never reported it — a placement check treats that like "unknown", never "enough".
     resources: MachineResources | None = None
+    #: The folders (relative to the machine's working directory, '/'-separated) its file nodes may
+    #: read and write, as its runner reports them — set by the owner ON the machine (`interact
+    #: machine file-roots`) and only the ones its runner accepts. A workflow path is usable iff it
+    #: equals one or lies below one. `None`: the runner does not report them (older runner).
+    file_roots: tuple[str, ...] | None = Field(default=None, max_length=32)
     last_seen_at: datetime | None = None
+
+    @field_validator("file_roots")
+    @classmethod
+    def plain_roots(cls, value: tuple[str, ...] | None) -> tuple[str, ...] | None:
+        if value is not None and not plain_file_roots(value):
+            raise ValueError("a file root is a relative folder path inside the machine's working directory")
+        return value
 
     @model_validator(mode="after")
     def unique_functions(self) -> Self:
