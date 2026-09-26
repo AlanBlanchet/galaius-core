@@ -103,7 +103,8 @@ class ContractView(BaseModel):
 
     def _collect(self, value: object, found: list[str]) -> None:
         if isinstance(value, BaseModel):
-            found.extend(f"{type(value).__name__}.{name}" for name in sorted(self.hidden(type(value))))
+            carried = type(value).carried if isinstance(value, WireModel) else frozenset()
+            found.extend(f"{type(value).__name__}.{name}" for name in sorted(self.hidden(type(value)) - carried))
             for name in type(value).model_fields:
                 self._collect(getattr(value, name), found)
         elif isinstance(value, (tuple, list, set, frozenset)):
@@ -127,6 +128,10 @@ class WireModel(BaseModel):
     """A contract read from the other side: unknown fields are kept (see module docstring)."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
+    #: Fields the SERVER carries over from the stored record when a released client's write cannot
+    #: express them (it copies them from what it holds): such a write resets nothing, so it is never
+    #: refused for them (`ContractView.unexpressed`).
+    carried: ClassVar[frozenset[str]] = frozenset()
 
     def model_dump(self, **options: Any) -> dict[str, Any]:
         data = super().model_dump(**options)
