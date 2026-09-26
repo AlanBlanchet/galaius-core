@@ -13,9 +13,12 @@ from interact_core import PERMISSION_CATALOG, GroupMembership, PermissionGroup
 def test_catalog_has_every_admin_and_product_permission_named_in_the_brief() -> None:
     keys = {item.key for item in PERMISSION_CATALOG}
     assert keys == {
-        "admin.access", "admin.groups.manage", "admin.users.view", "admin.plans.manage", "admin.audit.view",
+        "admin.access", "admin.groups.manage", "admin.users.view", "admin.plans.manage", "admin.audit.view", "admin.contact.view",
         "workflows.run", "models.platform_paid", "machines.pool.use", "machines.cloud.launch",
         "machines.reserve", "credits.auto_topup",
+        "company.members.manage", "company.groups.manage", "company.settings.manage", "company.delete",
+        "api_keys.manage", "approvals.manage", "billing.view", "billing.manage", "workflows.edit",
+        "connections.manage", "agents.edit", "machines.manage",
     }
 
 

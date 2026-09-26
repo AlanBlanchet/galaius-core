@@ -181,7 +181,8 @@ class OperatorAuditEvent(WireModel):
         "group.created", "group.renamed", "group.permissions_updated", "group.deleted",
         "group_member.added", "group_member.removed",
         "migration.operator_accounts_migrated", "subscription.group_granted", "subscription.group_revoked",
+        "contact_message.listed", "contact_message.read",
     ]
-    target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration"]
+    target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration", "contact_message"]
     target_id: UUID | None = None
     created_at: datetime
