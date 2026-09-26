@@ -1,7 +1,7 @@
 {
   "$defs": {
     "PromptCatalogPage": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One typed, cursor-addressed delta from the prompt catalogue.",
       "properties": {
         "cursor": {
@@ -45,7 +45,7 @@
       "type": "object"
     },
     "PromptChannelEntry": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Compare-and-swap channel pointer to one immutable prompt revision.",
       "properties": {
         "channel": {
@@ -109,7 +109,7 @@
       "type": "object"
     },
     "PromptExecutionRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Server-verified immutable prompt identity persisted with one execution.",
       "properties": {
         "channel": {
@@ -139,7 +139,7 @@
       "type": "object"
     },
     "PromptKey": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Stable prompt identity independent of revisions and publication channels.",
       "properties": {
         "namespace": {
@@ -202,7 +202,7 @@
       "type": "object"
     },
     "PromptRevision": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Immutable prompt content and its verifiable publication provenance.",
       "properties": {
         "content": {
@@ -269,7 +269,7 @@
       "type": "object"
     },
     "PromptSelection": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Untrusted channel and digest requested for server-backed resolution.",
       "properties": {
         "channel": {

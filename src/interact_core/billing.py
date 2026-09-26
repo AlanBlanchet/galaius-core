@@ -15,7 +15,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 
 def usd_to_micros(usd: float) -> int:
@@ -104,7 +104,7 @@ class CreditWallet(WireModel):
     updated_at: datetime
 
 
-class WalletTopUpRequest(WireModel):
+class WalletTopUpRequest(WireRequest):
     """A manual, owner-initiated top-up: an amount to charge the workspace's default payment
     method right now, via a Stripe Checkout session (redirect) — never a server-side off-session
     charge (that path is `AutoTopUpPolicy`'s alone, and only after the owner opts in)."""
@@ -130,7 +130,7 @@ class AutoTopUpPolicy(WireModel):
         return self
 
 
-class AutoTopUpPolicyUpdate(WireModel):
+class AutoTopUpPolicyUpdate(WireRequest):
     enabled: bool
     threshold_usd: float = Field(default=10.0, ge=0)
     topup_usd: float = Field(default=25.0, ge=1, le=10_000)
@@ -208,7 +208,7 @@ class WorkspaceSubscriptionState(WireModel):
         return self.status in ENTITLED_STATUSES
 
 
-class CheckoutSessionRequest(WireModel):
+class CheckoutSessionRequest(WireRequest):
     success_url: str = Field(min_length=1, max_length=2000)
     cancel_url: str = Field(min_length=1, max_length=2000)
 
@@ -228,7 +228,7 @@ class PortalSessionCreated(WireModel):
 MachineReservationStatus = Literal["held", "active", "completed", "cancelled"]
 
 
-class MachineReservationRequest(WireModel):
+class MachineReservationRequest(WireRequest):
     provider: Literal["scaleway"] = "scaleway"
     region: str = Field(min_length=1, max_length=40)
     instance_type: str = Field(min_length=1, max_length=40)
@@ -297,7 +297,7 @@ class TaxProfile(WireModel):
         return self
 
 
-class TaxProfileUpdate(WireModel):
+class TaxProfileUpdate(WireRequest):
     country_code: str = Field(min_length=2, max_length=2, pattern=r"^[A-Z]{2}$")
     business: bool
     vat_number: str | None = Field(default=None, max_length=32)
@@ -355,7 +355,7 @@ class OperatorGrant(WireModel):
     granted_at: datetime
 
 
-class OperatorGrantRequest(WireModel):
+class OperatorGrantRequest(WireRequest):
     note: str = Field(min_length=1, max_length=400)
 
 

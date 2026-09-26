@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 _PART = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -51,7 +51,7 @@ class PromptRevision(WireModel):
         return self
 
 
-class PromptCreateRequest(WireModel):
+class PromptCreateRequest(WireRequest):
     """Hostile authoring input for the first immutable Git-backed prompt revision."""
 
     key: PromptKey
@@ -113,7 +113,7 @@ class PromptCatalogPage(WireModel):
         return {(entry.key.namespace, entry.key.slug): entry for entry in self.entries}
 
 
-class PromptPublicationRequest(WireModel):
+class PromptPublicationRequest(WireRequest):
     """One complete exact-commit prompt snapshot applied by global cursor CAS."""
 
     expected_cursor: str | None = None

@@ -18,7 +18,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 SignalStatus = Literal["new", "triaged", "fixed"]
 SignalScreenshotType = Literal["image/png", "image/jpeg", "image/webp"]
@@ -197,7 +197,7 @@ class SignalScreenshot(WireModel):
         return base64.b64decode(self.data_base64, validate=True)
 
 
-class SignalSubmission(WireModel):
+class SignalSubmission(WireRequest):
     """`POST /v1/signals`. `id` is chosen by the client and is the idempotency key: resending the
     same submission answers the stored signal, never a second one."""
 
@@ -260,5 +260,5 @@ class SignalList(WireModel):
     builds: tuple[SignalFacet, ...]
 
 
-class SignalStatusUpdate(WireModel):
+class SignalStatusUpdate(WireRequest):
     status: SignalStatus

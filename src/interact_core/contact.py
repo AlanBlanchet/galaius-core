@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 ContactLocale = Literal["en", "fr"]
 
@@ -21,7 +21,7 @@ _TEXT = r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*$"
 _EMAIL = r"^[^\s@\x00-\x1f\x7f]+@[^\s@\x00-\x1f\x7f]+\.[^\s@\x00-\x1f\x7f]+$"
 
 
-class ContactSubmission(WireModel):
+class ContactSubmission(WireRequest):
     """`POST /v1/site/contact`'s body. Surrounding whitespace is stripped before the bounds apply,
     so a blank name is `required`, never a one-space name. `website` is the honeypot: the server
     answers a filled one like a stored message and drops it before this model validates it."""

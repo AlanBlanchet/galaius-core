@@ -134,21 +134,8 @@ def test_agent_catalog_is_complete_verifiable_and_rejects_broken_reporting() -> 
         AgentCatalogSnapshot.create((lead.model_copy(update={"reports_to": child.id}), child), (prompt,))
 
 
-def test_contracts_are_immutable_and_reject_unknown_fields() -> None:
-    account = Account(
-        account_id=uuid4(),
-        email="owner@example.com",
-        locale="en",
-        verified=True,
-    )
-    with pytest.raises(ValidationError):
-        Account(
-            account_id=account.account_id,
-            email=account.email,
-            locale="en",
-            verified=True,
-            unexpected=True,
-        )
+def test_contracts_are_immutable() -> None:
+    account = Account(account_id=uuid4(), email="owner@example.com", locale="en", verified=True)
     with pytest.raises(ValidationError):
         account.locale = "fr"
 

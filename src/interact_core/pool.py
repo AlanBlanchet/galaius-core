@@ -18,7 +18,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .cloud import ResourceRequirement, resources_fit
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 from .workflows import MachineAccelerator, MachineRef, MachineResources
 
 #: gVisor (`runsc`) is the only tier this codebase currently proves closes the container-escape
@@ -146,7 +146,7 @@ class UnsafeModelWeightsError(Exception):
 POOL_SHARING_ENABLED = True
 
 
-class MachinePoolSettingsUpdate(WireModel):
+class MachinePoolSettingsUpdate(WireRequest):
     """The owner's own opt-in for ONE of their machines: off by default, and switching it on needs
     a price in the SAME request — an owner can never end up sharing at an unset (silently free)
     rate."""

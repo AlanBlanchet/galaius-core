@@ -1,7 +1,7 @@
 {
   "$defs": {
     "Account": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "account_id": {
           "format": "uuid",
@@ -80,7 +80,7 @@
       "type": "object"
     },
     "Bootstrap": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "account": {
           "$ref": "#/$defs/Account"
@@ -119,7 +119,7 @@
       "type": "object"
     },
     "ChangelogEntry": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "changes": {
           "items": {
@@ -151,7 +151,7 @@
       "type": "object"
     },
     "CompanyAccess": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "What the signed-in account may do in one company: the union of its company groups \u2014 the\nSAME set the server enforces, so a client shows only controls that will be accepted.",
       "properties": {
         "groups": {
@@ -169,6 +169,8 @@
               "admin.users.view",
               "admin.plans.manage",
               "admin.audit.view",
+              "admin.contact.view",
+              "admin.signals.view",
               "workflows.run",
               "models.platform_paid",
               "machines.pool.use",
@@ -208,7 +210,7 @@
       "type": "object"
     },
     "CompanyDetails": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Optional legal identity for an existing workspace, never a membership grant.",
       "properties": {
         "activity_code": {
@@ -344,7 +346,7 @@
       "type": "object"
     },
     "CompanyLookupResult": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "company": {
           "$ref": "#/$defs/CompanyDetails"
@@ -369,7 +371,7 @@
       "type": "object"
     },
     "CompanyProfile": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "activity_code": {
           "anyOf": [
@@ -662,7 +664,7 @@
       "type": "object"
     },
     "PlatformError": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "code": {
           "enum": [
@@ -678,7 +680,8 @@
             "rate_limited",
             "verification_failed",
             "recovery_failed",
-            "unavailable"
+            "unavailable",
+            "upgrade_required"
           ],
           "title": "Code",
           "type": "string"
@@ -695,7 +698,7 @@
       "type": "object"
     },
     "PortableToolSettings": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "revision": {
           "minimum": 0,
@@ -740,6 +743,7 @@
     },
     "PortableToolSettingsValues": {
       "additionalProperties": false,
+      "description": "User-authored settings synced through the server: a key outside this set (a secret, a\nmachine-local path) is refused on both sides, so a new setting reaches a client with its\nrelease.",
       "properties": {
         "audio_criteria": {
           "anyOf": [
@@ -1052,7 +1056,7 @@
       "type": "object"
     },
     "ReleaseInfo": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "build_id": {
           "anyOf": [
@@ -1149,7 +1153,7 @@
       "type": "object"
     },
     "Workspace": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "name": {
           "maxLength": 120,
@@ -1215,7 +1219,7 @@
       "type": "object"
     },
     "WorkspaceInvitation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -1294,7 +1298,7 @@
       "type": "object"
     },
     "WorkspaceMember": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "account": {
           "$ref": "#/$defs/Account"
@@ -1316,7 +1320,7 @@
       "type": "object"
     },
     "WorkspaceMembership": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "invitations": {
           "items": {

@@ -23,7 +23,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 from pydantic.experimental.missing_sentinel import MISSING
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 Permission = Literal[
     "admin.access",
@@ -122,12 +122,12 @@ class PermissionGroup(WireModel):
         return self
 
 
-class GroupCreate(WireModel):
+class GroupCreate(WireRequest):
     name: str = Field(min_length=1, max_length=120)
     permissions: tuple[Permission, ...] = Field(default=())
 
 
-class GroupUpdate(WireModel):
+class GroupUpdate(WireRequest):
     name: str | MISSING = MISSING
     permissions: tuple[Permission, ...] | MISSING = MISSING
 

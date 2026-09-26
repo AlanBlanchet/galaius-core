@@ -5,7 +5,7 @@ from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 
 class GoogleConnectionStatus(WireModel):
@@ -35,7 +35,7 @@ class GoogleOAuthAuthorization(WireModel):
     expires_at: datetime
 
 
-class GoogleOAuthCallback(WireModel):
+class GoogleOAuthCallback(WireRequest):
     state: str = Field(min_length=32, max_length=256)
     code: str = Field(min_length=1, max_length=4096)
 

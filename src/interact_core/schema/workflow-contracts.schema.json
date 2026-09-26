@@ -1,7 +1,7 @@
 {
   "$defs": {
     "AdminWorkspaceSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "active_api_key_count": {
           "minimum": 0,
@@ -46,7 +46,7 @@
       "type": "object"
     },
     "AgentCatalogSnapshot": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Complete server records and pinned instruction content for rebuildable clients.",
       "properties": {
         "agents": {
@@ -97,7 +97,7 @@
       "type": "object"
     },
     "AgentGraph": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "The current workspace agent heads and the selected assistant root.",
       "properties": {
         "agents": {
@@ -171,7 +171,7 @@
       "type": "object"
     },
     "AgentImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "An agent revision. Every node wired into its `tools` port is a tool it may call\n(`WorkflowNode.tool_schema`); the call runs that node like any other step.",
       "properties": {
         "agent": {
@@ -191,7 +191,7 @@
       "type": "object"
     },
     "AgentRevision": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "capabilities": {
           "default": [],
@@ -450,7 +450,7 @@
       "type": "object"
     },
     "AgentRevisionRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -471,7 +471,7 @@
       "type": "object"
     },
     "ArtifactRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "connection": {
           "$ref": "#/$defs/ConnectionResourceRef"
@@ -510,7 +510,7 @@
       "type": "object"
     },
     "BudgetPolicy": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "max_output_tokens": {
           "default": 2048,
@@ -550,7 +550,7 @@
       "type": "object"
     },
     "BuiltinImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Runs in the server itself (`BUILTIN_OPS[op]` says what it does and its ports) \u2014 or a FILE op\n(`FILE_OPS`), which runs where the file is: on the server against workspace storage\n(`config.connection`), or on an enrolled machine against its working directory\n(`artifact_path` relative to it, within the machine's permission ceiling).",
       "properties": {
         "kind": {
@@ -604,7 +604,7 @@
       "type": "object"
     },
     "ConfiguredModelRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "connection": {
           "$ref": "#/$defs/ConnectionResourceRef"
@@ -624,7 +624,7 @@
       "type": "object"
     },
     "ConnectionResource": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "capabilities": {
           "items": {
@@ -820,7 +820,7 @@
       "type": "object"
     },
     "ConnectionResourceRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "capability": {
           "enum": [
@@ -871,7 +871,7 @@
       "type": "object"
     },
     "ConnectorAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "action": {
           "enum": [
@@ -948,7 +948,7 @@
       "type": "object"
     },
     "ConnectorImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A configured connector or API operation (`DirectTool`), executable without a model call.\nIts config holds scalar arguments only (the tool's declared input schema).",
       "properties": {
         "kind": {
@@ -1011,7 +1011,7 @@
       "type": "object"
     },
     "Conversation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "agent": {
           "anyOf": [
@@ -1104,7 +1104,7 @@
       "type": "object"
     },
     "ConversationActivity": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "agent_activity": {
           "anyOf": [
@@ -1287,7 +1287,7 @@
       "type": "object"
     },
     "ConversationMessage": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "content": {
           "maxLength": 1048576,
@@ -1348,7 +1348,7 @@
       "type": "object"
     },
     "ConversationPage": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "items": {
           "items": {
@@ -1379,7 +1379,7 @@
       "type": "object"
     },
     "ConversationSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "agent": {
           "anyOf": [
@@ -1446,7 +1446,7 @@
       "type": "object"
     },
     "CredentialRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -1461,7 +1461,7 @@
       "type": "object"
     },
     "CriteriaClause": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One clause of the shared criteria grammar, parsed. `membership` (`sovereignty in\nself_hosted|eu_sovereign`) is the one clause over a WORD-valued property: its `values` are the\naccepted words, never numbers.",
       "properties": {
         "kind": {
@@ -1533,7 +1533,7 @@
       "type": "object"
     },
     "CriteriaWeight": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One `name=weight` ranking clause: a weight ORDERS what already passed, never admits.",
       "properties": {
         "name": {
@@ -1557,7 +1557,7 @@
       "type": "object"
     },
     "DelegatedAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "agent": {
           "$ref": "#/$defs/AgentRevisionRef"
@@ -1595,7 +1595,7 @@
       "type": "object"
     },
     "FunctionImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A function an enrolled machine declared (`MachineFunctionSummary`), pinned to the exact\nsignature version it was wired against: a later change on the machine refuses the call\ninstead of silently running under a different shape.",
       "properties": {
         "kind": {
@@ -1625,7 +1625,7 @@
       "type": "object"
     },
     "GitAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A git-hosting operation beyond plain listing, bound to a pinned `service_connector`\nconnection. `read_file` runs directly; the other four each change something outside this app\n(a branch, a commit, a pull/merge request, a comment) and are gated by the same owner-approval\nledger SSH writes use \u2014 the same read-direct/write-approved split `SshAgentTool` draws.",
       "properties": {
         "connection": {
@@ -1685,7 +1685,7 @@
       "type": "object"
     },
     "GmailAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "description": {
           "maxLength": 240,
@@ -1729,7 +1729,7 @@
       "type": "object"
     },
     "HttpAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "connection": {
           "$ref": "#/$defs/ConnectionResourceRef"
@@ -1788,7 +1788,7 @@
       "type": "object"
     },
     "MachineRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -1803,7 +1803,7 @@
       "type": "object"
     },
     "MailAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One IMAP read against a pinned `mail_server` connection, run directly like Gmail's reads.\nSending is `SendMessageTool` with `provider=\"mail_server\"`.",
       "properties": {
         "connection": {
@@ -1848,7 +1848,7 @@
       "type": "object"
     },
     "MailTrigger": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A new message in a mailbox starts the workflow. Polled every `every_minutes` (none of the\nthree providers pushes to an app without a public callback), deduplicated per message: a\nmessage starts exactly one run however often it is seen. Reads through a `mail_server`\nconnection's IMAP side (`connection`, read grant) or a connected Gmail / Microsoft 365 account\n(`account`, its selector). Only messages that arrive after the trigger is switched on count.",
       "properties": {
         "account": {
@@ -1925,7 +1925,7 @@
       "type": "object"
     },
     "ManualTrigger": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "kind": {
           "const": "manual",
@@ -1940,7 +1940,7 @@
       "type": "object"
     },
     "ModelChoice": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A model asked for by what it must DO and how it must SCORE, instead of by id \u2014 re-resolved\nevery run. Written in the ONE criteria grammar agents already use (`interact_core.criteria`):\n`constraints` are hard clauses (a model failing one, or with no known value for it, is out),\n`rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the\ntask's own primary benchmark(s), so the default follows the benchmark registry, not the day\nthe node was saved.",
       "properties": {
         "constraints": {
@@ -1993,7 +1993,7 @@
       "type": "object"
     },
     "ModelCriteriaCatalog": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "comparators": {
           "items": {
@@ -2026,7 +2026,7 @@
       "type": "object"
     },
     "ModelEligibility": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "criteria": {
           "maxLength": 2048,
@@ -2079,7 +2079,7 @@
       "type": "object"
     },
     "ModelEligibilityEvidence": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "actual": {
           "anyOf": [
@@ -2297,7 +2297,7 @@
       "type": "object"
     },
     "ModelImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Any model typed by its task (`ModelTask`, Hugging Face pipeline tags). With an unpinned\n`choice`, `provider`/`model` are the model that choice resolved to when last edited (what the\neditor shows and prices); every run re-resolves the choice and records its answer in the run.",
       "properties": {
         "choice": {
@@ -2359,7 +2359,7 @@
       "type": "object"
     },
     "ModelProperty": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One fact a model can be constrained or ranked by. `choice` properties take a word from\n`values` (a sovereignty tier, where it runs) through a membership clause.",
       "properties": {
         "description": {
@@ -2476,7 +2476,7 @@
       "type": "object"
     },
     "NodeCostActual": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "What one node's run actually cost, after it ran \u2014 the provider's own charge (`cost_usd`)\nand the platform's fee on top of it (`fee_usd`), the two lines a metered call always shows.",
       "properties": {
         "cost_usd": {
@@ -2531,7 +2531,7 @@
       "type": "object"
     },
     "NodeError": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One node's failure once its retries are spent: the `error` port's value, and what a run\nrecords about each error it survived (`WorkflowRun.recovered`).",
       "properties": {
         "attempt": {
@@ -2582,7 +2582,7 @@
       "type": "object"
     },
     "NodeLibraryDefinition": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One reusable node: a configured node, or a selection of nodes with the wires between them.\nIts BOUNDARY \u2014 inner input ports no inner edge feeds, inner output ports no inner edge reads \u2014\nis the port list every node referencing it (`SubgraphImplementation` with a `NodeLibraryRef`)\ncarries. Positions are relative to the reference node's own position.",
       "properties": {
         "created_at": {
@@ -2642,7 +2642,7 @@
       "type": "object"
     },
     "NodeLibraryEntry": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "definition": {
           "$ref": "#/$defs/NodeLibraryDefinition"
@@ -2663,7 +2663,7 @@
       "type": "object"
     },
     "NodeLibraryRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -2678,7 +2678,7 @@
       "type": "object"
     },
     "NodeLibraryUse": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "name": {
           "maxLength": 120,
@@ -2698,7 +2698,7 @@
       "type": "object"
     },
     "NodePolicy": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "How any node runs and fails, whatever it runs. A failed attempt is retried `retries` times,\nthe n-th retry after `backoff_seconds * 2**(n-1)`; `timeout_seconds` bounds each attempt. Once\nevery attempt failed, `on_error` decides: `fail_run` stops the run (the default); `route` sends\na `NodeError` out of the `error` port and skips everything the node's other outputs feed;\n`continue_with_default` emits `defaults` (one per output port) as if the node had succeeded.\n`join` is the fan-in rule of each input port fed by several wires: `all` (the default) waits\nfor every wire and is skipped when one of them was, `any` takes the first value to arrive (a\nlist port: every value that arrived) and is skipped only when every wire was.",
       "properties": {
         "backoff_seconds": {
@@ -2785,7 +2785,7 @@
       "type": "object"
     },
     "NodeUsage": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Metered units for one node's run. Every field independently optional: a unit no meter\nreported for this node stays unset, never a synthetic zero standing in for \"not measured\".",
       "properties": {
         "audio_seconds": {
@@ -2936,7 +2936,7 @@
       "type": "object"
     },
     "ObjectStorageAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One S3-compatible or Azure Blob operation against a named bucket/container, bound to a\npinned `object_storage` connection. The connection is provider-agnostic (AWS S3, Scaleway,\nOVH, MinIO, Cloudflare R2, Azure Blob all reach this same tool shape); `bucket` is pinned per\ntool the way `HttpAgentTool.path` is pinned per tool, never left to agent-chosen free text.",
       "properties": {
         "bucket": {
@@ -2992,7 +2992,7 @@
       "type": "object"
     },
     "Placement": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Where a node runs: on the server (hosted APIs), or on one enrolled machine (local\ncheckpoints, the owner's own GPU \u2014 data stays on it). A machine placement is either PINNED\n(`machine` set: the owner or the graph editor named an exact machine) or AUTO (`requirement`\nset, `machine` unset: the run-time placement scheduler \u2014 `MachineChannel.dispatch`, server-\nside \u2014 resolves the cheapest fit at dispatch time instead: the workspace's own online\nhardware first, then a pooled peer machine, then an on-demand cloud launch, or a named refusal\nwhen nothing fits). Never both, never neither, for `target == \"machine\"`.",
       "properties": {
         "machine": {
@@ -3031,7 +3031,7 @@
       "type": "object"
     },
     "PortAddress": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "node": {
           "format": "uuid",
@@ -3053,7 +3053,7 @@
       "type": "object"
     },
     "PortExposure": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "name": {
           "maxLength": 80,
@@ -3073,7 +3073,7 @@
       "type": "object"
     },
     "PortSpec": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "direction": {
           "enum": [
@@ -3128,7 +3128,7 @@
       "type": "object"
     },
     "PriceSource": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "What a price is bound to, shown verbatim beside the number it justifies.",
       "properties": {
         "kind": {
@@ -3182,7 +3182,7 @@
       "type": "object"
     },
     "PromptExecutionRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Server-verified immutable prompt identity persisted with one execution.",
       "properties": {
         "channel": {
@@ -3212,7 +3212,7 @@
       "type": "object"
     },
     "PromptKey": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Stable prompt identity independent of revisions and publication channels.",
       "properties": {
         "namespace": {
@@ -3232,7 +3232,7 @@
       "type": "object"
     },
     "PromptRevision": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Immutable prompt content and its verifiable publication provenance.",
       "properties": {
         "content": {
@@ -3299,7 +3299,7 @@
       "type": "object"
     },
     "ProviderUsage": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One provider response's tokens in ONE additive shape, whatever the vendor \u2014 normalized at\nthe edge that parses the response: `input_tokens` = prompt tokens neither read from nor\nwritten to a cache, the two cache fields = the cached rest of the prompt, `output_tokens`\nincludes reasoning. Anthropic reports this shape natively; OpenAI and Gemini count cached\ntokens INSIDE their prompt figure, so they are carved out on the way in, never counted twice.",
       "properties": {
         "cache_creation_input_tokens": {
@@ -3360,7 +3360,7 @@
       "type": "object"
     },
     "ResourceRequirement": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "What one workflow node needs to run, derived from the model registry / the user's model\nrecord. Every field optional: unset means \"no constraint from this axis\", never zero \u2014 a node\nwith no declared requirement places on any connected machine, today's behaviour unchanged.\n\nDefined here (not in `.cloud`, which uses it) because `Placement` (below) carries one for an\nAUTO machine placement, and `Placement` predates `.cloud` in the dependency order \u2014 `.cloud`\nimports this and `resources_fit` from here rather than the reverse, so the placement contract\nnever needs a cross-module forward reference.",
       "properties": {
         "cpu_count": {
@@ -3442,7 +3442,7 @@
       "type": "object"
     },
     "RunCostActual": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "fee_usd": {
           "default": 0.0,
@@ -3478,7 +3478,7 @@
       "type": "object"
     },
     "RunInitiator": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Who started a run. `account` is the person it acts for: the signed-in account itself, the\naccount that created the workspace API key, or the account that saved the trigger - None when\nno person can be named (a key or trigger older than this record). A machine checks `account`\nagainst the people its owner lets run file nodes on it.",
       "properties": {
         "account": {
@@ -3537,7 +3537,7 @@
       "type": "object"
     },
     "RunPhase": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Why a run (or one of its steps) is where it is, since when. `reason` is the sentence a\nreader is shown (\"Queued behind 3 runs of this workspace (8 run at once)\"); the other fields\nare the same facts, typed, for a client that words or links them itself.",
       "properties": {
         "ahead": {
@@ -3643,7 +3643,7 @@
       "type": "object"
     },
     "ScheduleTrigger": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "cron": {
           "maxLength": 120,
@@ -3672,7 +3672,7 @@
       "type": "object"
     },
     "ScriptImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Python or shell code run on one enrolled machine \u2014 a code-execution boundary: the machine\nowner approves the exact `source_digest` before the server dispatches it\n(`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the\ncode comes from: \"inline\", source written in the editor (`config[\"source\"]`, the digest is its\nsha256); \"machine_file\", a script already on the machine (`config` is a `ScriptFile`, the digest\nis its `invocation_digest`). Any edit \u2014 of the code, the file's content, its arguments \u2014\nchanges the digest and re-arms that approval.",
       "properties": {
         "kind": {
@@ -3712,7 +3712,7 @@
       "type": "object"
     },
     "SendMessageTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Sends one message through the provider named on it \u2014 an email (SMTP, Gmail, Microsoft\n365) or a chat post (Slack, Discord, Telegram, WhatsApp). A saved connection\n(`connection`) or a connected OAuth account (`account`, its selector) carries the\ncredential, per `MessageProviderSpec.auth`. Always an effect on someone else's inbox: the\nserver gates it behind the owner-approval ledger by default (`send_mode=\"approval\"`); a\nworkflow the owner switched to `\"auto\"` sends without asking, within `auto_per_hour` sends and\nto `auto_recipients` only when that list is set \u2014 past either, the send waits for approval\nagain. Every automatic send is recorded in the same ledger (the audit trail).",
       "properties": {
         "account": {
@@ -3811,7 +3811,7 @@
       "type": "object"
     },
     "SovereigntyRequired": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A workflow's HARD placement constraint (threat-model #6): \"sovereign required\" REFUSES\ndispatch to a node whose PREDICTED figure fails to meet `min_sovereignty`, and REFUSES to\naccept a run whose ACTUAL figure fails it after the fact \u2014 never a soft warning, never a\nsilent autoscaler fallback to a cheaper non-sovereign region. Declared once per\n`WorkflowInterface`; `meets_requirement` is the ONE place both the pre-dispatch scheduler and\nthe post-run auditor check it, so the two can never drift into different rules.",
       "properties": {
         "min_sovereignty": {
@@ -3830,7 +3830,7 @@
       "type": "object"
     },
     "SshAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One SSH/SFTP operation bound to a pinned `ssh_server` connection. Running a command and\nwriting a file are effects on someone else's machine \u2014 the server gates both behind the same\nowner-approval-by-default ledger `GmailAgentTool.send_message` uses, switchable per\n(agent, connection) grant; listing and reading run immediately, like Gmail's reads.",
       "properties": {
         "connection": {
@@ -3880,7 +3880,7 @@
       "type": "object"
     },
     "SubgraphImplementation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Another graph run as one node: a saved workflow pinned to a revision, or a reusable node from\nthe workspace's library (its current definition). Its effects are its contents' (resolved by\nwhoever can read them: the server expands it).",
       "properties": {
         "each": {
@@ -3923,7 +3923,7 @@
       "type": "object"
     },
     "SubscriptionConfiguration": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "current_period_ends_at": {
           "anyOf": [
@@ -3977,7 +3977,7 @@
       "type": "object"
     },
     "ToolInputProperty": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "description": {
           "anyOf": [
@@ -4011,7 +4011,7 @@
       "type": "object"
     },
     "ToolInputSchema": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "additional_properties": {
           "const": false,
@@ -4050,7 +4050,7 @@
       "type": "object"
     },
     "TriggerBinding": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "configuration": {
           "discriminator": {
@@ -4126,7 +4126,7 @@
       "type": "object"
     },
     "TriggerConstant": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A value the BINDING carries, not the request.\n\nA schedule has no payload, so a scheduled trigger could only start a workflow whose inputs\nwere all optional \u2014 \"connect it to activate stuff\" stopped at the first required input. A\nconstant supplies that input from the binding itself, and is the only way a schedule reaches\na workflow that needs values.",
       "properties": {
         "target": {
@@ -4242,7 +4242,7 @@
       "type": "object"
     },
     "TriggerDefinition": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "configuration": {
           "discriminator": {
@@ -4339,7 +4339,7 @@
       "type": "object"
     },
     "TriggerDispatch": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -4469,7 +4469,7 @@
       "type": "object"
     },
     "TriggerInputMapping": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "source": {
           "maxLength": 80,
@@ -4502,7 +4502,7 @@
       "type": "object"
     },
     "TriggerInvocation": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "values": {
           "additionalProperties": {
@@ -4538,7 +4538,7 @@
       "type": "object"
     },
     "TriggerScheduleState": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "last_fire_at": {
           "anyOf": [
@@ -4598,7 +4598,7 @@
       "type": "object"
     },
     "UsageSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "input_tokens": {
           "minimum": 0,
@@ -4637,7 +4637,7 @@
       "type": "object"
     },
     "VariableSpec": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "name": {
           "maxLength": 80,
@@ -4681,7 +4681,7 @@
       "type": "object"
     },
     "WebhookAgentTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "Posts to a pinned `webhook` connection's URL \u2014 a Discord/Teams incoming webhook or a\nNetlify/Vercel deploy hook. The connection grants exactly one verb (\"write\"); this tool is\nalways owner-approval-gated, since a webhook post is an effect on someone else's system (a\nmessage sent, a deploy triggered) with no read counterpart to check first.",
       "properties": {
         "connection": {
@@ -4720,7 +4720,7 @@
       "type": "object"
     },
     "WebhookCredentialCreated": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "credential": {
           "$ref": "#/$defs/WebhookCredentialSummary"
@@ -4742,7 +4742,7 @@
       "type": "object"
     },
     "WebhookCredentialSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -4765,7 +4765,7 @@
       "type": "object"
     },
     "WebhookTrigger": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "kind": {
           "const": "webhook",
@@ -4780,7 +4780,7 @@
       "type": "object"
     },
     "WorkflowAgentActivity": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "agent": {
           "$ref": "#/$defs/AgentRevisionRef"
@@ -4841,7 +4841,7 @@
       "type": "object"
     },
     "WorkflowBlockAvailability": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One block the editor's palette offers: the node it places (implementation, ports, default\nconfig, placement) and whether it runs as placed. The editor copies these four fields onto a\nnew `WorkflowNode`; nothing is per kind.",
       "properties": {
         "category": {
@@ -5030,7 +5030,7 @@
       "type": "object"
     },
     "WorkflowCapabilityActivity": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "call_id": {
           "maxLength": 256,
@@ -5160,7 +5160,7 @@
       "type": "object"
     },
     "WorkflowEdge": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "source": {
           "$ref": "#/$defs/PortAddress"
@@ -5177,7 +5177,7 @@
       "type": "object"
     },
     "WorkflowEvent": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "kind": {
           "enum": [
@@ -5232,7 +5232,7 @@
       "type": "object"
     },
     "WorkflowFunctionTool": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "A 'function' as a tool: a block already in the graph, reused. Not bespoke code \u2014 a pinned,\nALREADY-SAVED workflow (deterministic transform nodes only, enforced at save time) exposed as\na callable with named inputs and one scalar result. Opens no code-execution boundary.",
       "properties": {
         "description": {
@@ -5271,7 +5271,7 @@
       "type": "object"
     },
     "WorkflowInterface": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "inputs": {
           "default": [],
@@ -5313,7 +5313,7 @@
       "type": "object"
     },
     "WorkflowKey": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -5328,7 +5328,7 @@
       "type": "object"
     },
     "WorkflowNode": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "description": "One node, whatever it runs. `config` holds the implementation's settings AND the constant\nvalue of any input port left unwired (a wire, when present, wins). `policy` says how it\nretries and where its errors go; `description` tells an agent calling it as a tool what it does.",
       "properties": {
         "config": {
@@ -5450,7 +5450,7 @@
       "type": "object"
     },
     "WorkflowRevision": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -5518,7 +5518,7 @@
       "type": "object"
     },
     "WorkflowRevisionRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "key": {
           "$ref": "#/$defs/WorkflowKey"
@@ -5537,7 +5537,7 @@
       "type": "object"
     },
     "WorkflowRun": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "cost": {
           "anyOf": [
@@ -5696,7 +5696,7 @@
       "type": "object"
     },
     "WorkflowValueSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "digest": {
           "pattern": "^[0-9a-f]{64}$",
@@ -5751,7 +5751,7 @@
       "type": "object"
     },
     "WorkspaceApiKeyCreated": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "key": {
           "$ref": "#/$defs/WorkspaceApiKeySummary"
@@ -5773,7 +5773,7 @@
       "type": "object"
     },
     "WorkspaceApiKeySummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",

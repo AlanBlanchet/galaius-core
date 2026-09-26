@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 from .workflows import ProviderUsage
 from .permissions import Permission
 
@@ -65,7 +65,7 @@ class WorkspaceSubscription(WireModel):
         return self
 
 
-class WorkspaceSubscriptionUpdate(WireModel):
+class WorkspaceSubscriptionUpdate(WireRequest):
     plan: SubscriptionPlanRef
     status: Literal["active", "suspended", "cancelled"]
 

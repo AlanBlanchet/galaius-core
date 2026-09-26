@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 from .workflows import (
     AcceleratorKind, DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources,
     NodeSovereigntyRecord, ResourceRequirement, Sovereignty, SovereigntyRequired, meets_requirement,
@@ -120,7 +120,7 @@ class CloudMachine(WireModel):
     idle_since: datetime | None = None
 
 
-class CloudLaunchRequest(WireModel):
+class CloudLaunchRequest(WireRequest):
     workflow_id: UUID
     requirement: ResourceRequirement
     provider: CloudProviderKind = "scaleway"
@@ -198,6 +198,6 @@ class MachineSovereignty(WireModel):
     sovereignty: DataSovereigntyTier
 
 
-class MachineSovereigntyUpdate(WireModel):
+class MachineSovereigntyUpdate(WireRequest):
     jurisdiction: str = Field(min_length=2, max_length=8)
     sovereignty: DataSovereigntyTier

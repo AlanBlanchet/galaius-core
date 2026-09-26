@@ -6,7 +6,7 @@ import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
 from collections.abc import Iterable
-from typing import Annotated, ClassVar, Literal, Self, get_args
+from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -16,7 +16,7 @@ from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio", "any"]
 WorkflowValue = str | int | float | bool | dict[str, object] | list[object]
@@ -351,12 +351,12 @@ class MachineCostRate(WireModel):
     usd_per_cpu_second: float = Field(default=0.0, ge=0)
 
 
-class MachineCostRateUpdate(WireModel):
+class MachineCostRateUpdate(WireRequest):
     usd_per_gpu_second: float = Field(default=0.0, ge=0)
     usd_per_cpu_second: float = Field(default=0.0, ge=0)
 
 
-class MachineCreateRequest(WireModel):
+class MachineCreateRequest(WireRequest):
     name: str = Field(min_length=1, max_length=120)
 
 
@@ -365,7 +365,7 @@ class MachineCreated(WireModel):
     token: SecretStr = Field(min_length=32, max_length=256)
 
 
-class WorkspaceApiKeyCreate(WireModel):
+class WorkspaceApiKeyCreate(WireRequest):
     scopes: tuple[WorkspaceApiKeyScope, ...] = Field(min_length=1, max_length=3)
 
     @model_validator(mode="after")
@@ -568,7 +568,7 @@ class TriggerInvocation(WireModel):
         return value
 
 
-class TriggerEnableUpdate(WireModel):
+class TriggerEnableUpdate(WireRequest):
     enabled: bool
 
 
@@ -620,7 +620,7 @@ class TriggerBinding(WireModel):
         return self
 
 
-class TriggerConfigurationUpdate(WireModel):
+class TriggerConfigurationUpdate(WireRequest):
     """Compare the displayed configuration before replacing it; runtime state is separate."""
 
     expected: TriggerBinding
@@ -633,7 +633,7 @@ class TriggerConfigurationUpdate(WireModel):
         return self
 
 
-class TriggerCreate(TriggerBinding):
+class TriggerCreate(TriggerBinding, WireRequest):
     enabled: Literal[False] = False
 
 
@@ -729,7 +729,7 @@ class CredentialRef(WireModel):
     id: UUID
 
 
-class ConnectionSecretUpdate(WireModel):
+class ConnectionSecretUpdate(WireRequest):
     secret: SecretStr = Field(min_length=1, max_length=16 * 1024)
 
 
@@ -1014,7 +1014,7 @@ class ConnectorCatalog(WireModel):
     connectors: tuple[ConnectorDefinition, ...] = Field(min_length=1, max_length=16)
 
 
-class ConnectorCheckRequest(WireModel):
+class ConnectorCheckRequest(WireRequest):
     connector: ConnectorKind
     connection: ConnectionResourceRef | None = None
 
@@ -1028,7 +1028,7 @@ class ConnectorCheck(WireModel):
     credential_expires_at: datetime | None = None
 
 
-class ConnectorBrowseRequest(WireModel):
+class ConnectorBrowseRequest(WireRequest):
     action: ConnectorBrowseActionName
     connection: ConnectionResourceRef | None = None
     query: str | None = Field(default=None, max_length=512)
@@ -1446,7 +1446,7 @@ class AgentGraph(WireModel):
         return self
 
 
-class AgentGraphUpdate(WireModel):
+class AgentGraphUpdate(WireRequest):
     """Atomic graph edit. ``agents`` contains changed immutable revisions only."""
 
     expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -1481,19 +1481,24 @@ class AgentCatalogSnapshot(WireModel):
         prompt_heads = tuple(sorted(prompt_heads, key=lambda item: (item.key.namespace, item.key.slug)))
         if prompt_heads:
             payload["prompt_heads"] = [item.model_dump(mode="json") for item in prompt_heads]
-        cursor = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
         return cls(agents=agents, paradigms=paradigms, root_agent=root_agent,
-                   prompt_heads=prompt_heads, cursor=cursor)
+                   prompt_heads=prompt_heads, cursor=cls.content_cursor(payload))
+
+    @staticmethod
+    def content_cursor(content: dict[str, Any]) -> str:
+        """The cursor sealing a JSON dump: canonical JSON of everything but the cursor, an absent
+        root and empty prompt heads left out."""
+        payload = {key: value for key, value in content.items() if key != "cursor"
+                   and not (key == "root_agent" and value is None) and not (key == "prompt_heads" and not value)}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+    @classmethod
+    def projected(cls, data: dict[str, Any]) -> dict[str, Any]:
+        return {**data, "cursor": cls.content_cursor(data)}
 
     @model_validator(mode="after")
     def coherent_snapshot(self) -> Self:
-        payload = self.model_dump(mode="json", exclude={"cursor"})
-        if self.root_agent is None:
-            payload.pop("root_agent")
-        if not self.prompt_heads:
-            payload.pop("prompt_heads")
-        digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-        if digest != self.cursor:
+        if self.content_cursor(self.model_dump(mode="json")) != self.cursor:
             raise ValueError("agent catalog cursor does not match its content")
         agents = {agent.id: agent for agent in self.agents}
         if self.root_agent is not None:
@@ -2363,7 +2368,7 @@ class WorkflowBlockAvailability(WireModel):
         return self
 
 
-class NodeSignatureRequest(WireModel):
+class NodeSignatureRequest(WireRequest):
     """The ports a node of `impl` takes under `config` — what the editor asks after a setting that
     shapes them changes (a switch's cases). Invalid settings are refused by name."""
 
@@ -2810,7 +2815,7 @@ class ConversationMessage(WireModel):
     usage: ProviderUsage | None = None
 
 
-class ConversationCreateRequest(WireModel):
+class ConversationCreateRequest(WireRequest):
     model: ConfiguredModelRef | None = None
     agent: AgentRevisionRef | None = None
     prompt: PromptExecutionRef | None = None
@@ -2838,7 +2843,7 @@ class Conversation(WireModel):
     error: str | None = Field(default=None, max_length=400)
 
 
-class ConversationAppendRequest(WireModel):
+class ConversationAppendRequest(WireRequest):
     expected_revision: int = Field(ge=0)
     input: str = Field(min_length=1, max_length=1 << 20)
     idempotency_key: str = Field(min_length=1, max_length=160)

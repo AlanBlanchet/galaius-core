@@ -8,7 +8,7 @@ from pydantic import Field, SecretStr
 from pydantic.experimental.missing_sentinel import MISSING
 
 from .permissions import Permission
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 WorkspaceRole = Literal["owner", "admin", "member", "viewer"]
 
@@ -23,7 +23,7 @@ class Account(WireModel):
     verified: bool
 
 
-class AccountUpdate(WireModel):
+class AccountUpdate(WireRequest):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     locale: Literal["en", "fr"] | MISSING = MISSING
 
@@ -36,22 +36,22 @@ class Bootstrap(WireModel):
     session_expires_at: datetime
 
 
-class SignupRequest(WireModel):
+class SignupRequest(WireRequest):
     email: str = Field(pattern=_EMAIL, max_length=320)
     password: SecretStr = Field(min_length=12, max_length=1024)
     locale: Literal["en", "fr"] = "en"
 
 
-class LoginRequest(WireModel):
+class LoginRequest(WireRequest):
     email: str = Field(pattern=_EMAIL, max_length=320)
     password: SecretStr = Field(min_length=1, max_length=1024)
 
 
-class TokenRequest(WireModel):
+class TokenRequest(WireRequest):
     token: SecretStr = Field(min_length=32, max_length=512)
 
 
-class RecoveryRequest(WireModel):
+class RecoveryRequest(WireRequest):
     email: str = Field(pattern=_EMAIL, max_length=320)
 
 
@@ -64,8 +64,8 @@ class Workspace(WireModel):
     name: str = Field(min_length=1, max_length=120)
     role: WorkspaceRole
     """A coarse label DERIVED from the member's company permissions (`CompanyAccess.role`), kept
-    exactly as released clients parse it (`extra="forbid"`): rights themselves are
-    `CompanyAccess.permissions`, never this label."""
+    because released clients require it: rights themselves are `CompanyAccess.permissions`,
+    never this label."""
 
 
 class CompanyAccess(WireModel):
@@ -83,15 +83,15 @@ class CompanyAccess(WireModel):
         return "owner" if "company.delete" in held else "admin" if "company.members.manage" in held else "member" if "workflows.edit" in held else "viewer"
 
 
-class WorkspaceCreate(WireModel):
+class WorkspaceCreate(WireRequest):
     name: str = Field(min_length=1, max_length=120)
 
 
-class WorkspaceUpdate(WireModel):
+class WorkspaceUpdate(WireRequest):
     name: str = Field(min_length=1, max_length=120)
 
 
-class WorkspaceDeleteRequest(WireModel):
+class WorkspaceDeleteRequest(WireRequest):
     """The confirmation an owner-only, irreversible workspace delete requires: the workspace's
     OWN current name, typed back — checked server-side against the real row, never trusted from
     an earlier client read."""
@@ -117,11 +117,11 @@ class CompanyProfile(CompanyDetails):
     logo_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
-class CompanyProfileUpdate(CompanyDetails):
+class CompanyProfileUpdate(CompanyDetails, WireRequest):
     expected_revision: int = Field(ge=0)
 
 
-class CompanyLogoUpload(WireModel):
+class CompanyLogoUpload(WireRequest):
     expected_revision: int = Field(ge=0)
     media_type: Literal["image/png", "image/jpeg", "image/webp"]
     data_base64: str = Field(min_length=1, max_length=1400000)
@@ -154,7 +154,7 @@ class WorkspaceMembership(WireModel):
     invitations: tuple[WorkspaceInvitation, ...]
 
 
-class WorkspaceInvite(WireModel):
+class WorkspaceInvite(WireRequest):
     email: str = Field(pattern=_EMAIL, max_length=320)
     group_ids: tuple[UUID, ...] = ()
 
@@ -162,7 +162,7 @@ class WorkspaceInvite(WireModel):
 PlatformErrorCode = Literal[
     "authentication_failed", "csrf_failed", "invalid_origin", "invalid_request",
     "last_sign_in_method", "link_expired", "not_found", "not_linked", "permission_denied", "rate_limited",
-    "verification_failed", "recovery_failed", "unavailable",
+    "verification_failed", "recovery_failed", "unavailable", "upgrade_required",
 ]
 """The wire's complete failure vocabulary, and the single source the server's own raisable set
 binds to (`server.errors.ErrorCode`) — a code can never reach a client without being
@@ -175,7 +175,9 @@ door out, so it is never removed silently. `not_linked`: the email named in a di
 request is not one of the caller's own linked Google identities. `permission_denied`: the caller
 is authenticated and (where applicable) a workspace member, but lacks the specific permission the
 route requires — distinct from `not_found`, which this codebase uses to obscure a resource's
-existence from a caller with no relationship to it at all."""
+existence from a caller with no relationship to it at all. `upgrade_required`: a client released
+before the contract it writes grew a field sent a body that would reset that field on the stored
+record; `detail` names the fields — the client must be upgraded to write it."""
 
 
 class PlatformError(WireModel):

@@ -1,7 +1,7 @@
 {
   "$defs": {
     "BudgetDecision": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "measured_total_tokens": {
           "minimum": 0,
@@ -58,7 +58,7 @@
       "type": "object"
     },
     "OperatorAuditEvent": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "action": {
           "enum": [
@@ -80,7 +80,13 @@
             "group_member.removed",
             "migration.operator_accounts_migrated",
             "subscription.group_granted",
-            "subscription.group_revoked"
+            "subscription.group_revoked",
+            "contact_message.listed",
+            "contact_message.read",
+            "contact_message.deleted",
+            "signal.listed",
+            "signal.status_changed",
+            "signal.deleted"
           ],
           "title": "Action",
           "type": "string"
@@ -132,7 +138,9 @@
             "usage",
             "group",
             "group_member",
-            "migration"
+            "migration",
+            "contact_message",
+            "signal"
           ],
           "title": "Target Kind",
           "type": "string"
@@ -148,7 +156,7 @@
       "type": "object"
     },
     "OperatorAuthority": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "account_id": {
           "format": "uuid",
@@ -169,6 +177,8 @@
               "admin.users.view",
               "admin.plans.manage",
               "admin.audit.view",
+              "admin.contact.view",
+              "admin.signals.view",
               "workflows.run",
               "models.platform_paid",
               "machines.pool.use",
@@ -208,7 +218,7 @@
       "type": "object"
     },
     "OperatorRunFailure": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -264,7 +274,7 @@
       "type": "object"
     },
     "OperatorServiceSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "account_count": {
           "minimum": 0,
@@ -303,7 +313,7 @@
       "type": "object"
     },
     "OperatorWorkspaceSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "membership_count": {
           "minimum": 0,
@@ -335,7 +345,7 @@
       "type": "object"
     },
     "SubscriptionLimit": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "name": {
           "maxLength": 80,
@@ -358,7 +368,7 @@
       "type": "object"
     },
     "SubscriptionPlanDefinition": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "created_at": {
           "format": "date-time",
@@ -449,7 +459,7 @@
       "type": "object"
     },
     "SubscriptionPlanRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -470,7 +480,7 @@
       "type": "object"
     },
     "UsageProvenanceSummary": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "estimated": {
           "$ref": "#/$defs/UsageTotals"
@@ -499,7 +509,7 @@
       "type": "object"
     },
     "UsageRecord": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "cache_creation_input_tokens": {
           "anyOf": [
@@ -605,7 +615,7 @@
       "type": "object"
     },
     "UsageSourceRef": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": {
           "format": "uuid",
@@ -643,7 +653,7 @@
       "type": "object"
     },
     "UsageTotals": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "cache_creation_input_tokens": {
           "default": 0,
@@ -688,7 +698,7 @@
       "type": "object"
     },
     "WorkspaceSubscription": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "assigned_at": {
           "anyOf": [

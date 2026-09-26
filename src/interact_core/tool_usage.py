@@ -29,7 +29,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 #: How the call reached the model — a saved provider API key, or the vendor CLI's own logged-in
 #: subscription session (Claude Code, Codex). Distinct billing meters, never merged.
@@ -56,7 +56,7 @@ class ToolTokenUsage(WireModel):
         return self
 
 
-class ToolUsageIngestRecord(WireModel):
+class ToolUsageIngestRecord(WireRequest):
     """One call, as the local tool reports it. No account id: the authenticated session that
     posts the batch IS the account, so a client-supplied id here could log usage onto another
     account. ``id`` is the tool's own idempotency key for this call — a retried post after a
@@ -71,7 +71,7 @@ class ToolUsageIngestRecord(WireModel):
     recorded_at: datetime
 
 
-class ToolUsageIngestRequest(WireModel):
+class ToolUsageIngestRequest(WireRequest):
     records: tuple[ToolUsageIngestRecord, ...] = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")

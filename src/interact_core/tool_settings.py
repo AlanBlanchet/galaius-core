@@ -12,7 +12,7 @@ from typing import Literal, Self
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 VLM_MIN_DIM_DEFAULT = 768
 VLM_MAX_DIM_DEFAULT = 1280
@@ -24,7 +24,11 @@ MediaSessionProviderName = Literal["claude"]
 _CRITERIA_MAX_LENGTH = 2048
 
 
-class PortableToolSettingsValues(WireModel):
+class PortableToolSettingsValues(WireRequest):
+    """User-authored settings synced through the server: a key outside this set (a secret, a
+    machine-local path) is refused on both sides, so a new setting reaches a client with its
+    release."""
+
     image_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
     video_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
     audio_criteria: str | None = Field(default=None, max_length=_CRITERIA_MAX_LENGTH)
@@ -68,6 +72,6 @@ class PortableToolSettings(WireModel):
     values: PortableToolSettingsValues
 
 
-class PortableToolSettingsUpdate(WireModel):
+class PortableToolSettingsUpdate(WireRequest):
     expected_revision: int = Field(ge=0)
     values: PortableToolSettingsValues
