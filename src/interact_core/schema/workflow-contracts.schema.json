@@ -422,6 +422,13 @@
           "maxItems": 64,
           "title": "Skill Paradigms",
           "type": "array"
+        },
+        "summary": {
+          "default": "",
+          "maxLength": 120,
+          "pattern": "^[^\\r\\n]*$",
+          "title": "Summary",
+          "type": "string"
         }
       },
       "required": [
@@ -3522,6 +3529,112 @@
       "title": "RunInitiator",
       "type": "object"
     },
+    "RunPhase": {
+      "additionalProperties": false,
+      "description": "Why a run (or one of its steps) is where it is, since when. `reason` is the sentence a\nreader is shown (\"Queued behind 3 runs of this workspace (8 run at once)\"); the other fields\nare the same facts, typed, for a client that words or links them itself.",
+      "properties": {
+        "ahead": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ahead"
+        },
+        "kind": {
+          "enum": [
+            "queued",
+            "preparing",
+            "running",
+            "waiting_for_machine",
+            "running_on_machine",
+            "installing",
+            "loading_model",
+            "running_model",
+            "waiting_for_model",
+            "pausing",
+            "retrying",
+            "waiting_for_approval"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "machine_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Machine Id"
+        },
+        "machine_name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Machine Name"
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "reason": {
+          "maxLength": 300,
+          "title": "Reason",
+          "type": "string"
+        },
+        "since": {
+          "format": "date-time",
+          "title": "Since",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        }
+      },
+      "required": [
+        "kind",
+        "since",
+        "reason"
+      ],
+      "title": "RunPhase",
+      "type": "object"
+    },
     "ScheduleTrigger": {
       "additionalProperties": false,
       "properties": {
@@ -5464,6 +5577,17 @@
         "invocation": {
           "$ref": "#/$defs/TriggerInvocation"
         },
+        "phase": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPhase"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "recovered": {
           "default": [],
           "items": {
@@ -5530,6 +5654,15 @@
           "format": "date-time",
           "title": "Updated At",
           "type": "string"
+        },
+        "waits": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RunPhase"
+          },
+          "maxItems": 64,
+          "title": "Waits",
+          "type": "array"
         },
         "workflow": {
           "$ref": "#/$defs/WorkflowRevisionRef"

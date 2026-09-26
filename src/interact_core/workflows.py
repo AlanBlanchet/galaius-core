@@ -1383,6 +1383,7 @@ class AgentRevision(WireModel):
     name: str = Field(min_length=1, max_length=120)
     role_key: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
     description: str = Field(default="", max_length=8192)
+    summary: str = Field(default="", max_length=120, pattern=r"^[^\r\n]*$")
     scope: str = Field(default="core", pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
     department: str | None = Field(default=None, min_length=1, max_length=120)
     reports_to: UUID | None = None
