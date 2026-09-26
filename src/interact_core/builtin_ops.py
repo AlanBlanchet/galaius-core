@@ -190,8 +190,8 @@ class MergeSettings(_Settings):
 
 class MergeOp(BuiltinOpSpec):
     op, category, title = "merge", "flow", "Merge"
-    summary = "Waits for every wire into 'inputs' and merges them: append lists, combine objects, zip by position, or join on a key."
-    summary_fr = "Attend chaque fil arrivant dans « inputs » et les fusionne : listes ajoutées, objets combinés, appariés par position ou joints par clé."
+    summary = "Waits until every wire into it has delivered, then passes their values on together: append lists, combine objects, zip by position, or join on a key."
+    summary_fr = "Attend que chaque fil qui y arrive ait livré, puis transmet leurs valeurs ensemble : listes ajoutées, objets combinés, appariés par position ou joints par clé."
     keywords = ("join", "combine", "concat", "zip", "wait for all", "gather", "union")
     Config = MergeSettings
 
