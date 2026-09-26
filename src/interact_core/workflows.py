@@ -1836,9 +1836,10 @@ class FunctionImplementation(_Implementation):
 
 class ScriptFile(WireModel):
     """A script that already lives on its machine (`ScriptImplementation.origin == "machine_file"`):
-    its path inside the machine owner's file roots, the sha256 of the file's bytes when it was
-    picked, and how it is started. Paths are relative to the machine's working directory, as its
-    file roots are; the machine re-checks the roots and the file's digest before every run."""
+    its path inside the machine owner's script folders (`interact machine script-roots`, never
+    where workflow file steps write), the sha256 of the file's bytes when it was picked, and how it
+    is started. Paths are relative to the machine's working directory; the machine re-checks the
+    folders and the file's digest before every run."""
 
     path: str = Field(min_length=1, max_length=1024)
     file_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -1854,7 +1855,7 @@ class ScriptFile(WireModel):
     def machine_relative(cls, value: str | None) -> str | None:
         if value is not None and (value.startswith("/") or "\\" in value or ":" in value or "\x00" in value
                                   or any(part in {"", ".", ".."} or part.startswith(".") for part in value.split("/"))):
-            raise ValueError("a script path is a plain relative path inside the machine's file roots (no hidden names, no '..')")
+            raise ValueError("a script path is a plain relative path inside the machine's script folders (no hidden names, no '..')")
         return value
 
     @field_validator("args")
@@ -1864,12 +1865,16 @@ class ScriptFile(WireModel):
             raise ValueError("script arguments cannot hold NUL characters")
         return value
 
+    #: Starts every hashed invocation: its NUL keeps file digests apart from inline source digests
+    #: (inline source never holds NUL), so approving some inline text never approves a file run.
+    DIGEST_TAG: ClassVar[str] = "interact.script.machine_file.v1\x00"
+
     def invocation_digest(self, language: str) -> str:
         """What a machine owner approves: the file's content AND how it is started (path, folder,
-        arguments, interpreter). Canonical JSON (sorted keys, no spaces, UTF-8) — the editor
-        computes the same bytes (frontend graph/scriptSource.ts `scriptFileDigest`)."""
+        arguments, interpreter), after `DIGEST_TAG`. Canonical JSON (sorted keys, no spaces, UTF-8)
+        — the editor computes the same bytes (frontend graph/scriptSource.ts `scriptFileDigest`)."""
         payload = {"language": language, **self.model_dump(mode="json")}
-        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        return hashlib.sha256((self.DIGEST_TAG + json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)).encode()).hexdigest()
 
 
 class ScriptImplementation(_Implementation):
@@ -1911,7 +1916,7 @@ class ScriptImplementation(_Implementation):
                 raise ValueError("script file settings do not match their pinned digest")
             return
         source = config.get("source")
-        if not isinstance(source, str) or len(source) > 1 << 16 or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
+        if not isinstance(source, str) or len(source) > 1 << 16 or "\x00" in source or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
             raise ValueError("script node source does not match its pinned digest")
 
 
@@ -2178,10 +2183,10 @@ class MachineCommand(WireModel):
 
 
 class MachineFileQuery(WireModel):
-    """The server asks one connected machine what is at `path` inside its owner's file roots (""
-    = the roots themselves), for a person picking a script there. Read-only: a folder answers its
+    """The server asks one connected machine what is at `path` inside its owner's script folders
+    ("" = the folders themselves), for a person picking a script there. Read-only: a folder answers its
     entries, a file its size and sha256; nothing runs. Signed with the machine's key like a
-    command and short-lived; the machine refuses anything outside its roots."""
+    command and short-lived; the machine refuses anything outside those folders."""
 
     id: UUID
     machine: MachineRef
