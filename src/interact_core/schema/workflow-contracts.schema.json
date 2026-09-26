@@ -3666,7 +3666,7 @@
     },
     "ScriptImplementation": {
       "additionalProperties": false,
-      "description": "Server-authored source (Python or shell), pinned by content digest, run on one enrolled\nmachine \u2014 a code-execution boundary: the machine owner approves the exact `source_digest`\nbefore the server dispatches it (`MachineStore.script_approved`), on top of the per-command\nsignature. The source itself is `config[\"source\"]`; any edit changes the digest and re-arms\nthat approval.",
+      "description": "Python or shell code run on one enrolled machine \u2014 a code-execution boundary: the machine\nowner approves the exact `source_digest` before the server dispatches it\n(`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the\ncode comes from: \"inline\", source written in the editor (`config[\"source\"]`, the digest is its\nsha256); \"machine_file\", a script already on the machine (`config` is a `ScriptFile`, the digest\nis its `invocation_digest`). Any edit \u2014 of the code, the file's content, its arguments \u2014\nchanges the digest and re-arms that approval.",
       "properties": {
         "kind": {
           "const": "script",
@@ -3679,6 +3679,15 @@
             "shell"
           ],
           "title": "Language",
+          "type": "string"
+        },
+        "origin": {
+          "default": "inline",
+          "enum": [
+            "inline",
+            "machine_file"
+          ],
+          "title": "Origin",
           "type": "string"
         },
         "source_digest": {

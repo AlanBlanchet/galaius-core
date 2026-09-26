@@ -1618,6 +1618,9 @@ class _Implementation(WireModel):
     def check(self, config: dict[str, WorkflowValue]) -> None:
         """Rules binding this implementation to its config; raises ValueError."""
 
+    def check_placement(self, placement: "Placement") -> None:
+        """Rules binding this implementation to where it is placed, beyond `placements`; raises ValueError."""
+
     #: Control ports this kind adds to `CONTROL_PORTS` (an agent's `tools`).
     control_ports: ClassVar[tuple[PortSpec, ...]] = ()
 
@@ -1831,24 +1834,82 @@ class FunctionImplementation(_Implementation):
     placements: ClassVar[frozenset[str]] = frozenset({"machine"})
 
 
+class ScriptFile(WireModel):
+    """A script that already lives on its machine (`ScriptImplementation.origin == "machine_file"`):
+    its path inside the machine owner's file roots, the sha256 of the file's bytes when it was
+    picked, and how it is started. Paths are relative to the machine's working directory, as its
+    file roots are; the machine re-checks the roots and the file's digest before every run."""
+
+    path: str = Field(min_length=1, max_length=1024)
+    file_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    args: tuple[Annotated[str, Field(max_length=4096)], ...] = Field(default=(), max_length=32)
+    #: The folder it starts in; None: the script's own folder.
+    cwd: str | None = Field(default=None, min_length=1, max_length=1024)
+    #: The program that runs it (a command name or an absolute path); None: `python3` or `/bin/sh`
+    #: by the node's language (a Python script declaring packages, PEP 723, runs through uv).
+    interpreter: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[^\s\x00]+$")
+
+    @field_validator("path", "cwd")
+    @classmethod
+    def machine_relative(cls, value: str | None) -> str | None:
+        if value is not None and (value.startswith("/") or "\\" in value or ":" in value or "\x00" in value
+                                  or any(part in {"", ".", ".."} or part.startswith(".") for part in value.split("/"))):
+            raise ValueError("a script path is a plain relative path inside the machine's file roots (no hidden names, no '..')")
+        return value
+
+    @field_validator("args")
+    @classmethod
+    def plain_args(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any("\x00" in arg for arg in value):
+            raise ValueError("script arguments cannot hold NUL characters")
+        return value
+
+    def invocation_digest(self, language: str) -> str:
+        """What a machine owner approves: the file's content AND how it is started (path, folder,
+        arguments, interpreter). Canonical JSON (sorted keys, no spaces, UTF-8) — the editor
+        computes the same bytes (frontend graph/scriptSource.ts `scriptFileDigest`)."""
+        payload = {"language": language, **self.model_dump(mode="json")}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
 class ScriptImplementation(_Implementation):
-    """Server-authored source (Python or shell), pinned by content digest, run on one enrolled
-    machine — a code-execution boundary: the machine owner approves the exact `source_digest`
-    before the server dispatches it (`MachineStore.script_approved`), on top of the per-command
-    signature. The source itself is `config["source"]`; any edit changes the digest and re-arms
-    that approval."""
+    """Python or shell code run on one enrolled machine — a code-execution boundary: the machine
+    owner approves the exact `source_digest` before the server dispatches it
+    (`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the
+    code comes from: "inline", source written in the editor (`config["source"]`, the digest is its
+    sha256); "machine_file", a script already on the machine (`config` is a `ScriptFile`, the digest
+    is its `invocation_digest`). Any edit — of the code, the file's content, its arguments —
+    changes the digest and re-arms that approval."""
 
     kind: Literal["script"]
     category: ClassVar[BlockCategory] = "code"
     language: Literal["python", "shell"]
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    origin: Literal["inline", "machine_file"] = "inline"
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
     placements: ClassVar[frozenset[str]] = frozenset({"machine"})
 
     def required_config(self) -> tuple[str, ...]:
-        return ("source",)
+        return ("source",) if self.origin == "inline" else ("path", "file_digest")
+
+    def script_file(self, config: dict[str, WorkflowValue]) -> ScriptFile:
+        """The machine file a "machine_file" script runs, from its config; raises ValueError."""
+        if self.origin != "machine_file":
+            raise ValueError("this script is written inline, not a file on the machine")
+        try:
+            return ScriptFile.model_validate(config)
+        except ValidationError as error:
+            raise ValueError(f"script file settings are invalid: {error.errors()[0]['msg']}") from error
+
+    def check_placement(self, placement: "Placement") -> None:
+        if self.origin == "machine_file" and placement.machine is None:
+            raise ValueError("a script file lives on one machine: choose that machine")
 
     def check(self, config: dict[str, WorkflowValue]) -> None:
+        if self.origin == "machine_file":
+            if self.script_file(config).invocation_digest(self.language) != self.source_digest:
+                raise ValueError("script file settings do not match their pinned digest")
+            return
         source = config.get("source")
         if not isinstance(source, str) or len(source) > 1 << 16 or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
             raise ValueError("script node source does not match its pinned digest")
@@ -1984,6 +2045,7 @@ class WorkflowNode(WireModel):
         self.impl.check_ports(self.ports)
         if self.placement.target not in self.impl.placements:
             raise ValueError(f"a {self.impl.kind} node cannot run on the {self.placement.target}")
+        self.impl.check_placement(self.placement)
         reserved = {port.name for port in self.control_ports} & {port.name for port in self.ports}
         if reserved:
             raise ValueError(f"port name {sorted(reserved)[0]} is reserved for every node")
@@ -2098,6 +2160,8 @@ class MachineCommand(WireModel):
             raise ValueError("a pooled (cross-workspace) command cannot run an agent step — script, function and model only, for now")
         if self.impl.kind == "builtin" and (self.impl.op not in BuiltinImplementation.FILE_OPS or self.tenancy == "pooled"):
             raise ValueError("a machine runs a builtin only to read or write one of its own files")
+        if self.tenancy == "pooled" and self.impl.kind == "script" and self.impl.origin != "inline":
+            raise ValueError("a pooled (cross-workspace) command runs inline code only, never a file of the machine")
         return self
 
     # A file crosses machines through the server, over HTTP authenticated by the machine's own
@@ -2111,6 +2175,66 @@ class MachineCommand(WireModel):
     @property
     def upload_path(self) -> str:
         return f"/v1/machine-channel/commands/{self.id}/files"
+
+
+class MachineFileQuery(WireModel):
+    """The server asks one connected machine what is at `path` inside its owner's file roots (""
+    = the roots themselves), for a person picking a script there. Read-only: a folder answers its
+    entries, a file its size and sha256; nothing runs. Signed with the machine's key like a
+    command and short-lived; the machine refuses anything outside its roots."""
+
+    id: UUID
+    machine: MachineRef
+    workspace_id: UUID
+    path: str = Field(default="", max_length=1024)
+    expires_at: datetime
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class MachineFileEntry(WireModel):
+    name: str = Field(min_length=1, max_length=255)
+    kind: Literal["file", "folder"]
+    size: int | None = Field(default=None, ge=0)
+
+
+class MachineGitOrigin(WireModel):
+    """The git checkout a picked file sits in, as the machine read it: where it came from, at
+    which commit, and whether the file differs from that commit. Shown, never pinned (the file's
+    digest is what a run is pinned to)."""
+
+    repository: str | None = Field(default=None, max_length=500)
+    commit: str = Field(pattern=r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+    path: str = Field(min_length=1, max_length=1024)
+    clean: bool
+
+
+class MachineFileListing(WireModel):
+    path: str = Field(max_length=1024)
+    kind: Literal["folder", "file"]
+    entries: tuple[MachineFileEntry, ...] = Field(default=(), max_length=500)
+    #: A folder holding more entries than `entries` carries.
+    truncated: bool = False
+    size: int | None = Field(default=None, ge=0)
+    digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    git: MachineGitOrigin | None = None
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if (self.kind == "file") != (self.digest is not None and self.size is not None) or (self.kind == "file" and self.entries):
+            raise ValueError("a file answers its size and digest; a folder its entries")
+        return self
+
+
+class MachineFileQueryResult(WireModel):
+    query_id: UUID
+    listing: MachineFileListing | None = None
+    error: str | None = Field(default=None, max_length=400)
+
+    @model_validator(mode="after")
+    def one_answer(self) -> Self:
+        if (self.listing is None) == (self.error is None):
+            raise ValueError("a file query answers a listing or an error")
+        return self
 
 
 def _port_slug(label: str) -> str:
