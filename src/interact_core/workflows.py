@@ -10,7 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -1847,6 +1847,9 @@ class ScriptFile(WireModel):
     where workflow file steps write), the sha256 of the file's bytes when it was picked, and how it
     is started. Paths are relative to the machine's working directory; the machine re-checks the
     folders and the file's digest before every run."""
+
+    #: Settings a client authors: an unknown key is refused, never carried into the approved digest.
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     path: str = Field(min_length=1, max_length=1024)
     file_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
