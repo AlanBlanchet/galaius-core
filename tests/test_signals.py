@@ -82,6 +82,6 @@ def test_redaction_that_grows_a_value_is_cut_to_its_bound_and_reads_back() -> No
     assert SignalSubmission.model_validate_json(value.model_dump_json()) == value
 
 
-@pytest.mark.parametrize("route", ["/", "/?enter#login", "/#runs?project=x"])
+@pytest.mark.parametrize("route", ["/", "/?enter#login", "/#runs?project=x", "/#data?source=workspace.3f2b8c1e9a4d4c7e8b1a0d2e4f6a8b9c.storage_folder&node=root"])
 def test_route_accepts_the_app_address(route: str) -> None:
     assert SignalSubmission.model_validate({"id": RUN, "description": "x", "context": {**CONTEXT, "route": route}}).context.route == route

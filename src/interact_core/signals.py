@@ -18,7 +18,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, Field, model_validator
 
-from .wire import WireModel
+from .wire import WireModel, WireRequest
 
 SignalStatus = Literal["new", "triaged", "fixed"]
 SignalScreenshotType = Literal["image/png", "image/jpeg", "image/webp"]
@@ -55,20 +55,23 @@ class SignalRedaction:
     def route(cls, value: str) -> str:
         """An app address keeps its query values (`#runs?project=<name>`: the deep link reopens
         the same view); only secret-named ones (`token`, `code`, `state`, ...) and emails go."""
-        return cls._EMAIL.sub("[email]", cls._SECRET_QUERY.sub(r"\1\2[redacted]", cls._credentials(value)))
+        return cls._EMAIL.sub("[email]", cls._SECRET_QUERY.sub(r"\1\2[redacted]", cls._credentials(value, hex_ids=True)))
 
     @classmethod
-    def _credentials(cls, value: str) -> str:
+    def _credentials(cls, value: str, hex_ids: bool = False) -> str:
+        """`hex_ids`: a run of hex digits alone is an id (`uuid.hex`, a digest) in the app's own
+        address, where the deep link needs it; in free text it may be a key, so it goes."""
         for pattern, replacement in cls._SECRETS:
             value = pattern.sub(replacement, value)
-        return cls._BLOB.sub(cls._blob, value)
+        return cls._BLOB.sub(lambda match: cls._blob(match, hex_ids), value)
 
     @classmethod
-    def _blob(cls, match: re.Match[str]) -> str:
+    def _blob(cls, match: re.Match[str], hex_ids: bool) -> str:
         """A long opaque run is a token unless it is only path words and UUIDs: each `/`-separated
         piece, UUIDs removed, is dropped when 32+ characters mixing letters and digits remain."""
         pieces = [cls._UUID.sub("", piece) for piece in match.group(0).split("/")]
-        opaque = any(len(piece) >= 32 and re.search(r"\d", piece) and re.search(r"[A-Za-z]", piece) for piece in pieces)
+        opaque = any(len(piece) >= 32 and re.search(r"\d", piece) and re.search(r"[A-Za-z]", piece)
+                     and not (hex_ids and re.fullmatch(r"[0-9a-fA-F]+", piece)) for piece in pieces)
         return cls.MARK if opaque else match.group(0)
 
     @classmethod
@@ -194,7 +197,7 @@ class SignalScreenshot(WireModel):
         return base64.b64decode(self.data_base64, validate=True)
 
 
-class SignalSubmission(WireModel):
+class SignalSubmission(WireRequest):
     """`POST /v1/signals`. `id` is chosen by the client and is the idempotency key: resending the
     same submission answers the stored signal, never a second one."""
 
@@ -257,5 +260,5 @@ class SignalList(WireModel):
     builds: tuple[SignalFacet, ...]
 
 
-class SignalStatusUpdate(WireModel):
+class SignalStatusUpdate(WireRequest):
     status: SignalStatus
