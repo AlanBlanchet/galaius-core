@@ -429,6 +429,13 @@
           "pattern": "^[^\\r\\n]*$",
           "title": "Summary",
           "type": "string"
+        },
+        "summary_fr": {
+          "default": "",
+          "maxLength": 120,
+          "pattern": "^[^\\r\\n]*$",
+          "title": "Summary Fr",
+          "type": "string"
         }
       },
       "required": [
