@@ -1381,6 +1381,7 @@ class AgentRevision(WireModel):
     revision: UUID
     parent_revision: UUID | None = None
     name: str = Field(min_length=1, max_length=120)
+    name_fr: str = Field(default="", max_length=120, pattern=r"^[^\r\n]*$")
     role_key: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
     description: str = Field(default="", max_length=8192)
     summary: str = Field(default="", max_length=120, pattern=r"^[^\r\n]*$")
@@ -1896,7 +1897,9 @@ class ScriptImplementation(_Implementation):
     category: ClassVar[BlockCategory] = "code"
     language: Literal["python", "shell"]
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    origin: Literal["inline", "machine_file"] = "inline"
+    #: Written only when not "inline": every Script saved before this field existed, and every
+    #: runner or client released before it (extra fields forbidden), reads inline code unchanged.
+    origin: Literal["inline", "machine_file"] = Field(default="inline", exclude_if=lambda origin: origin == "inline")
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
     placements: ClassVar[frozenset[str]] = frozenset({"machine"})
 

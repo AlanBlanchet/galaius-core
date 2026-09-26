@@ -328,6 +328,13 @@
           "title": "Name",
           "type": "string"
         },
+        "name_fr": {
+          "default": "",
+          "maxLength": 120,
+          "pattern": "^[^\\r\\n]*$",
+          "title": "Name Fr",
+          "type": "string"
+        },
         "paradigms": {
           "default": [],
           "items": {
