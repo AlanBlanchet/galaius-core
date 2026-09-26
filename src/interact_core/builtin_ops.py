@@ -193,9 +193,15 @@ class SwitchOp(BuiltinOpSpec):
 
 
 class MergeSettings(_Settings):
-    mode: Literal["append", "combine", "zip", "join"] = Field(default="append", title="Mode", description="append: one list; combine: one object (later keys win); zip: items side by side; join: match the first two lists on a key.")
-    key: str = Field(default="id", max_length=200, title="Join key", description="For 'join': dot path matched in both lists.")
-    keep_unmatched: bool = Field(default=False, title="Keep unmatched (left join)")
+    # `options` / `fr`: the words the editor's settings form shows for each value, and in French.
+    mode: Literal["append", "combine", "zip", "join"] = Field(default="append", title="How to merge", description="One list; one object (later keys win); items side by side; or the first two lists matched on a key.",
+        json_schema_extra={"options": {"append": "One list, one after another", "combine": "One object (later keys win)", "zip": "Items side by side", "join": "Match two lists on a key"},
+                           "fr": {"title": "Comment fusionner", "description": "Une liste ; un objet (les dernières clés gagnent) ; éléments côte à côte ; ou les deux premières listes appariées sur une clé.",
+                                  "options": {"append": "Une liste, à la suite", "combine": "Un objet (les dernières clés gagnent)", "zip": "Éléments côte à côte", "join": "Apparier deux listes sur une clé"}}})
+    key: str = Field(default="id", max_length=200, title="Join key", description="For 'Match two lists on a key': the field matched in both lists (a dot path).",
+        json_schema_extra={"fr": {"title": "Clé d’appariement", "description": "Pour « Apparier deux listes sur une clé » : le champ comparé dans les deux listes (chemin avec des points)."}})
+    keep_unmatched: bool = Field(default=False, title="Keep items with no match",
+        json_schema_extra={"fr": {"title": "Garder les éléments sans correspondance"}})
 
 
 class MergeOp(BuiltinOpSpec):
