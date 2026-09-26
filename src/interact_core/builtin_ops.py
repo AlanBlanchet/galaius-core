@@ -112,14 +112,17 @@ class _TextMap(_Free):
 
 class UppercaseOp(_TextMap):
     op, title, summary, keywords = "uppercase", "Uppercase", "Upper-cases text (each item of a list).", ("capitals", "case")
+    title_fr, summary_fr = "Majuscules", "Met le texte en majuscules (chaque élément d’une liste)."
 
 
 class LowercaseOp(_TextMap):
     op, title, summary, keywords = "lowercase", "Lowercase", "Lower-cases text (each item of a list).", ("case",)
+    title_fr, summary_fr = "Minuscules", "Met le texte en minuscules (chaque élément d’une liste)."
 
 
 class IdentityOp(_TextMap):
     op, title, summary, keywords = "identity", "Pass through", "Passes its value on unchanged.", ("noop", "relay", "identity")
+    title_fr, summary_fr = "Transmettre", "Transmet sa valeur sans la changer."
 
 
 class HttpGetOp(_TextMap):
