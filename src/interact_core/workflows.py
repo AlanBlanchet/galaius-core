@@ -1888,22 +1888,43 @@ class ScriptFile(WireRequest):
 
 class ScriptImplementation(_Implementation):
     """Python or shell code run on one enrolled machine — a code-execution boundary: the machine
-    owner approves the exact `source_digest` before the server dispatches it
+    owner approves the step's exact `approval_digest` before the server dispatches it
     (`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the
-    code comes from: "inline", source written in the editor (`config["source"]`, the digest is its
-    sha256); "machine_file", a script already on the machine (`config` is a `ScriptFile`, the digest
-    is its `invocation_digest`). Any edit — of the code, the file's content, its arguments —
-    changes the digest and re-arms that approval."""
+    code comes from: "inline", source written in the editor (`config["source"]`); "machine_file", a
+    script already on the machine (`config` is a `ScriptFile`). The digest covers what runs AND what
+    runs it: inline code with its language (the language fixes the program: the runner's Python, or
+    uv for declared packages, or /bin/sh), a file with its content, path, arguments, folder and
+    program. Any edit — of the code, its language, the file, how it starts — changes the digest and
+    re-arms that approval."""
 
     kind: Literal["script"]
     category: ClassVar[BlockCategory] = "code"
     language: Literal["python", "shell"]
+    #: The digest pinned when the step was saved. A step saved before approvals covered the language
+    #: holds the bare sha256 of its source (`needs_reapproval`): it still loads, and its old approval
+    #: never counts — approvals are looked up by `approval_digest`, computed from what runs.
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     #: Written only when not "inline": every Script saved before this field existed, and every
     #: runner or client released before it (extra fields forbidden), reads inline code unchanged.
     origin: Literal["inline", "machine_file"] = Field(default="inline", exclude_if=lambda origin: origin == "inline")
     effects: ClassVar[frozenset[str]] = frozenset({"machine"})
     placements: ClassVar[frozenset[str]] = frozenset({"machine"})
+    #: Starts every hashed inline payload: its NUL keeps inline digests apart from the bare sha256
+    #: of any source (source never holds NUL) and from `ScriptFile.DIGEST_TAG` digests.
+    INLINE_DIGEST_TAG: ClassVar[str] = "interact.script.inline.v1\x00"
+
+    @classmethod
+    def inline_digest(cls, language: str, source: str) -> str:
+        """What a machine owner approves for inline code: its language and its exact source, after
+        `INLINE_DIGEST_TAG`, as canonical JSON (sorted keys, no spaces, UTF-8) — the editor computes
+        the same bytes (frontend graph/scriptSource.ts `inlineDigest`)."""
+        payload = json.dumps({"language": language, "source": source}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256((cls.INLINE_DIGEST_TAG + payload).encode()).hexdigest()
+
+    @classmethod
+    def inline(cls, language: Literal["python", "shell"], source: str) -> "ScriptImplementation":
+        """An inline Script step pinned to `source` in `language`."""
+        return cls(kind="script", language=language, source_digest=cls.inline_digest(language, source))
 
     def required_config(self) -> tuple[str, ...]:
         return ("source",) if self.origin == "inline" else ("path", "file_digest")
@@ -1917,17 +1938,35 @@ class ScriptImplementation(_Implementation):
         except ValidationError as error:
             raise ValueError(f"script file settings are invalid: {error.errors()[0]['msg']}") from error
 
+    def approval_digest(self, config: dict[str, WorkflowValue]) -> str:
+        """The digest a machine owner must have approved for this step to run, computed from what
+        runs (never trusted from the stored `source_digest`)."""
+        if self.origin == "machine_file":
+            return self.script_file(config).invocation_digest(self.language)
+        return self.inline_digest(self.language, self._source(config))
+
+    def needs_reapproval(self, config: dict[str, WorkflowValue]) -> bool:
+        """Saved before approvals covered the language: pinned to the bare sha256 of its source."""
+        return self.origin == "inline" and self.source_digest != self.approval_digest(config)
+
     def check_placement(self, placement: "Placement") -> None:
         if self.origin == "machine_file" and placement.machine is None:
             raise ValueError("a script file lives on one machine: choose that machine")
+
+    @staticmethod
+    def _source(config: dict[str, WorkflowValue]) -> str:
+        source = config.get("source")
+        if not isinstance(source, str) or len(source) > 1 << 16 or "\x00" in source:
+            raise ValueError("script node source must be text of at most 64 KiB without NUL characters")
+        return source
 
     def check(self, config: dict[str, WorkflowValue]) -> None:
         if self.origin == "machine_file":
             if self.script_file(config).invocation_digest(self.language) != self.source_digest:
                 raise ValueError("script file settings do not match their pinned digest")
             return
-        source = config.get("source")
-        if not isinstance(source, str) or len(source) > 1 << 16 or "\x00" in source or hashlib.sha256(source.encode()).hexdigest() != self.source_digest:
+        source = self._source(config)
+        if self.source_digest not in {self.inline_digest(self.language, source), hashlib.sha256(source.encode()).hexdigest()}:
             raise ValueError("script node source does not match its pinned digest")
 
 
