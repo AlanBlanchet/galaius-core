@@ -2353,52 +2353,100 @@ class MachineDataAnswer(WireModel):
         return self
 
 
-#: Largest window of one agent run's event stream a MachineAgentRequest `tail` carries.
+#: Largest window of one agent run's event stream a `tail` request carries.
 MACHINE_AGENT_TAIL = 256 * 1024
-MachineAgentOp = Literal["folders", "runs", "tail", "start", "send", "stop"]
-#: The ops that change something on the machine: each request id is accepted once.
-MACHINE_AGENT_ACTIONS: frozenset[str] = frozenset({"start", "send", "stop"})
+#: What an agent started from the web may do on a machine — the launcher's touch scopes
+#: (`interact.agents.vocabulary.TouchScope`), set on the machine by its owner.
+AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
+AgentRole = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 
 
-class MachineAgentRequest(WireRequest):
-    """The machine OWNER, signed in on the web, drives coding agents on one of his computers, the
-    way the editor panel does: list the folders its owner allowed agents in (`folders`, "" root =
-    the agent roots), list / read the runs started this way (`runs`, `tail` from a byte `cursor`),
-    start one in a folder (`start`: `role`, `provider`, `text` = the brief), message it (`send`)
-    or stop it (`stop`). Signed with the machine's key, short-lived, `type` inside the signed
-    payload. The machine refuses anything outside its agent roots and any run it did not start
-    for this channel."""
+class AgentStartSpec(WireRequest):
+    """What the owner asks for when starting an agent on one of his machines: the folder (an agent
+    root, and a path beneath it), the role, the CLI (None: the best available by the role's
+    criterion) and the brief."""
+
+    root: str = Field(min_length=1, max_length=240)
+    path: str = Field(default="", max_length=1024)
+    role: AgentRole
+    provider: Literal["claude", "codex"] | None = None
+    text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
+
+
+class AgentMessageSpec(WireRequest):
+    text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
+
+
+class MachineAgentRequestBase(WireRequest):
+    """The machine OWNER, signed in on the web, drives coding agents on one of his computers the
+    way the editor panel does. One subclass per op, chosen by `op`. Signed with the machine's key,
+    short-lived, `type` inside the signed payload; the machine refuses anything outside its agent
+    roots and any run it did not start for this channel. `action`: changes something there (its
+    id is accepted once, it is audited); `seconds`: how long the server waits for the answer."""
 
     type: Literal["agent_request"] = "agent_request"
     id: UUID
     machine: MachineRef
     workspace_id: UUID
-    op: MachineAgentOp
-    root: str = Field(default="", max_length=240)
-    path: str = Field(default="", max_length=1024)
-    run_id: UUID | None = None
-    cursor: int | None = Field(default=None, ge=0)
-    role: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)
-    provider: Literal["claude", "codex"] | None = None
-    text: str = Field(default="", max_length=8000)
     initiator_account: UUID
     expires_at: datetime
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+    action: ClassVar[bool] = False
+    seconds: ClassVar[float] = 15
+
+
+class AgentFoldersRequest(MachineAgentRequestBase):
+    """The agent roots and the roles the machine can start ("" root), or the plain folders beneath one."""
+
+    op: Literal["folders"] = "folders"
+    root: str = Field(default="", max_length=240)
+    path: str = Field(default="", max_length=1024)
 
     @model_validator(mode="after")
-    def coherent(self) -> Self:
-        needs_run = self.op in {"tail", "send", "stop"}
-        if needs_run != (self.run_id is not None):
-            raise ValueError(f"{self.op} {'names' if needs_run else 'names no'} run")
-        if self.op == "start" and not (self.root and self.role and self.text.strip()):
-            raise ValueError("a start names its folder, its role and its brief")
-        if self.op == "send" and not self.text.strip():
-            raise ValueError("a message has text")
-        if self.op not in {"start", "folders"} and (self.root or self.path):
-            raise ValueError(f"{self.op} names no folder")
-        if not self.root and self.path:
+    def beneath_a_root(self) -> Self:
+        if self.path and not self.root:
             raise ValueError("a path lies beneath a root")
         return self
+
+
+class AgentRunsRequest(MachineAgentRequestBase):
+    op: Literal["runs"] = "runs"
+
+
+class AgentTailRequest(MachineAgentRequestBase):
+    """One run's stream after byte `cursor` (None: its last lines)."""
+
+    op: Literal["tail"] = "tail"
+    run_id: UUID
+    cursor: int | None = Field(default=None, ge=0)
+
+
+class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec):
+    op: Literal["start"] = "start"
+    action: ClassVar[bool] = True
+    #: The machine gives its launcher 120 s; the server waits longer, so it never gives up on a
+    #: start that then happens anyway (a retry would start a second agent).
+    seconds: ClassVar[float] = 135
+
+
+class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec):
+    op: Literal["send"] = "send"
+    run_id: UUID
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 75
+
+
+class AgentStopRequest(MachineAgentRequestBase):
+    op: Literal["stop"] = "stop"
+    run_id: UUID
+    action: ClassVar[bool] = True
+
+
+MachineAgentRequest = Annotated[
+    AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest,
+    Field(discriminator="op"),
+]
+MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
 
 
 class MachineAgentRun(WireModel):
@@ -2422,8 +2470,8 @@ class MachineAgentRun(WireModel):
 
 
 class MachineAgentAnswer(WireModel):
-    """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` when no
-    root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
+    """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` and the
+    startable `roles` when no root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
     after the cursor; `start` the new run id; `send` / `stop` a one-line outcome in `detail`."""
 
     request_id: UUID
@@ -2431,7 +2479,9 @@ class MachineAgentAnswer(WireModel):
     roots: tuple[str, ...] = Field(default=(), max_length=32)
     entries: tuple[MachineFileEntry, ...] = Field(default=(), max_length=500)
     truncated: bool = False
-    permission: Literal["read_only", "workspace_write", "full_access"] | None = None
+    permission: AgentTouchScope | None = None
+    #: The roles this machine's launcher can start (its active catalog), with the roots listing.
+    roles: tuple[str, ...] = Field(default=(), max_length=500)
     runs: tuple[MachineAgentRun, ...] = Field(default=(), max_length=200)
     run_id: UUID | None = None
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
