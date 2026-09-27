@@ -9,10 +9,10 @@ workspace API key for the CLI — no new credential kind."""
 import re
 import secrets
 from datetime import datetime
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 from uuid import UUID
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AfterValidator, Field, SecretStr, field_validator
 
 from .wire import WireModel, WireRequest
 from .workflows import MachineSummary, WorkspaceApiKeyScope
@@ -46,12 +46,21 @@ class UserCode:
         return code
 
 
+#: A sign-in code as a person typed or read it, held in its canonical XXXX-XXXX form.
+UserCodeText = Annotated[str, AfterValidator(UserCode.normalize)]
+
+#: pending → approved | denied (on /link) → issuing → consumed (the computer collected) → revoked (logout / machine removed).
+DeviceLoginStatus = Literal["pending", "approved", "denied", "issuing", "consumed", "revoked"]
+
+
 class DeviceLoginStart(WireRequest):
     """What the CLI says about the computer asking to join."""
 
     client_name: str
     platform: Literal["linux", "macos", "windows"]
     client_version: str = Field(min_length=1, max_length=40, pattern=r"^[0-9A-Za-z.+-]+$")
+    #: The CLI may also start workflow runs (`interact login --allow-runs`); otherwise it only reads.
+    runs: bool = False
 
     @field_validator("client_name", mode="before")
     @classmethod
@@ -70,11 +79,15 @@ class DeviceLoginStart(WireRequest):
 
 class DeviceLoginStarted(WireModel):
     device_code: SecretStr
-    user_code: str
+    user_code: UserCodeText
     verification_uri: str
     verification_uri_complete: str
     expires_in: int = Field(gt=0)
     interval: int = Field(gt=0)
+
+    def revealed(self) -> dict[str, object]:
+        """The JSON body a server sends (the device code written out: only the asking computer gets it)."""
+        return {**self.model_dump(mode="json"), "device_code": self.device_code.get_secret_value()}
 
 
 class DeviceLoginWorkspace(WireModel):
@@ -85,7 +98,7 @@ class DeviceLoginWorkspace(WireModel):
 class DeviceLoginView(WireModel):
     """What the signed-in person sees before allowing a computer in."""
 
-    user_code: str
+    user_code: UserCodeText
     client_name: str
     platform: Literal["linux", "macos", "windows"]
     client_version: str
@@ -104,8 +117,9 @@ class DeviceLoginView(WireModel):
 
 class DeviceLoginApproval(WireRequest):
     workspace_id: UUID
-    #: The code as the person typed it; required when `DeviceLoginView.same_network` is false.
-    confirm_code: str | None = Field(default=None, max_length=16)
+    #: What the person typed as the code, kept as typed: required when `DeviceLoginView.same_network`
+    #: is false, and a mistyped one is refused like a wrong one (`verification_failed`), not as a form error.
+    confirm_code: str | None = Field(default=None, max_length=32)
 
 
 class DeviceTokenRequest(WireRequest):
@@ -113,6 +127,12 @@ class DeviceTokenRequest(WireRequest):
 
 
 DeviceTokenError = Literal["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant"]
+
+
+class DeviceTokenRefusal(WireModel):
+    """The token endpoint's answer (HTTP 400) while it issues nothing."""
+
+    error: DeviceTokenError
 
 
 class DeviceLoginKey(WireModel):
