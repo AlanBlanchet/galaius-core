@@ -2353,6 +2353,92 @@ class MachineDataAnswer(WireModel):
         return self
 
 
+#: Largest window of one agent run's event stream a MachineAgentRequest `tail` carries.
+MACHINE_AGENT_TAIL = 256 * 1024
+MachineAgentOp = Literal["folders", "runs", "tail", "start", "send", "stop"]
+#: The ops that change something on the machine: each request id is accepted once.
+MACHINE_AGENT_ACTIONS: frozenset[str] = frozenset({"start", "send", "stop"})
+
+
+class MachineAgentRequest(WireRequest):
+    """The machine OWNER, signed in on the web, drives coding agents on one of his computers, the
+    way the editor panel does: list the folders its owner allowed agents in (`folders`, "" root =
+    the agent roots), list / read the runs started this way (`runs`, `tail` from a byte `cursor`),
+    start one in a folder (`start`: `role`, `provider`, `text` = the brief), message it (`send`)
+    or stop it (`stop`). Signed with the machine's key, short-lived, `type` inside the signed
+    payload. The machine refuses anything outside its agent roots and any run it did not start
+    for this channel."""
+
+    type: Literal["agent_request"] = "agent_request"
+    id: UUID
+    machine: MachineRef
+    workspace_id: UUID
+    op: MachineAgentOp
+    root: str = Field(default="", max_length=240)
+    path: str = Field(default="", max_length=1024)
+    run_id: UUID | None = None
+    cursor: int | None = Field(default=None, ge=0)
+    role: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)
+    provider: Literal["claude", "codex"] | None = None
+    text: str = Field(default="", max_length=8000)
+    initiator_account: UUID
+    expires_at: datetime
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        needs_run = self.op in {"tail", "send", "stop"}
+        if needs_run != (self.run_id is not None):
+            raise ValueError(f"{self.op} {'names' if needs_run else 'names no'} run")
+        if self.op == "start" and not (self.root and self.role and self.text.strip()):
+            raise ValueError("a start names its folder, its role and its brief")
+        if self.op == "send" and not self.text.strip():
+            raise ValueError("a message has text")
+        if self.op not in {"start", "folders"} and (self.root or self.path):
+            raise ValueError(f"{self.op} names no folder")
+        if not self.root and self.path:
+            raise ValueError("a path lies beneath a root")
+        return self
+
+
+class MachineAgentRun(WireModel):
+    """One run the machine started for the web, as the machine's registry has it now."""
+
+    run_id: UUID
+    name: str = Field(max_length=120)
+    role: str | None = Field(default=None, max_length=80)
+    provider: str = Field(max_length=40)
+    model: str | None = Field(default=None, max_length=120)
+    status: str = Field(max_length=40)
+    root: str = Field(max_length=240)
+    path: str = Field(default="", max_length=1024)
+    task: str = Field(default="", max_length=8000)
+    last: str = Field(default="", max_length=400)
+    started_at: float = Field(ge=0)
+    finished_at: float | None = Field(default=None, ge=0)
+    cost_usd: float | None = Field(default=None, ge=0)
+    #: Set for a run a web-started run launched itself (its tree's root is `parent`).
+    parent_run_id: UUID | None = None
+
+
+class MachineAgentAnswer(WireModel):
+    """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` when no
+    root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
+    after the cursor; `start` the new run id; `send` / `stop` a one-line outcome in `detail`."""
+
+    request_id: UUID
+    error: str | None = Field(default=None, max_length=400)
+    roots: tuple[str, ...] = Field(default=(), max_length=32)
+    entries: tuple[MachineFileEntry, ...] = Field(default=(), max_length=500)
+    truncated: bool = False
+    permission: Literal["read_only", "workspace_write", "full_access"] | None = None
+    runs: tuple[MachineAgentRun, ...] = Field(default=(), max_length=200)
+    run_id: UUID | None = None
+    lines: tuple[str, ...] = Field(default=(), max_length=4000)
+    cursor: int | None = Field(default=None, ge=0)
+    detail: str = Field(default="", max_length=400)
+
+
 def _port_slug(label: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "node"
     return slug if slug[0].isalpha() else f"n_{slug}"
