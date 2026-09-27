@@ -2359,6 +2359,12 @@ MACHINE_AGENT_TAIL = 256 * 1024
 #: (`interact.agents.vocabulary.TouchScope`), set on the machine by its owner.
 AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
 AgentRole = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
+AgentModelId = Annotated[str, Field(pattern=r"^[A-Za-z0-9._:/@+-]+$", min_length=1, max_length=256)]
+AgentProvider = Literal["claude", "codex"]
+#: `agent`: a role run by the launcher (`interact agents spawn`); `session`: an open conversation
+#: like the editor's chat, which ASKS before a command or a file change (the approvals the web
+#: answers); `continued`: a copy of one of the owner's own editor conversations, continued here.
+AgentRunKind = Literal["agent", "session", "continued"]
 
 
 class AgentStartSpec(WireRequest):
@@ -2368,9 +2374,20 @@ class AgentStartSpec(WireRequest):
 
     root: str = Field(min_length=1, max_length=240)
     path: str = Field(default="", max_length=1024)
-    role: AgentRole
-    provider: Literal["claude", "codex"] | None = None
+    kind: Literal["agent", "session"] = "agent"
+    #: The role an `agent` runs as; a `session` has none.
+    role: AgentRole | None = None
+    provider: AgentProvider | None = None
+    #: A model this machine offers (`MachineAgentAnswer.models` / `session_models`); None: the
+    #: role's criterion (agent) or the route's default (session) decides.
+    model: AgentModelId | None = None
     text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
+
+    @model_validator(mode="after")
+    def role_for_an_agent(self) -> Self:
+        if (self.kind == "agent") != (self.role is not None):
+            raise ValueError("an agent names its role; a session names none")
+        return self
 
 
 class AgentMessageSpec(WireRequest):
@@ -2442,11 +2459,94 @@ class AgentStopRequest(MachineAgentRequestBase):
     action: ClassVar[bool] = True
 
 
+class AgentOptionsRequest(MachineAgentRequestBase):
+    """What can be started here: roles, models per CLI, and whether a session can open."""
+
+    op: Literal["options"] = "options"
+    seconds: ClassVar[float] = 45
+
+
+class AgentAnswerSpec(WireRequest):
+    """The owner's answer to one approval a session asked for (`AgentInteraction`)."""
+
+    interaction_id: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9._:@+-]+$")
+    values: dict[Annotated[str, Field(max_length=160)], str | bool] = Field(max_length=32)
+
+
+class AgentAnswerRequest(MachineAgentRequestBase, AgentAnswerSpec):
+    op: Literal["answer"] = "answer"
+    run_id: UUID
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 30
+
+
+class AgentSessionsRequest(MachineAgentRequestBase):
+    """The owner's own editor conversations whose folder lies inside an agent root."""
+
+    op: Literal["sessions"] = "sessions"
+    seconds: ClassVar[float] = 30
+
+
+class AgentContinueRequest(MachineAgentRequestBase, AgentMessageSpec):
+    """Continue one of the owner's editor conversations here: a copy of it resumes with `text`;
+    the editor's own conversation is never written to."""
+
+    op: Literal["continue"] = "continue"
+    session_id: UUID
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 135
+
+
+class AgentLogsRequest(MachineAgentRequestBase):
+    """The machine connection's recent log lines, or one run's error output (`run_id`)."""
+
+    op: Literal["logs"] = "logs"
+    run_id: UUID | None = None
+
+
 MachineAgentRequest = Annotated[
-    AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest,
+    AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
+    | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
+
+
+class AgentInteractionField(WireModel):
+    key: str = Field(min_length=1, max_length=160)
+    kind: Literal["choice", "text", "boolean"]
+    label: str = Field(min_length=1, max_length=500)
+    required: bool = True
+    options: tuple[str, ...] = Field(default=(), max_length=32)
+
+
+class AgentInteraction(WireModel):
+    """An approval a session is waiting for: a command to run, a file change, a question."""
+
+    id: str = Field(min_length=1, max_length=160)
+    kind: Literal["command_approval", "file_change_approval", "user_input", "permission_approval"]
+    title: str = Field(min_length=1, max_length=500)
+    fields: tuple[AgentInteractionField, ...] = Field(min_length=1, max_length=32)
+    disclosure: tuple[str, ...] = Field(default=(), max_length=32)
+
+
+class MachineAgentModel(WireModel):
+    provider: str = Field(max_length=40)
+    model: str = Field(max_length=256)
+
+
+class MachineAgentSession(WireModel):
+    """One of the owner's own editor conversations on this machine."""
+
+    session_id: UUID
+    provider: str = Field(max_length=40)
+    title: str = Field(default="", max_length=400)
+    last: str = Field(default="", max_length=400)
+    root: str = Field(max_length=240)
+    path: str = Field(default="", max_length=1024)
+    updated_at: float = Field(ge=0)
+    #: Open in the editor right now (continuing makes a copy; the editor's is never written to).
+    live: bool = False
 
 
 class MachineAgentRun(WireModel):
@@ -2467,6 +2567,9 @@ class MachineAgentRun(WireModel):
     cost_usd: float | None = Field(default=None, ge=0)
     #: Set for a run a web-started run launched itself (its tree's root is `parent`).
     parent_run_id: UUID | None = None
+    kind: AgentRunKind = "agent"
+    #: Approvals this session waits for, oldest first.
+    pending: tuple[AgentInteraction, ...] = Field(default=(), max_length=16)
 
 
 class MachineAgentAnswer(WireModel):
@@ -2482,6 +2585,11 @@ class MachineAgentAnswer(WireModel):
     permission: AgentTouchScope | None = None
     #: The roles this machine's launcher can start (its active catalog), with the roots listing.
     roles: tuple[str, ...] = Field(default=(), max_length=500)
+    #: `options`: models an agent can be started on, per CLI, best first; a session's route.
+    models: tuple[MachineAgentModel, ...] = Field(default=(), max_length=500)
+    session_models: tuple[str, ...] = Field(default=(), max_length=200)
+    session_reason: str = Field(default="", max_length=500)
+    sessions: tuple[MachineAgentSession, ...] = Field(default=(), max_length=100)
     runs: tuple[MachineAgentRun, ...] = Field(default=(), max_length=200)
     run_id: UUID | None = None
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
