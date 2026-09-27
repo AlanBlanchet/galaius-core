@@ -12,6 +12,19 @@ from .tool_usage import (
     ToolUsageTotals,
 )
 from .releases import ChangelogEntry, ReleaseInfo
+from .device_login import (
+    DeviceLoginApproval,
+    DeviceLoginIssued,
+    DeviceLoginKey,
+    DeviceLoginStart,
+    DeviceLoginStarted,
+    DeviceLoginView,
+    DeviceLoginWorkspace,
+    DeviceLogout,
+    DeviceTokenError,
+    DeviceTokenRequest,
+    UserCode,
+)
 from .accounts import (
     Account,
     AccountUpdate,
@@ -228,6 +241,7 @@ __all__ = [
     "MachineRef", "MachineRuntime", "MachineAccelerator", "MachineFunctionSummary", "MachineSummary", "plain_file_roots", "MachineCreateRequest", "MachineCreated", "MachineCommand", "MachineCommandResult", "MachineEvent", "MachineFileQuery", "MachineFileEntry", "MachineGitOrigin", "MachineFileListing", "MachineFileQueryResult", "MachineDataRequest", "MachineDataAnswer", "MACHINE_DATA_CHUNK", "ScriptFile",
     "CloudInstanceType", "CloudLaunchRequest", "CloudMachine", "CloudMachineState", "CloudProviderKind", "MachineResources", "MachineSovereignty", "MachineSovereigntyUpdate", "PlacementDecision", "ResourceRequirement", "WorkspaceCloudLimits", "cheapest_fit", "choose_placement", "meets_tier", "node_sovereignty_record", "resources_fit",
     "WorkspaceApiKeyCreate", "WorkspaceApiKeyCreated", "WorkspaceApiKeySummary",
+    "DeviceLoginApproval", "DeviceLoginIssued", "DeviceLoginKey", "DeviceLoginStart", "DeviceLoginStarted", "DeviceLoginView", "DeviceLoginWorkspace", "DeviceLogout", "DeviceTokenError", "DeviceTokenRequest", "UserCode",
     "ValuePreview", "VALUE_PREVIEW_MAX_PIXELS", "VALUE_PREVIEW_MAX_BYTES",
     "UserModel", "UserModelOrigin", "UserModelOriginKind", "UserModelRef",
     "CREDIT_KINDS", "DEBIT_KINDS", "ENTITLED_STATUSES", "AutoTopUpFailure", "AutoTopUpFailureReason", "AutoTopUpPolicy", "AutoTopUpPolicyUpdate",
