@@ -2470,6 +2470,9 @@ class AgentAnswerSpec(WireRequest):
     """The owner's answer to one approval a session asked for (`AgentInteraction`)."""
 
     interaction_id: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9._:@+-]+$")
+    #: `AgentInteraction.digest` of the request the owner saw: the machine refuses the answer if
+    #: what is pending there differs (another command, another change).
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     values: dict[Annotated[str, Field(max_length=160)], str | bool] = Field(max_length=32)
 
 
@@ -2528,6 +2531,8 @@ class AgentInteraction(WireModel):
     title: str = Field(min_length=1, max_length=500)
     fields: tuple[AgentInteractionField, ...] = Field(min_length=1, max_length=32)
     disclosure: tuple[str, ...] = Field(default=(), max_length=32)
+    #: sha256 of everything above as the machine holds it; an answer carries it back.
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class MachineAgentModel(WireModel):
