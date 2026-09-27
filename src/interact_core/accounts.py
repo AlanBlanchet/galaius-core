@@ -66,6 +66,9 @@ class Workspace(WireModel):
     """A coarse label DERIVED from the member's company permissions (`CompanyAccess.role`), kept
     because released clients require it: rights themselves are `CompanyAccess.permissions`,
     never this label."""
+    #: The company made with the account, still under the name the server gave it: a client shows
+    #: it in the reader's own language instead of that stored name.
+    is_default: bool = False
 
 
 class CompanyAccess(WireModel):

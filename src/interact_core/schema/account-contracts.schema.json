@@ -1155,6 +1155,11 @@
     "Workspace": {
       "additionalProperties": true,
       "properties": {
+        "is_default": {
+          "default": false,
+          "title": "Is Default",
+          "type": "boolean"
+        },
         "name": {
           "maxLength": 120,
           "minLength": 1,
