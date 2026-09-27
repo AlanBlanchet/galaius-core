@@ -8,10 +8,10 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, create_model
 
 import interact_core
-from interact_core import AgentCatalogSnapshot, AgentGraphUpdate, AgentRevision, PromptExecutionRef, PromptKey, PromptRevision
+from interact_core import AgentCatalogSnapshot, AgentGraphUpdate, AgentRevision, PromptExecutionRef, PromptKey, PromptRevision, WorkflowNode, WorkflowRevision
 from interact_core.builtin_ops import _Settings
 from interact_core.wire import ContractDump, ContractView, WireModel, WireRequest
 
@@ -126,3 +126,36 @@ def test_a_catalog_from_a_writer_without_a_defaulted_field_verifies() -> None:
     older_writer = json.loads(snapshot.model_dump_json(exclude_defaults=True))
     assert "summary_fr" not in older_writer["agents"][0]
     assert AgentCatalogSnapshot.model_validate(older_writer) == snapshot
+
+
+def test_carry_refuses_an_edit_conflicting_with_a_preserved_policy() -> None:
+    node = WorkflowNode(id=uuid4(), label="Script", x=0, y=0,
+                        impl={"kind": "script", "language": "python", "source_digest": hashlib.sha256(b"print(1)").hexdigest()},
+                        config={"source": "print(1)"}, placement={"target": "machine", "machine": {"id": uuid4()}},
+                        ports=({"name": "value", "direction": "input", "value_type": "text"},), policy={"join": {"value": "any"}})
+    stored = WorkflowRevision(key={"id": uuid4()}, revision=uuid4(), name="Work", nodes=(node,), edges=(), interface={}, created_at=datetime.now(UTC))
+    view = older("WorkflowNode.policy")
+    raw = view.project(stored, stored.model_dump(mode="json"))
+    raw.update(revision=str(uuid4()), parent_revision=str(stored.revision))
+    raw["nodes"][0]["ports"] = []
+    edit = WorkflowRevision.model_validate(raw)
+    carried, missed = view.carry(edit, {WorkflowRevision: lambda _: stored})
+    assert (carried, missed) == (edit, ("WorkflowNode.policy",))  # named: the server answers 426
+
+
+@pytest.mark.parametrize("new_field", ["", "new value"])
+def test_catalog_hash_matches_wire_bytes_with_different_reader_writer_schemas(new_field) -> None:
+    # A genuinely newer agent schema; the older reader retains its unknown default as an extra.
+    WriterAgent = create_model("WriterAgent", __base__=AgentRevision, newer_default=(str, ""))
+    WriterCatalog = create_model("WriterCatalog", __base__=AgentCatalogSnapshot, agents=(tuple[WriterAgent, ...], ...))
+    lead, prompt = agent()
+    newer = WriterAgent.model_validate({**lead.model_dump(), "newer_default": new_field})
+    snapshot = WriterCatalog.create((newer,), (prompt,))
+    for raw in (snapshot.model_dump(mode="json"), json.loads(snapshot.model_dump_json())):
+        assert raw["cursor"] == AgentCatalogSnapshot.content_cursor(raw)
+        assert AgentCatalogSnapshot.model_validate(raw).cursor == snapshot.cursor
+        # Models added to a newer reader also cannot change what an older writer sealed.
+        NewReader = create_model("NewReader", __base__=AgentCatalogSnapshot, agents=(tuple[WriterAgent, ...], ...))
+        assert NewReader.model_validate(raw).cursor == snapshot.cursor
+    # Sealing never takes over a caller's own dump options or the contract's schema.
+    assert "cursor" not in snapshot.model_dump(exclude={"cursor"}) and "agents" in AgentCatalogSnapshot.model_json_schema(mode="serialization")["properties"]

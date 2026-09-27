@@ -13,7 +13,7 @@ from interact_core import (
     WorkflowNode, model_task_ports, value_type_accepts, provider_sovereignty, workflow_sovereignty,
     NodeSovereigntyRecord, SovereigntyRequired, actual_workflow_sovereignty, meets_requirement, workflow_data_tier,
 )
-from interact_core.workflows import ValueType
+from interact_core.workflows import ScriptImplementation, ValueType
 
 
 def port(name, direction, value_type="text", **extra):
@@ -24,6 +24,19 @@ MACHINE = {"id": str(uuid4())}
 ON_MACHINE = {"target": "machine", "machine": MACHINE}
 SOURCE = "print('hi')"
 DIGEST = hashlib.sha256(SOURCE.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("language", ["python", "shell"])
+def test_script_source_pin_stays_content_only_and_approval_binds_language(language) -> None:
+    impl = ScriptImplementation.inline(language, SOURCE)
+    assert impl.source_digest == DIGEST
+    impl.check({"source": SOURCE})
+    approvals = {ScriptImplementation.inline(kind, SOURCE).approval_digest({"source": SOURCE}) for kind in ("python", "shell")}
+    assert len(approvals) == 2 and DIGEST not in approvals
+    with pytest.raises(ValueError, match="pinned digest"):
+        impl.model_copy(update={"source_digest": impl.approval_digest({"source": SOURCE})}).check({"source": SOURCE})
+    with pytest.raises(ValueError, match="pinned digest"):
+        impl.check({"source": SOURCE + "\n"})
 CONNECTION = {"id": str(uuid4()), "revision": str(uuid4()), "capability": "write"}
 TOOL = {"kind": "http", "name": "lookup", "description": "Look up", "method": "POST", "path": "v1/items", "connection": {**CONNECTION, "capability": "http"}, "json_body_from_arguments": True, "input_schema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": []}}
 #: One realistic node per implementation: (impl, ports, config, placement, effects).

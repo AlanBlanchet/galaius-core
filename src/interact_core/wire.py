@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 M = TypeVar("M")
 
@@ -124,10 +124,22 @@ class ContractView(BaseModel):
                     update[name] = getattr(stored, name)
                 elif not covered:
                     missed.append(f"{model.__name__}.{name}")
+            restored = tuple(update)
             for name in model.model_fields:
                 if name not in update and (carried := self._carry(child := getattr(value, name), getattr(stored, name, None), covered, parents, missed)) is not child:
                     update[name] = carried
-            return value.model_copy(update=update) if update else value
+            if not update:
+                return value
+            # `model_copy` skips validation, and a restored field can contradict the edit (a join
+            # rule naming a port the edit removed): the merge is validated whole. Refused, it is
+            # named (the server answers 426), never stored. `merged` keeps what the sender set.
+            merged = value.model_copy(update=update)
+            try:
+                model.model_validate({name: getattr(merged, name) for name in model.model_fields} | (merged.model_extra or {}), by_name=True)
+            except ValidationError:
+                missed.extend([f"{model.__name__}.{name}" for name in restored] or [model.__name__])
+                return value
+            return merged
         if isinstance(value, (tuple, list)):
             pool = stored if isinstance(stored, (tuple, list)) else ()
             items = [self._carry(item, self._counterpart(item, pool), covered, parents, missed) for item in value]

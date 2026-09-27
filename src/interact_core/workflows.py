@@ -10,7 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -1470,6 +1470,17 @@ class AgentCatalogSnapshot(WireModel):
     prompt_heads: tuple[PromptExecutionRef, ...] = ()
     cursor: str = Field(pattern=r"^[0-9a-f]{64}$")
 
+    @model_serializer(mode="wrap")
+    def sealed_content(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo):
+        """Every dump, nested in any response too, is the default-free content the cursor seals: a
+        reader whose release lacks a defaulted field would keep it as an extra and hash it."""
+        if info.exclude_defaults:
+            return handler(self)
+        return self.model_dump(mode=info.mode, include=info.include, exclude=info.exclude, context=info.context, by_alias=info.by_alias,
+                               exclude_unset=info.exclude_unset, exclude_none=info.exclude_none, exclude_computed_fields=info.exclude_computed_fields,
+                               round_trip=info.round_trip, serialize_as_any=info.serialize_as_any, polymorphic_serialization=info.polymorphic_serialization,
+                               exclude_defaults=True)
+
     @classmethod
     def create(cls, agents: tuple[AgentRevision, ...], paradigms: tuple[PromptRevision, ...],
                root_agent: AgentRevisionRef | None = None,
@@ -1484,9 +1495,8 @@ class AgentCatalogSnapshot(WireModel):
     @staticmethod
     def content_cursor(content: dict[str, Any]) -> str:
         """The cursor sealing a JSON dump: canonical JSON of everything but the cursor, an absent
-        root and empty prompt heads left out. The catalog is sealed over its dump WITHOUT default
-        values, so a reader whose release added a defaulted field hashes what the writer hashed;
-        `projected` reseals a full dump, the rule releases before that one check."""
+        root and empty prompt heads left out. What is sent is what is sealed (`canonical_content`);
+        a projection for an older reader reseals what it sends (`projected`)."""
         payload = {key: value for key, value in content.items() if key != "cursor"
                    and not (key == "root_agent" and value is None) and not (key == "prompt_heads" and not value)}
         return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
@@ -1900,9 +1910,8 @@ class ScriptImplementation(_Implementation):
     kind: Literal["script"]
     category: ClassVar[BlockCategory] = "code"
     language: Literal["python", "shell"]
-    #: The digest pinned when the step was saved. A step saved before approvals covered the language
-    #: holds the bare sha256 of its source (`needs_reapproval`): it still loads, and its old approval
-    #: never counts — approvals are looked up by `approval_digest`, computed from what runs.
+    #: Inline code: the sha256 of its source, as every released runner checks it. A machine file:
+    #: its `invocation_digest`. What an owner approves is `approval_digest`, never this pin.
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     #: Written only when not "inline": every Script saved before this field existed, and every
     #: runner or client released before it (extra fields forbidden), reads inline code unchanged.
@@ -1924,7 +1933,7 @@ class ScriptImplementation(_Implementation):
     @classmethod
     def inline(cls, language: Literal["python", "shell"], source: str) -> "ScriptImplementation":
         """An inline Script step pinned to `source` in `language`."""
-        return cls(kind="script", language=language, source_digest=cls.inline_digest(language, source))
+        return cls(kind="script", language=language, source_digest=hashlib.sha256(source.encode()).hexdigest())
 
     def required_config(self) -> tuple[str, ...]:
         return ("source",) if self.origin == "inline" else ("path", "file_digest")
@@ -1945,10 +1954,6 @@ class ScriptImplementation(_Implementation):
             return self.script_file(config).invocation_digest(self.language)
         return self.inline_digest(self.language, self._source(config))
 
-    def needs_reapproval(self, config: dict[str, WorkflowValue]) -> bool:
-        """Saved before approvals covered the language: pinned to the bare sha256 of its source."""
-        return self.origin == "inline" and self.source_digest != self.approval_digest(config)
-
     def check_placement(self, placement: "Placement") -> None:
         if self.origin == "machine_file" and placement.machine is None:
             raise ValueError("a script file lives on one machine: choose that machine")
@@ -1966,7 +1971,7 @@ class ScriptImplementation(_Implementation):
                 raise ValueError("script file settings do not match their pinned digest")
             return
         source = self._source(config)
-        if self.source_digest not in {self.inline_digest(self.language, source), hashlib.sha256(source.encode()).hexdigest()}:
+        if self.source_digest != hashlib.sha256(source.encode()).hexdigest():
             raise ValueError("script node source does not match its pinned digest")
 
 
@@ -2296,7 +2301,7 @@ class MachineFileQueryResult(WireModel):
 MACHINE_DATA_CHUNK = 1024 * 1024
 
 
-class MachineDataRequest(BaseModel):
+class MachineDataRequest(WireRequest):
     """The server asks one connected machine about its owner's FILE ROOTS for the Data screen (and
     the agents its owner allowed): list a folder, stat a file, or read one slice of it. Read-only:
     nothing is written, nothing runs. `root` is the file root the request stays beneath ("" only
@@ -2304,7 +2309,6 @@ class MachineDataRequest(BaseModel):
     links, hidden names and anything but a plain file. Signed with the machine's key, short-lived;
     `type` is inside the signed payload so no other signed message can be replayed as this one."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
     type: Literal["data_request"] = "data_request"
     id: UUID
     machine: MachineRef
