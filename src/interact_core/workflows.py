@@ -10,7 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -2289,6 +2289,63 @@ class MachineFileQueryResult(WireModel):
     def one_answer(self) -> Self:
         if (self.listing is None) == (self.error is None):
             raise ValueError("a file query answers a listing or an error")
+        return self
+
+
+#: Largest slice of a file one MachineDataRequest reads (a view reads a file slice by slice).
+MACHINE_DATA_CHUNK = 1024 * 1024
+
+
+class MachineDataRequest(BaseModel):
+    """The server asks one connected machine about its owner's FILE ROOTS for the Data screen (and
+    the agents its owner allowed): list a folder, stat a file, or read one slice of it. Read-only:
+    nothing is written, nothing runs. `root` is the file root the request stays beneath ("" only
+    to list the roots themselves); the machine walks `path` from that root part by part and refuses
+    links, hidden names and anything but a plain file. Signed with the machine's key, short-lived;
+    `type` is inside the signed payload so no other signed message can be replayed as this one."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    type: Literal["data_request"] = "data_request"
+    id: UUID
+    machine: MachineRef
+    workspace_id: UUID
+    op: Literal["list", "stat", "read"]
+    root: str = Field(default="", max_length=240)
+    path: str = Field(default="", max_length=1024)
+    offset: int = Field(default=0, ge=0)
+    length: int = Field(default=0, ge=0, le=MACHINE_DATA_CHUNK)
+    expires_at: datetime
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if not self.root and (self.op != "list" or self.path):
+            raise ValueError("only a listing of the roots names no root")
+        if self.op == "read" and self.length == 0:
+            raise ValueError("a read names how many bytes it wants")
+        return self
+
+
+class MachineDataAnswer(WireModel):
+    """The machine's answer to one MachineDataRequest: a folder's entries, a file's facts, or one
+    slice of it (base64). `identity` ("<device>:<inode>:<mtime_ns>") lets the server refuse a file
+    that changed between two slices."""
+
+    request_id: UUID
+    kind: Literal["file", "folder"] | None = None
+    entries: tuple[MachineFileEntry, ...] = Field(default=(), max_length=500)
+    truncated: bool = False
+    size: int | None = Field(default=None, ge=0)
+    modified_at: datetime | None = None
+    identity: str | None = Field(default=None, max_length=80)
+    offset: int | None = Field(default=None, ge=0)
+    data: str | None = Field(default=None, max_length=(MACHINE_DATA_CHUNK * 4) // 3 + 8)
+    error: str | None = Field(default=None, max_length=400)
+
+    @model_validator(mode="after")
+    def one_answer(self) -> Self:
+        if (self.error is None) == (self.kind is None):
+            raise ValueError("a data request answers facts or an error")
         return self
 
 
