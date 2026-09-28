@@ -61,8 +61,17 @@ rights to accounts, product entitlements to workspaces; `company` = one company'
 that company's member accounts. A key may be grantable in both (`workflows.run`: the platform
 decides whether a workspace's plan may run workflows, the company decides which members may)."""
 
-MemberKind = Literal["account", "workspace"]
+MemberKind = Literal["account", "workspace", "agent"]
+"""`agent`: an agent placed in a company DEPARTMENT (never a rights-bearing member: a department
+gives its agents no permission, it says which part of the company runs them)."""
 MembershipSource = Literal["manual", "subscription"]
+
+GroupKind = Literal["group", "department"]
+"""`group`: an access group (Owners, Admins, Billing...), permissions only. `department`: a part of
+the company (Sales, Support...) — same permissions its PEOPLE inherit, plus a reporting line
+(`parent_id`), an owner (transfers / deletes it) and a manager ("responsable": accountable for it,
+adds and removes its people and the agents they own or manage). Platform groups are always
+`group`."""
 
 
 class PermissionInfo(WireModel):
@@ -114,6 +123,13 @@ class PermissionGroup(WireModel):
     permissions: tuple[Permission, ...] = Field(default=())
     created_at: datetime
     updated_at: datetime
+    kind: GroupKind = "group"
+    parent_id: UUID | None = None
+    """Department it reports to (same company, never a cycle); None = reports to the company."""
+    owner_account_id: UUID | None = None
+    """Department owner (a company member); None for an access group."""
+    manager_account_id: UUID | None = None
+    """Department manager (a company member); None for an access group."""
 
     @model_validator(mode="after")
     def unique_permissions(self) -> Self:
@@ -125,11 +141,28 @@ class PermissionGroup(WireModel):
 class GroupCreate(WireRequest):
     name: str = Field(min_length=1, max_length=120)
     permissions: tuple[Permission, ...] = Field(default=())
+    kind: GroupKind = "group"
+    parent_id: UUID | None = None
+    owner_account_id: UUID | None = None
+    manager_account_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def department_has_stewards(self) -> Self:
+        if self.kind == "department" and (self.owner_account_id is None or self.manager_account_id is None):
+            raise ValueError("a department needs an owner and a manager")
+        if self.kind == "group" and (self.parent_id, self.owner_account_id, self.manager_account_id) != (None, None, None):
+            raise ValueError("only a department has a parent, an owner and a manager")
+        return self
 
 
 class GroupUpdate(WireRequest):
+    """A missing field stays as it is; `parent_id: null` moves a department to the top level."""
+
     name: str | MISSING = MISSING
     permissions: tuple[Permission, ...] | MISSING = MISSING
+    parent_id: UUID | None | MISSING = MISSING
+    owner_account_id: UUID | MISSING = MISSING
+    manager_account_id: UUID | MISSING = MISSING
 
 
 class GroupMembership(WireModel):
@@ -165,3 +198,60 @@ DEFAULT_COMPANY_GROUPS: tuple[GroupCreate, ...] = (
 """Seeded into every company; the old per-workspace roles, one group each (owner-only rights —
 deleting the company, enrolling machines and approving their scripts — stay Owners-only). A
 company renames, edits or deletes them like any group it created itself."""
+
+
+OverrideEffect = Literal["allow", "deny"]
+
+
+class MemberOverride(WireModel):
+    """One per-person exception on top of groups and departments: `allow` adds a right nobody's
+    group gives them, `deny` removes one whatever gives it (deny beats every source)."""
+
+    permission: Permission
+    effect: OverrideEffect
+
+
+class MemberOverridesUpdate(WireRequest):
+    """Full replacement of one member's overrides (an empty tuple clears them)."""
+
+    overrides: tuple[MemberOverride, ...] = Field(default=())
+
+    @model_validator(mode="after")
+    def one_per_permission(self) -> Self:
+        keys = [item.permission for item in self.overrides]
+        if len(set(keys)) != len(keys):
+            raise ValueError("one override per permission")
+        return self
+
+
+RightSourceKind = Literal["group", "department", "allow", "deny", "manager"]
+
+
+class RightSource(WireModel):
+    """WHERE one right comes from (or, `deny`, what takes it away): an access group, a department,
+    a per-person override, or (`manager`) the agent's manager it is capped by."""
+
+    kind: RightSourceKind
+    id: UUID | None = None
+    name: str = Field(min_length=1, max_length=320)
+
+
+class RightExplanation(WireModel):
+    permission: Permission
+    held: bool
+    sources: tuple[RightSource, ...] = Field(default=())
+
+
+class AgentStewards(WireModel):
+    """Who answers for an agent: its OWNER (transfers, deletes, names the manager) and its MANAGER
+    (gives it places, edits it), plus the one department it sits in (None = no department)."""
+
+    agent_id: UUID
+    owner_account_id: UUID
+    manager_account_id: UUID
+    department_id: UUID | None = None
+
+
+class AgentStewardsUpdate(WireRequest):
+    owner_account_id: UUID
+    manager_account_id: UUID

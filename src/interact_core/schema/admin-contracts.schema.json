@@ -78,6 +78,9 @@
             "group.deleted",
             "group_member.added",
             "group_member.removed",
+            "group.department_updated",
+            "member.overrides_set",
+            "agent.stewards_set",
             "migration.operator_accounts_migrated",
             "subscription.group_granted",
             "subscription.group_revoked",
@@ -86,7 +89,13 @@
             "contact_message.deleted",
             "signal.listed",
             "signal.status_changed",
-            "signal.deleted"
+            "signal.deleted",
+            "machine_agent.started",
+            "machine_agent.messaged",
+            "machine_agent.stopped",
+            "machine_agent.answered",
+            "machine_agent.continued",
+            "machine_agent.provider_switched"
           ],
           "title": "Action",
           "type": "string"
@@ -140,7 +149,9 @@
             "group_member",
             "migration",
             "contact_message",
-            "signal"
+            "signal",
+            "machine",
+            "agent"
           ],
           "title": "Target Kind",
           "type": "string"
