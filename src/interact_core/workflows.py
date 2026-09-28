@@ -2410,6 +2410,9 @@ class MachineAgentRequestBase(WireRequest):
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
     action: ClassVar[bool] = False
     seconds: ClassVar[float] = 15
+    #: What the machine's runner must say it supports (its hello's `features`) to be asked this:
+    #: an older runner is told apart from a silent one.
+    feature: ClassVar[str] = "agent_control"
 
 
 class AgentFoldersRequest(MachineAgentRequestBase):
@@ -2510,9 +2513,30 @@ class AgentLogsRequest(MachineAgentRequestBase):
     run_id: UUID | None = None
 
 
+class AgentSettingsRequest(MachineAgentRequestBase):
+    """Which CLIs may run agents here, and the model each of interact's own tools resolves to here
+    (its rule is the owner's, synced from his account; the keys that decide what clears it are this
+    machine's)."""
+
+    op: Literal["settings"] = "settings"
+    seconds: ClassVar[float] = 45
+    feature: ClassVar[str] = "agent_settings"
+
+
+class AgentProviderSwitchRequest(MachineAgentRequestBase):
+    """Let one CLI run agents here, or stop it (VS Code: "Providers That Run Agents")."""
+
+    op: Literal["provider"] = "provider"
+    provider: AgentProvider
+    active: bool
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "agent_settings"
+
+
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
-    | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest,
+    | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
+    | AgentSettingsRequest | AgentProviderSwitchRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -2541,6 +2565,33 @@ class AgentInteraction(WireModel):
 class MachineAgentModel(WireModel):
     provider: str = Field(max_length=40)
     model: str = Field(max_length=256)
+
+
+class AgentProviderState(WireModel):
+    """One CLI interact can drive agents through, on this machine."""
+
+    provider: AgentProvider
+    #: The owner lets it run agents here (unmentioned: on).
+    active: bool
+    #: Its program is installed here.
+    available: bool
+
+
+#: interact's own tools that pick a model by rule: screenshots and images, UI element detection,
+#: video, audio, and the quick (low / medium) review tier.
+ToolModelRole = Literal["image", "component", "video", "audio", "sovereign"]
+
+
+class ToolRoleModels(WireModel):
+    """What one tool's rule resolves to on this machine, best first; `reason` says why nothing (or
+    nothing stronger) clears it here."""
+
+    role: ToolModelRole
+    criterion: str = Field(max_length=4096)
+    #: The owner wrote this rule; False: the built-in default is in force.
+    configured: bool
+    models: tuple[MachineAgentModel, ...] = Field(default=(), max_length=5)
+    reason: str = Field(default="", max_length=600)
 
 
 class MachineAgentSession(WireModel):
@@ -2603,6 +2654,9 @@ class MachineAgentAnswer(WireModel):
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
     cursor: int | None = Field(default=None, ge=0)
     detail: str = Field(default="", max_length=400)
+    #: `settings`: the CLIs agents may run through here, and each tool's model here.
+    providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
+    tool_models: tuple[ToolRoleModels, ...] = Field(default=(), max_length=16)
 
 
 def _port_slug(label: str) -> str:
