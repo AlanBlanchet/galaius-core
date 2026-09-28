@@ -187,6 +187,7 @@
               "billing.manage",
               "workflows.edit",
               "connections.manage",
+              "accounts.connect_own",
               "agents.edit",
               "machines.manage"
             ],

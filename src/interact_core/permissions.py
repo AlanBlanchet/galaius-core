@@ -49,6 +49,7 @@ Permission = Literal[
     "billing.manage",
     "workflows.edit",
     "connections.manage",
+    "accounts.connect_own",
     "agents.edit",
     "machines.manage",
 ]
@@ -110,6 +111,7 @@ PERMISSION_CATALOG: tuple[PermissionInfo, ...] = (
     PermissionInfo(key="billing.manage", label="Manage billing", description="Buy credits, set auto top-up, subscribe or change plan, edit the tax profile, set budgets and reserve machines.", label_fr='Gérer la facturation', description_fr='Acheter des crédits, régler la recharge automatique, s’abonner ou changer de formule, modifier le profil fiscal, fixer les budgets et réserver des machines.', scopes=("company",)),
     PermissionInfo(key="workflows.edit", label="Edit workflows", description="Create, change and delete workflows, their triggers and the node library.", label_fr='Modifier les workflows', description_fr='Créer, modifier et supprimer les workflows, leurs déclencheurs et la bibliothèque de nœuds.', scopes=("company",)),
     PermissionInfo(key="connections.manage", label="Manage connections", description="Add, test and delete connections and their secrets, and link external accounts (Google, Microsoft).", label_fr='Gérer les connexions', description_fr='Ajouter, tester et supprimer les connexions et leurs secrets, et lier des comptes externes (Google, Microsoft).', scopes=("company",)),
+    PermissionInfo(key="accounts.connect_own", label="Connect your own accounts", description="Sign in your own Google or Microsoft account and read it in Data; only you see it.", label_fr="Connecter ses propres comptes", description_fr="Connecter son propre compte Google ou Microsoft et le lire dans Données ; vous seul le voyez.", scopes=("company",)),
     PermissionInfo(key="agents.edit", label="Edit agents", description="Create and change agents, the agent graph, prompts, model preferences and own models.", label_fr='Modifier les agents', description_fr='Créer et modifier les agents, le graphe d’agents, les prompts, les préférences de modèles et les modèles propres.', scopes=("company",)),
     PermissionInfo(key="machines.manage", label="Manage machines", description="Enroll and revoke machines, approve the scripts they run, set their cost rate and pool sharing.", label_fr='Gérer les machines', description_fr='Enrôler et révoquer des machines, approuver leurs scripts, régler leur coût et leur partage.', scopes=("company",)),
 )
@@ -155,14 +157,27 @@ class GroupCreate(WireRequest):
         return self
 
 
-class GroupUpdate(WireRequest):
-    """A missing field stays as it is; `parent_id: null` moves a department to the top level."""
+class DepartmentUpdate(WireRequest):
+    """A department's reporting line, owner and manager; a missing field stays as it is,
+    `parent_id: null` moves the department to the top level."""
 
-    name: str | MISSING = MISSING
-    permissions: tuple[Permission, ...] | MISSING = MISSING
     parent_id: UUID | None | MISSING = MISSING
     owner_account_id: UUID | MISSING = MISSING
     manager_account_id: UUID | MISSING = MISSING
+
+    def changes(self) -> dict[str, UUID | None]:
+        """Only the fields this update carries (column name -> value)."""
+        return {key: getattr(self, key) for key in DepartmentUpdate.model_fields if getattr(self, key) is not MISSING}
+
+
+class GroupUpdate(DepartmentUpdate):
+    """A missing field stays as it is (the department fields: `DepartmentUpdate`)."""
+
+    name: str | MISSING = MISSING
+    permissions: tuple[Permission, ...] | MISSING = MISSING
+
+    def department(self) -> DepartmentUpdate:
+        return DepartmentUpdate(**self.changes())
 
 
 class GroupMembership(WireModel):
@@ -192,12 +207,13 @@ class EffectivePermissions(WireModel):
 DEFAULT_COMPANY_GROUPS: tuple[GroupCreate, ...] = (
     GroupCreate(name="Owners", permissions=tuple(item.key for item in PERMISSION_CATALOG if "company" in item.scopes)),
     GroupCreate(name="Admins", permissions=tuple(item.key for item in PERMISSION_CATALOG if "company" in item.scopes and item.key not in ("company.delete", "machines.manage"))),
-    GroupCreate(name="Members", permissions=("billing.view", "workflows.edit", "workflows.run", "connections.manage", "agents.edit")),
+    GroupCreate(name="Members", permissions=("billing.view", "workflows.edit", "workflows.run", "accounts.connect_own", "agents.edit")),
     GroupCreate(name="Viewers", permissions=("billing.view",)),
 )
 """Seeded into every company; the old per-workspace roles, one group each (owner-only rights —
-deleting the company, enrolling machines and approving their scripts — stay Owners-only). A
-company renames, edits or deletes them like any group it created itself."""
+deleting the company, enrolling machines and approving their scripts — stay Owners-only). Members
+connect their OWN accounts but do not read every company place (`connections.manage`: Owners +
+Admins). A company renames, edits or deletes them like any group it created itself."""
 
 
 OverrideEffect = Literal["allow", "deny"]
