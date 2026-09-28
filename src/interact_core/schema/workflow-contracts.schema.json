@@ -3680,7 +3680,7 @@
     },
     "ScriptImplementation": {
       "additionalProperties": true,
-      "description": "Python or shell code run on one enrolled machine \u2014 a code-execution boundary: the machine\nowner approves the exact `source_digest` before the server dispatches it\n(`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the\ncode comes from: \"inline\", source written in the editor (`config[\"source\"]`, the digest is its\nsha256); \"machine_file\", a script already on the machine (`config` is a `ScriptFile`, the digest\nis its `invocation_digest`). Any edit \u2014 of the code, the file's content, its arguments \u2014\nchanges the digest and re-arms that approval.",
+      "description": "Python, shell, PowerShell or cmd code run on one enrolled machine \u2014 a code-execution boundary: the machine\nowner approves the step's exact `approval_digest` before the server dispatches it\n(`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the\ncode comes from: \"inline\", source written in the editor (`config[\"source\"]`); \"machine_file\", a\nscript already on the machine (`config` is a `ScriptFile`). The digest covers what runs AND what\nruns it: inline code with its language (the language fixes the program, `ScriptLanguage`), a file with its content, path, arguments, folder and\nprogram. Any edit \u2014 of the code, its language, the file, how it starts \u2014 changes the digest and\nre-arms that approval.",
       "properties": {
         "kind": {
           "const": "script",
@@ -3690,7 +3690,9 @@
         "language": {
           "enum": [
             "python",
-            "shell"
+            "shell",
+            "powershell",
+            "cmd"
           ],
           "title": "Language",
           "type": "string"

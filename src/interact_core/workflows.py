@@ -1865,8 +1865,8 @@ class ScriptFile(WireRequest):
     args: tuple[Annotated[str, Field(max_length=4096)], ...] = Field(default=(), max_length=32)
     #: The folder it starts in; None: the script's own folder.
     cwd: str | None = Field(default=None, min_length=1, max_length=1024)
-    #: The program that runs it (a command name or an absolute path); None: `python3` or `/bin/sh`
-    #: by the node's language (a Python script declaring packages, PEP 723, runs through uv).
+    #: The program that runs it (a command name or an absolute path); None: the language's own
+    #: program on that machine (`ScriptLanguage`; a Python script declaring packages, PEP 723, runs through uv).
     interpreter: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[^\s\x00]+$")
 
     @field_validator("path", "cwd")
@@ -1896,20 +1896,26 @@ class ScriptFile(WireRequest):
         return hashlib.sha256((self.DIGEST_TAG + json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)).encode()).hexdigest()
 
 
+#: What a Script step is written in; each fixes the program that runs it on the machine: Python (the
+#: runner's own, or uv for declared packages), shell (`/bin/sh`: Linux / macOS), PowerShell (`pwsh`,
+#: else Windows PowerShell), cmd (Windows only). A machine says which it runs (`script:<language>`
+#: among its features); a step never lands on one that does not.
+ScriptLanguage = Literal["python", "shell", "powershell", "cmd"]
+
+
 class ScriptImplementation(_Implementation):
-    """Python or shell code run on one enrolled machine — a code-execution boundary: the machine
+    """Python, shell, PowerShell or cmd code run on one enrolled machine — a code-execution boundary: the machine
     owner approves the step's exact `approval_digest` before the server dispatches it
     (`MachineStore.script_approved`), on top of the per-command signature. `origin` says where the
     code comes from: "inline", source written in the editor (`config["source"]`); "machine_file", a
     script already on the machine (`config` is a `ScriptFile`). The digest covers what runs AND what
-    runs it: inline code with its language (the language fixes the program: the runner's Python, or
-    uv for declared packages, or /bin/sh), a file with its content, path, arguments, folder and
+    runs it: inline code with its language (the language fixes the program, `ScriptLanguage`), a file with its content, path, arguments, folder and
     program. Any edit — of the code, its language, the file, how it starts — changes the digest and
     re-arms that approval."""
 
     kind: Literal["script"]
     category: ClassVar[BlockCategory] = "code"
-    language: Literal["python", "shell"]
+    language: ScriptLanguage
     #: Inline code: the sha256 of its source, as every released runner checks it. A machine file:
     #: its `invocation_digest`. What an owner approves is `approval_digest`, never this pin.
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -1931,7 +1937,7 @@ class ScriptImplementation(_Implementation):
         return hashlib.sha256((cls.INLINE_DIGEST_TAG + payload).encode()).hexdigest()
 
     @classmethod
-    def inline(cls, language: Literal["python", "shell"], source: str) -> "ScriptImplementation":
+    def inline(cls, language: ScriptLanguage, source: str) -> "ScriptImplementation":
         """An inline Script step pinned to `source` in `language`."""
         return cls(kind="script", language=language, source_digest=hashlib.sha256(source.encode()).hexdigest())
 

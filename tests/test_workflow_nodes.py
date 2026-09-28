@@ -26,13 +26,13 @@ SOURCE = "print('hi')"
 DIGEST = hashlib.sha256(SOURCE.encode()).hexdigest()
 
 
-@pytest.mark.parametrize("language", ["python", "shell"])
+@pytest.mark.parametrize("language", ["python", "shell", "powershell", "cmd"])
 def test_script_source_pin_stays_content_only_and_approval_binds_language(language) -> None:
     impl = ScriptImplementation.inline(language, SOURCE)
     assert impl.source_digest == DIGEST
     impl.check({"source": SOURCE})
-    approvals = {ScriptImplementation.inline(kind, SOURCE).approval_digest({"source": SOURCE}) for kind in ("python", "shell")}
-    assert len(approvals) == 2 and DIGEST not in approvals
+    approvals = {ScriptImplementation.inline(kind, SOURCE).approval_digest({"source": SOURCE}) for kind in ("python", "shell", "powershell", "cmd")}
+    assert len(approvals) == 4 and DIGEST not in approvals
     with pytest.raises(ValueError, match="pinned digest"):
         impl.model_copy(update={"source_digest": impl.approval_digest({"source": SOURCE})}).check({"source": SOURCE})
     with pytest.raises(ValueError, match="pinned digest"):
