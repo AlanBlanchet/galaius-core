@@ -1,14 +1,16 @@
 """The builtin op registry: every `BuiltinOp` has exactly one spec, every spec's defaults make a
 valid node and a valid palette block, and config-derived ports follow their config."""
 
+import re
+import time
 from typing import get_args
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from interact_core import BUILTIN_OPS, BuiltinOp, WorkflowBlockAvailability, WorkflowNode
-from interact_core.builtin_ops import BUILTIN_OP_SPECS, switch_cases
+from interact_core import BUILTIN_OPS, BuiltinOp, Plumbing, WorkflowBlockAvailability, WorkflowNode
+from interact_core.builtin_ops import BUILTIN_OP_SPECS, TemplateOp, TemplateSettings, switch_cases
 
 OPS = sorted(BUILTIN_OPS)
 
@@ -31,7 +33,7 @@ def test_defaults_make_a_node_and_a_block(op):
     placed = node(op, config)
     assert placed.impl.placements == spec.placements
     block = WorkflowBlockAvailability.model_validate({"impl": {"kind": "builtin", "op": op}, "name": spec.title, "ports": [port.model_dump() for port in spec.ports(config)], "config": config, "readiness": "executable", "reason": "Runs on the server."})
-    assert block.category == spec.category and block.summary == spec.summary
+    assert block.category == spec.category and block.summary == spec.summary and block.plumbing == spec.plumbing
     assert block.config_schema == ({} if not spec.fixed_ports else spec.Config.model_json_schema())
     # A block survives its own JSON (the editor and the CLI read it back).
     assert WorkflowBlockAvailability.model_validate(block.model_dump(mode="json")) == block
@@ -97,3 +99,17 @@ def test_map_over_a_workflow():
 def test_every_kind_is_filed_under_its_category():
     script = WorkflowBlockAvailability(impl={"kind": "script", "language": "python", "source_digest": "0" * 64}, name="Script", ports=(), config={"source": ""}, readiness="config_required", reason="Runs on a machine.")
     assert script.category == "code" and script.summary == "" and script.config_schema == {}
+
+
+@pytest.mark.parametrize("template", ["{{\n" + " " * 16000 + "x", "{{" + " " * 16000, "{{a}}" + " " * 16000 + "!"])
+def test_template_patterns_never_backtrack_on_a_long_template(template):
+    # The editor and the server read every saved template with them: one hostile template froze both.
+    began = time.perf_counter()
+    re.match(TemplateOp.plumbing.only_if.pattern, template)
+    re.findall(TemplateSettings.PLACEHOLDER, template)
+    assert time.perf_counter() - began < 0.05
+
+
+def test_plumbing_reads_only_settings_its_kind_has():
+    with pytest.raises(TypeError, match="nope"):
+        type("BadOp", (BUILTIN_OPS["merge"],), {"op": "bad_plumbing", "plumbing": Plumbing(badge="{nope}", badge_fr="x")})

@@ -1609,6 +1609,8 @@ class _Implementation(WireModel):
     placements: ClassVar[frozenset[str]] = frozenset({"server"})
     #: Where the palette files it (`WorkflowBlockAvailability.category`).
     category: ClassVar["BlockCategory"]
+    #: Set when it is plumbing (`Plumbing`); every non-builtin kind is a step: it does the work itself.
+    plumbing: ClassVar["Plumbing | None"] = None
 
     def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...] | None:
         """The ports this implementation fixes by itself, or None when they come from outside it
@@ -1624,7 +1626,7 @@ class _Implementation(WireModel):
     def described(self) -> dict[str, object]:
         """What a palette block of it says by default: its category (a builtin adds its summary,
         search words and settings schema)."""
-        return {"category": self.category}
+        return {"category": self.category, "plumbing": self.plumbing}
 
     def required_config(self) -> tuple[str, ...]:
         """Config keys a node needs before it can run (the palette's `required_config_fields`)."""
@@ -1648,6 +1650,32 @@ BuiltinOp = Literal[
 ]
 #: Where a palette block sits and what a search for a kind of step finds (`WorkflowBlockAvailability.category`).
 BlockCategory = Literal["input_output", "flow", "data", "text", "files", "time", "people", "web", "agents", "models", "apps", "machines", "code", "workflows"]
+class PlumbingCondition(WireModel):
+    """Plumbing only while setting `field` matches `pattern`: a text template holding nothing but
+    `{{fields}}` passes them on. The editor runs it (JavaScript): keep to syntax both engines read alike."""
+
+    field: str = Field(min_length=1, max_length=64)
+    pattern: str = Field(min_length=1, max_length=200)
+
+
+class Plumbing(WireModel):
+    """What makes a node kind PLUMBING rather than a step: it only carries a value to the next step
+    in the form that step needs — its format converted (text <-> data), fields picked, set or
+    renamed, values merged or split, or passed on as is — deciding nothing and writing nothing the
+    reader would call content (a step changes the value itself: its case, its words, which items
+    are kept). The editor folds plumbing into the wire or step it serves, saying `badge` there; the
+    workflow and its runs are unchanged by it.
+
+    `badge` / `badge_fr` are templates over the node's settings: `{name}` is setting `name` (an
+    object gives its keys, a list its items); " · " parts whose setting is empty are left out."""
+
+    badge: str = Field(min_length=1, max_length=80)
+    badge_fr: str = Field(min_length=1, max_length=80)
+    only_if: PlumbingCondition | None = None
+
+    def fields(self) -> set[str]:
+        """The settings its words and condition read."""
+        return set(re.findall(r"\{(\w+)\}", self.badge + self.badge_fr)) | ({self.only_if.field} if self.only_if else set())
 
 
 class NoSettings(BaseModel):
@@ -1672,6 +1700,8 @@ class BuiltinOpSpec:
     #: The same sentence in French (the editor shows the reader's language).
     summary_fr: ClassVar[str] = ""
     keywords: ClassVar[tuple[str, ...]] = ()
+    #: Set when it is plumbing, not a step (`Plumbing`): what the editor says where it folds it.
+    plumbing: ClassVar[Plumbing | None] = None
     Config: ClassVar[type[BaseModel]] = NoSettings
     #: Config keys a node needs before it can run.
     required: ClassVar[tuple[str, ...]] = ()
@@ -1684,6 +1714,9 @@ class BuiltinOpSpec:
         if "op" in cls.__dict__:
             if cls.op in BUILTIN_OPS:
                 raise TypeError(f"builtin op {cls.op} is declared twice")
+            unknown = cls.plumbing.fields() - set(cls.Config.model_fields) if cls.plumbing else set()
+            if unknown:
+                raise TypeError(f"builtin op {cls.op}: its plumbing reads settings it does not have: {sorted(unknown)}")
             BUILTIN_OPS[cls.op] = cls
 
     @classmethod
@@ -1739,7 +1772,7 @@ class BuiltinImplementation(_Implementation):
 
     def described(self) -> dict[str, object]:
         spec = self.spec
-        return {"category": spec.category, "summary": spec.summary, "summary_fr": spec.summary_fr, "name_fr": spec.title_fr, "keywords": spec.keywords, "config_schema": spec.config_schema()}
+        return {"category": spec.category, "plumbing": spec.plumbing, "summary": spec.summary, "summary_fr": spec.summary_fr, "name_fr": spec.title_fr, "keywords": spec.keywords, "config_schema": spec.config_schema()}
 
     def signature(self, placement: Literal["server", "machine"] = "machine", config: dict[str, "WorkflowValue"] | None = None) -> tuple[PortSpec, ...] | None:
         return self.spec.ports(config or {}) if self.spec.fixed_ports else None
@@ -2761,6 +2794,8 @@ class WorkflowBlockAvailability(WireModel):
     summary_fr: str = Field(default="", max_length=400)
     #: A builtin's name in French ("" for kinds named by their own record).
     name_fr: str = Field(default="", max_length=120)
+    #: Set when its kind is plumbing (`Plumbing`): the editor folds it into the wire or step it serves.
+    plumbing: Plumbing | None = None
     keywords: tuple[str, ...] = Field(default=(), max_length=32)
     #: JSON Schema of the node's settings (`config`), rendered by the editor's one generic form;
     #: empty when the node has none or its kind edits them elsewhere.

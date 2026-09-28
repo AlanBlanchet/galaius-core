@@ -7,11 +7,11 @@ its spec.
 Settings are typed (text, number, boolean, choice, a list of texts, a JSON object); the node
 editor renders every op with one form driven by the schema."""
 
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .workflows import BuiltinOpSpec, PortSpec, ValueType, WorkflowValue, _port_slug
+from .workflows import BuiltinOpSpec, Plumbing, PlumbingCondition, PortSpec, ValueType, WorkflowValue, _port_slug
 
 
 def _port(name: str, direction: Literal["input", "output"], value_type: ValueType = "any", *, required: bool = True, multiple: bool = False) -> PortSpec:
@@ -123,6 +123,7 @@ class LowercaseOp(_TextMap):
 class IdentityOp(_TextMap):
     op, title, summary, keywords = "identity", "Pass through", "Passes its value on unchanged.", ("noop", "relay", "identity")
     title_fr, summary_fr = "Transmettre", "Transmet sa valeur sans la changer."
+    plumbing = Plumbing(badge="passes on", badge_fr="transmet")
 
 
 class HttpGetOp(_TextMap):
@@ -211,6 +212,7 @@ class MergeOp(BuiltinOpSpec):
     summary_fr = "Attend que chaque fil qui y arrive ait livré, puis transmet leurs valeurs ensemble : listes ajoutées, objets combinés, appariés par position ou joints par clé."
     keywords = ("join", "combine", "concat", "zip", "wait for all", "gather", "union")
     Config = MergeSettings
+    plumbing = Plumbing(badge="waits for all, merges", badge_fr="attend tout, fusionne")
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
@@ -372,6 +374,7 @@ class SetFieldsOp(BuiltinOpSpec):
     summary_fr = "Ajoute, remplace ou retire des champs d’un objet (de chaque élément d’une liste)."
     keywords = ("edit fields", "assign", "rename", "map", "variable", "set", "object")
     Config = SetFieldsSettings
+    plumbing = Plumbing(badge="set {fields} · drop {remove}", badge_fr="champs {fields} · retire {remove}")
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
@@ -389,6 +392,7 @@ class TransformOp(BuiltinOpSpec):
     summary_fr = "Remodèle du JSON avec une expression JMESPath : choisir, filtrer, projeter, aplatir."
     keywords = ("jmespath", "jq", "jsonata", "query", "select", "reshape", "extract", "pick field")
     Config = TransformSettings
+    plumbing = Plumbing(badge="pick {expression}", badge_fr="choisit {expression}")
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
@@ -412,8 +416,21 @@ class SqlOp(BuiltinOpSpec):
         return (_port("tables", "input", "json"), _port("result", "output", "json"))
 
 
+#: A data format's name in words (the settings form's choices, a folded step's words), EN and FR.
+FORMAT_WORDS = {"json": "JSON", "csv": "CSV", "tsv": "TSV", "xml": "XML", "yaml": "YAML", "lines": "lines", "xlsx": "Excel", "markdown_table": "Markdown table"}
+FORMAT_WORDS_FR = {**FORMAT_WORDS, "lines": "lignes", "markdown_table": "tableau Markdown"}
+
+
+def _format_words(*formats: str) -> dict[str, object]:
+    return {"options": {name: FORMAT_WORDS[name] for name in formats}, "fr": {"options": {name: FORMAT_WORDS_FR[name] for name in formats}}}
+
+
+ParseFormat = Literal["json", "csv", "tsv", "xml", "yaml", "lines", "xlsx"]
+TextFormat = Literal["json", "csv", "tsv", "xml", "yaml", "lines", "markdown_table"]
+
+
 class ParseSettings(_Settings):
-    format: Literal["json", "csv", "tsv", "xml", "yaml", "lines", "xlsx"] = Field(default="json", title="Format")
+    format: ParseFormat = Field(default="json", title="Format", json_schema_extra=_format_words(*get_args(ParseFormat)))
     header: bool = Field(default=True, title="First row is the header", description="CSV, TSV and spreadsheets.")
     sheet: str = Field(default="", max_length=120, title="Sheet", description="Spreadsheets; empty = the first sheet.")
 
@@ -425,6 +442,7 @@ class ParseOp(BuiltinOpSpec):
     summary_fr = "Transforme un texte ou un fichier en JSON : JSON, CSV, TSV, XML, YAML, lignes ou feuille Excel."
     keywords = ("read csv", "read xml", "spreadsheet", "excel", "xlsx", "decode", "extract from file", "yaml")
     Config = ParseSettings
+    plumbing = Plumbing(badge="{format} → data", badge_fr="{format} → données")
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
@@ -432,7 +450,7 @@ class ParseOp(BuiltinOpSpec):
 
 
 class FormatSettings(_Settings):
-    format: Literal["json", "csv", "tsv", "xml", "yaml", "lines", "markdown_table"] = Field(default="json", title="Format")
+    format: TextFormat = Field(default="json", title="Format", json_schema_extra=_format_words(*get_args(TextFormat)))
     pretty: bool = Field(default=True, title="Indented")
 
 
@@ -443,6 +461,7 @@ class FormatOp(BuiltinOpSpec):
     summary_fr = "Écrit du JSON en texte : JSON, CSV, TSV, XML, YAML, lignes ou tableau Markdown (« Écrire un fichier » l’enregistre ensuite)."
     keywords = ("serialize", "to csv", "to json", "to xml", "export", "stringify", "table")
     Config = FormatSettings
+    plumbing = Plumbing(badge="→ {format} text", badge_fr="→ texte {format}")
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
@@ -487,6 +506,10 @@ class EncodeOp(BuiltinOpSpec):
 
 
 class TemplateSettings(_Settings):
+    #: One `{{field}}` of a template (group 1 = its path, spaces around it stripped by the reader):
+    #: what the server fills and what makes a template only plumbing. One quantifier inside, so a
+    #: long run of spaces never backtracks; a class both Python and the editor's engines read alike.
+    PLACEHOLDER: ClassVar[str] = r"\{\{([^{}]*)\}\}"
     template: str = Field(default="Hello {{name}}", min_length=1, max_length=16000, title="Template", description="{{field}} inserts a field of 'values' (dot path); {{value}} the whole value.")
     missing: Literal["error", "empty"] = Field(default="error", title="Missing field")
 
@@ -498,6 +521,8 @@ class TemplateOp(BuiltinOpSpec):
     summary_fr = "Compose un texte à partir d’un modèle rempli avec les champs de son entrée."
     keywords = ("format", "compose", "prompt", "message", "interpolate", "string")
     Config = TemplateSettings
+    # Only while the template holds nothing but {{fields}}: words around them are content, a step.
+    plumbing = Plumbing(badge="→ text", badge_fr="→ texte", only_if=PlumbingCondition(field="template", pattern=rf"^\s*(?:{TemplateSettings.PLACEHOLDER}\s*)+$"))
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
@@ -552,7 +577,9 @@ SEPARATORS = {"new_line": "\n", "comma": ",", "semicolon": ";", "tab": "\t", "sp
 
 
 class SplitSettings(_Settings):
-    separator: Literal["new_line", "comma", "semicolon", "tab", "space", "custom"] = Field(default="new_line", title="Separator")
+    separator: Literal["new_line", "comma", "semicolon", "tab", "space", "custom"] = Field(default="new_line", title="Separator",
+        json_schema_extra={"options": {name: name.replace("_", " ") for name in [*SEPARATORS, "custom"]},
+                           "fr": {"title": "Séparateur", "options": {"new_line": "retour à la ligne", "comma": "virgule", "semicolon": "point-virgule", "tab": "tabulation", "space": "espace", "custom": "personnalisé"}}})
     custom: str = Field(default="|", min_length=1, max_length=40, title="Custom separator")
     trim: bool = Field(default=True, title="Trim spaces")
     drop_empty: bool = Field(default=True, title="Drop empty parts")
@@ -565,6 +592,7 @@ class SplitOp(BuiltinOpSpec):
     summary_fr = "Découpe un texte en liste (par ligne, virgule ou tout séparateur) pour la parcourir ou la filtrer."
     keywords = ("lines", "tokenize", "explode", "split out", "list")
     Config = SplitSettings
+    plumbing = Plumbing(badge="split ({separator})", badge_fr="découpe ({separator})")
 
     @classmethod
     def ports(cls, config: dict[str, WorkflowValue]) -> tuple[PortSpec, ...]:
