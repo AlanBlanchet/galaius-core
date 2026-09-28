@@ -2460,9 +2460,12 @@ class AgentStopRequest(MachineAgentRequestBase):
 
 
 class AgentOptionsRequest(MachineAgentRequestBase):
-    """What can be started here: roles, models per CLI, and whether a session can open."""
+    """What can be started here: roles, models per CLI, and whether a session can open. With
+    `role`: `models` is what that role's own rule picks on each CLI here (best first), so the owner
+    sees before starting which model it will run on, and which CLI cannot run it at all."""
 
     op: Literal["options"] = "options"
+    role: AgentRole | None = None
     seconds: ClassVar[float] = 45
 
 
