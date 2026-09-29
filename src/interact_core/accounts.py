@@ -11,6 +11,9 @@ from .permissions import Permission
 from .wire import WireModel, WireRequest
 
 WorkspaceRole = Literal["owner", "admin", "member", "viewer"]
+#: What a workspace is for: one person's own space, or a company's. Asked once at sign-up; a
+#: personal workspace converts to a company one way (`POST .../convert-to-company`).
+WorkspaceKind = Literal["personal", "company"]
 
 _EMAIL = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 
@@ -40,6 +43,8 @@ class SignupRequest(WireRequest):
     email: str = Field(pattern=_EMAIL, max_length=320)
     password: SecretStr = Field(min_length=12, max_length=1024)
     locale: Literal["en", "fr"] = "en"
+    #: "For yourself / For a company" — the kind of the workspace made with the account.
+    kind: WorkspaceKind = "personal"
 
 
 class LoginRequest(WireRequest):
@@ -66,8 +71,9 @@ class Workspace(WireModel):
     """A coarse label DERIVED from the member's company permissions (`CompanyAccess.role`), kept
     because released clients require it: rights themselves are `CompanyAccess.permissions`,
     never this label."""
-    #: The company made with the account, still under the name the server gave it: a client shows
-    #: it in the reader's own language instead of that stored name.
+    kind: WorkspaceKind
+    #: A personal workspace still under the name the server gave it: a client shows it in the
+    #: reader's own language instead of that stored name (never true for a company).
     is_default: bool = False
 
 
@@ -128,6 +134,17 @@ class CompanyLogoUpload(WireRequest):
     expected_revision: int = Field(ge=0)
     media_type: Literal["image/png", "image/jpeg", "image/webp"]
     data_base64: str = Field(min_length=1, max_length=1400000)
+
+
+class VatCheck(WireModel):
+    """One VAT number checked against the EU register (VIES). `name` / `address` are None when the
+    member state does not disclose them. A valid number says the company is REGISTERED, never that
+    the person asking represents it."""
+
+    valid: bool
+    name: str | None = Field(default=None, max_length=240)
+    address: str | None = Field(default=None, max_length=500)
+    checked_at: datetime
 
 
 class CompanyLookupResult(WireModel):

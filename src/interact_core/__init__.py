@@ -51,8 +51,10 @@ from .accounts import (
     WorkspaceInvite,
     WorkspaceMember,
     WorkspaceMembership,
+    WorkspaceKind,
     WorkspaceRole,
     CompanyAccess,
+    VatCheck,
     WorkspaceUpdate,
 )
 from .admin import (
@@ -233,7 +235,7 @@ __all__ = [
     "DirectTool", "ModelTask", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "CriteriaClause", "CriteriaWeight", "CriteriaError", "parse_criteria", "parse_criteria_weights", "format_criteria", "format_criteria_weights", "ModelChoice", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ScriptLanguage", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "RunInitiator", "RunPhase", "RunPhaseKind", "PhaseEvent", "MACHINE_PHASES", "NodePolicy", "NodeError", "JoinRule", "OnError", "CONTROL_PORTS", "CONTROL_INPUTS", "StepEvent", "StepStatus", "BlockCategory", "Plumbing", "PlumbingCondition", "BuiltinOpSpec", "BUILTIN_OPS", "NodeSignatureRequest", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
     "HarnessToolDescriptor", "MESSAGE_FIELDS", "MESSAGE_PROVIDERS", "MessageAccount", "MessageField", "MessageProvider", "MessageProviderChoice", "MessageProviderSpec", "SendMessageTool", "GitAgentTool", "GitConnector", "GitOperationName", "MailAgentTool", "MailOperationName", "WebhookAgentTool",
     "ChangelogEntry", "ReleaseInfo",
-    "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult",
+    "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult", "VatCheck", "WorkspaceKind",
     "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
     "BudgetDecision", "OperatorAuditEvent", "OperatorAuthority", "OperatorRunFailure", "OperatorServiceSummary", "OperatorWorkspaceSummary",
     "SubscriptionLimit", "SubscriptionPlanDefinition", "SubscriptionPlanRef", "UsageProvenanceSummary", "UsageRecord", "UsageSourceRef", "UsageTotals", "WorkspaceSubscription", "WorkspaceSubscriptionUpdate",
