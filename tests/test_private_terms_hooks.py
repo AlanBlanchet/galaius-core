@@ -78,3 +78,17 @@ def test_force_push_over_a_remote_tip_this_clone_never_saw_is_still_scanned(work
     commit_unchecked(work, f"{TERM}\n", "clean")
     result = git(work, "push", "--force", "origin", "HEAD:refs/heads/main")
     assert result.returncode != 0 and "private term in a diff" in result.stderr
+
+
+def test_push_refuses_adding_private_notes_but_lets_their_removal_through(work: Path) -> None:
+    notes = work / ".github" / "research" / "notes.md"
+    notes.parent.mkdir(parents=True)
+    notes.write_text("notes\n")
+    git(work, "add", "-f", str(notes))
+    assert git(work, "commit", "-q", "--no-verify", "-m", "notes").returncode == 0
+    result = git(work, "push", "origin", "HEAD:refs/heads/main")
+    assert result.returncode != 0 and "private notes/research files" in result.stderr
+    assert git(work, "push", "-q", "--no-verify", "origin", "HEAD:refs/heads/main").returncode == 0  # an old leak
+    git(work, "rm", "-q", "--cached", str(notes))
+    assert git(work, "commit", "-q", "--no-verify", "-m", "drop notes").returncode == 0
+    assert git(work, "push", "origin", "HEAD:refs/heads/main").returncode == 0

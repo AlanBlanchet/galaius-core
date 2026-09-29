@@ -21,7 +21,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
   # shellcheck disable=SC2086
   added="$(git log -p --no-color --format= $range -- . ':(exclude).githooks' | grep -E '^\+' | grep -Ev '^\+\+\+' || true)"
   # shellcheck disable=SC2086
-  paths="$(git log --name-only --format= $range | sort -u)"
+  paths="$(git log --name-only --diff-filter=d --format= $range | sort -u)"   # deleting a leak is fine
 
   hits="$(printf '%s\n' "$added" | grep -E '/home/[a-z_][a-z0-9_-]*/' | head -5)"
   [ -n "$hits" ] && { echo "pre-push: machine-local home path:" >&2; echo "$hits" >&2; status=1; }
