@@ -3,8 +3,7 @@ pure placement decisions every scheduler (server or test) reuses.
 
 interact-core stays provider-independent and ships NO real-world compute catalog or compliance
 data of its own — `CloudInstanceType` is a SHAPE; the actual Scaleway (or other provider) rows
-are a CSV-bound registry server-side (`server.machines.catalog`, mirroring
-`server.models.sovereignty`'s exact "CSV copied verbatim, loader binds to it" pattern),
+are a CSV-bound registry server-side ("CSV copied verbatim, loader binds to it"),
 never hand-copied into this package. `cheapest_fit`/`choose_placement` are pure functions over
 whatever catalog/candidates the caller supplies."""
 
@@ -53,9 +52,8 @@ class CloudInstanceType(WireModel):
     price_per_hour: float = Field(ge=0)
     currency: Literal["EUR", "USD"]
     #: This instance's ACTUAL processing jurisdiction (ISO 3166-1 alpha-2), and the
-    #: `DataSovereigntyTier` it lands in — sourced from the same registry
-    #: `server.models.sovereignty` reads (§2 of cloud-compute-and-sovereignty CSV),
-    #: never a second, independently-typed encoding of the same fact.
+    #: `DataSovereigntyTier` it lands in — sourced from the same registry the server's provider
+    #: sovereignty lookup reads, never a second, independently-typed encoding of the same fact.
     jurisdiction: str = Field(min_length=2, max_length=8)
     sovereignty: DataSovereigntyTier
 
@@ -154,8 +152,7 @@ def choose_placement(
     candidate). `candidates` are already filtered to ONLINE, non-revoked machines by the caller —
     this function knows nothing about connection state. `sovereignty_by_machine` is the caller's
     OWN resolution (from `MachineSovereignty`/`CloudMachine`) per machine id; a machine absent
-    from it reads `"unknown"`, never guessed `"self_hosted"` just for being enrolled — mirrors
-    `server.workflows.repository`'s `revision_sovereignty` fix of the same bug. No fit
+    from it reads `"unknown"`, never guessed `"self_hosted"` just for being enrolled. No fit
     -> the caller provisions a cloud machine (itself sovereignty-constrained via
     `cheapest_fit`'s `min_tier`, a separate call)."""
     graded = sovereignty_by_machine or {}
@@ -175,8 +172,7 @@ def node_sovereignty_record(node_id: UUID, machine: MachineRef, cloud_machine: "
     ACTUALLY landed, resolved post-provisioning against the provider's real response, never the
     zone that was merely requested. Otherwise the owner's own `MachineSovereignty` declaration.
     Otherwise `"unknown"` — never a guessed `"self_hosted"` just because the node reached SOME
-    enrolled machine (the exact bug `server.workflows.repository.revision_sovereignty`
-    used to have). `source_id` always cites a real, findable record: the `CloudMachine`'s own id,
+    enrolled machine. `source_id` always cites a real, findable record: the `CloudMachine`'s own id,
     the graded `MachineSovereignty`'s machine id, or — ungraded — the placement's own machine id,
     so an auditor can always locate WHY a run was graded the way it was."""
     if cloud_machine is not None:

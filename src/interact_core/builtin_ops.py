@@ -1,6 +1,6 @@
 """Every builtin operation's contract: what it does (category, summary, search words), its settings
 (a pydantic `Config`, published as JSON Schema so one generic form edits any of them) and the ports
-it fixes. The server runs them (`server.workflows.ops`, keyed by the same op name); the
+it fixes. The server runs them (keyed by the same op name); the
 registry itself (`BUILTIN_OPS`) lives beside `BuiltinImplementation`, which checks a node against
 its spec.
 

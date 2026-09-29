@@ -1,6 +1,5 @@
 """Contract tests for account/workspace wire shapes: `WorkspaceDeleteRequest` is the confirmation
-an owner-only, irreversible workspace delete requires (server's `accounts.py`
-`delete_workspace`) — the wire contract precedes the server-side deletion it gates."""
+an owner-only, irreversible workspace delete requires — the wire contract precedes the server-side deletion it gates."""
 
 import pytest
 from pydantic import ValidationError

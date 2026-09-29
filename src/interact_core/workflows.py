@@ -836,9 +836,8 @@ DataSovereigntyTier = Literal["eu_sovereign", "eu_hosted_foreign_law", "non_eu"]
 
 class ProviderSovereignty(WireModel):
     """One provider's jurisdiction TIER at one connection's actual endpoint — the wire shape a
-    CSV-bound registry populates server-side (`server.models.sovereignty`, bound to
-    `~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md` §2's machine-readable table,
-    never hand-copied into this package: interact-core stays provider-independent and ships no
+    CSV-bound registry populates server-side (bound to a sourced machine-readable table, never
+    hand-copied into this package: interact-core stays provider-independent and ships no
     real-world compliance data of its own). `tier` is a property of (provider, ENDPOINT) — Mistral
     on its EU-default endpoint reads `eu_sovereign`, on its opt-in US regional endpoint `non_eu`;
     OpenAI's default endpoint reads `non_eu`, its `eu.api.openai.com` endpoint
@@ -859,8 +858,7 @@ def provider_sovereignty(provider: str | None) -> Sovereignty | None:
     before reaching here); any other named provider is a network call to a remote vendor,
     `"vendor_api"`, whether or not that vendor's JURISDICTION has been sourced yet. The finer
     question — which `DataSovereigntyTier` that vendor's ACTUAL endpoint lands in — is a SEPARATE,
-    CSV-bound lookup (`server.models.sovereignty.tier_for`, keyed by provider AND
-    endpoint), never this function's job."""
+    CSV-bound server-side lookup (keyed by provider AND endpoint), never this function's job."""
     if provider is None or provider == "self_hosted":
         return None
     return "vendor_api"
@@ -2249,7 +2247,7 @@ class MachineCommand(WireModel):
         # The vendor catalog (`MACHINE_MODELS`, `provider == "huggingface"`) is the only model
         # source this contract can check by a fixed registry — a workspace's OWN registered model
         # (`provider == "workspace"`) is a `UserModel` UUID the SERVER already validated at
-        # save/registration time (`server`'s `OwnModels.validate_node`); this wire
+        # save/registration time; this wire
         # contract has no workspace database to check it against and must never reject it.
         if self.impl.kind == "model" and self.impl.provider != "workspace" and self.impl.model not in MACHINE_MODELS:
             raise ValueError("machine model is not in the machine model registry")

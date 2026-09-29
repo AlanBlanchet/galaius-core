@@ -128,14 +128,12 @@ class UnsafeModelWeightsError(Exception):
 #: test AND a real pooled dispatch existed to read it:
 #:   1 isolation  — interact/tests/test_pool_isolation.py (4 tests, real gVisor containers)
 #:   2 egress     — interact/tests/test_pool_egress.py (5 tests, real nft ruleset + listener)
-#:   3 GPU scrub  — interact/tests/test_gpu_scrub.py (3 tests, real CUDA) +
-#:                  server/tests/server tests.py (freshness gate, real dispatch)
-#:   4 budget     — server/tests/server tests.py
-#:                  (test_dispatch_pooled_refuses_a_run_that_would_cross_the_workspace_ceiling)
-#:   5 sovereignty — server/tests/server tests.py
-#:                  (test_dispatch_pooled_with_sovereignty_required_skips_a_non_sovereign_owner)
+#:   3 GPU scrub  — interact/tests/test_gpu_scrub.py (3 tests, real CUDA) + the server's
+#:                  freshness gate on a real dispatch
+#:   4 budget     — the server refuses a pooled run that would cross the workspace ceiling
+#:   5 sovereignty — the server skips a non-sovereign owner when sovereignty is required
 #:   6 safetensors — interact/tests/test_model_safety.py (5 tests, real pickle RCE payload refused)
-#: The real dispatch: `server.machines.channel.MachineChannel.dispatch_pooled`, runner
+#: The real dispatch: the server's pooled dispatch, runner
 #: routing in `interact.machines.MachineRunner._execute`/`_run_script_pooled`. Scope note: pooled
 #: dispatch today only offers SCRIPT nodes to the pool (the safetensors gate applies to model
 #: weight loading, not yet reachable from this specific dispatch path — MODEL/FUNCTION pooled

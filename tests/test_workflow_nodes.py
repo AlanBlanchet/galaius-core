@@ -114,7 +114,7 @@ def test_a_palette_block_is_the_node_it_places() -> None:
 def test_provider_sovereignty_is_a_purely_structural_routing_fact() -> None:
     """No compliance data needed: any named provider is a network call ("vendor_api"), whether or
     not its jurisdiction has been sourced yet — that finer question is
-    server.models.sovereignty.tier_for's job, CSV-bound, never this function's."""
+    the server's CSV-bound tier lookup, never this function's."""
     assert provider_sovereignty(None) is None  # no vendor reached (builtin, bare connector)
     assert provider_sovereignty("self_hosted") is None  # the owner's own endpoint, resolved elsewhere
     assert provider_sovereignty("gemini") == "vendor_api"
@@ -180,9 +180,8 @@ def test_a_machine_command_carries_the_node_impl_config_and_inputs() -> None:
     with pytest.raises(ValidationError, match="registry"):
         MachineCommand.model_validate(command({"kind": "model", "provider": "huggingface", "model": "someone/else", "task": "object-detection"}, inputs={"images": ["a.png"]}))
     # A workspace's own registered model (`interact_core.UserModel`) is never a `MACHINE_MODELS`
-    # key — its id is a UUID the SERVER already validated at registration/save time
-    # (`server`'s `OwnModels.validate_node`); the vendor-catalog registry check must
-    # never fire for it, or no `MachineCommand` for a workspace model could ever be constructed.
+    # key — its id is a UUID the SERVER already validated at registration/save time; the
+    # vendor-catalog registry check must never fire for it, or no `MachineCommand` for a workspace model could ever be constructed.
     own_model = MachineCommand.model_validate(command({"kind": "model", "provider": "workspace", "model": str(uuid4()), "task": "object-detection"},
                                                        config={"_user_model": {"origin": {"kind": "huggingface_repo", "repo_id": "org/name", "weight_files": ["model.safetensors"]}, "licence": "Apache-2.0"}},
                                                        inputs={"images": ["a.png"]}))

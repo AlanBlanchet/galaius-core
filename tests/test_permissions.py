@@ -1,5 +1,5 @@
 """Contract tests for the permission catalog and group/membership wire shapes
-(server's `permissions.py` PermissionRepository is the runtime this precedes)."""
+(the server's permission store is the runtime this precedes)."""
 
 from datetime import UTC, datetime
 from uuid import uuid4
