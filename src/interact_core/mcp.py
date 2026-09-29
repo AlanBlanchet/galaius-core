@@ -14,6 +14,7 @@ until it is approved again."""
 import hashlib
 import json
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any, Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -135,11 +136,18 @@ class McpCatalogEntry(WireModel):
     auth: Literal["none", "api_key", "unknown"]
     mark: str | None = Field(default=None, max_length=64)
     repository: str | None = Field(default=None, max_length=2048)
+    #: Popularity: its GitHub repository's stars, when read (None: no GitHub repository, or not
+    #: read yet), and when they were read. The registry itself keeps no popularity.
+    stars: int | None = Field(default=None, ge=0)
+    stars_checked_at: datetime | None = None
 
 
 class McpCatalogPage(WireModel):
+    """One registry page, most-starred first (entries whose stars are unknown last)."""
+
     entries: tuple[McpCatalogEntry, ...] = Field(max_length=100)
     next: str | None = Field(default=None, max_length=512)
+    ranked_by: Literal["github_stars"] = "github_stars"
 
 
 class McpToolModel(WireModel):

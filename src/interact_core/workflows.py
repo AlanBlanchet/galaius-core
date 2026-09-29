@@ -3564,6 +3564,19 @@ class ConversationAppendRequest(WireRequest):
     max_output_tokens: int = Field(default=2048, ge=1, le=32768)
 
 
+class ChatRun(WireModel):
+    """A chat as the run feed lists it beside workflow runs (`GET /runs` `chats`), so every screen
+    that says who is working reads the same record."""
+
+    id: UUID
+    origin: Literal["chat"] = "chat"
+    title: str = Field(max_length=120)
+    agent: AgentRevisionRef | None = None
+    state: Literal["queued", "running", "succeeded", "failed", "cancelled", "unknown_outcome"]
+    started_at: datetime
+    updated_at: datetime
+
+
 class ConversationSummary(WireModel):
     id: UUID
     revision: int = Field(ge=0)
