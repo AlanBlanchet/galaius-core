@@ -1374,6 +1374,37 @@ class HarnessToolDescriptor(WireModel):
 AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | SendMessageTool | WorkflowFunctionTool, Field(discriminator="kind")]
 
 
+#: A server an agent's MCP binding names: the tools shipped with interact (`interact`), a remote
+#: server this company added (its UUID), or one a PC declared (`pc:<machine UUID>:<name>`).
+MCP_SERVER_ID = r"^(interact|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|pc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9_.-]{1,64})$"
+#: An MCP tool's name, as the protocol allows it.
+MCP_TOOL_NAME = r"^[A-Za-z0-9_.-]{1,128}$"
+McpToolName = Annotated[str, Field(pattern=MCP_TOOL_NAME)]
+
+
+class McpBinding(WireModel):
+    """One MCP server an agent is connected to: which of its tools the agent may call (`all`: every
+    tool the server lists, new ones included) and, per model-using tool, the model it asks for
+    (overriding the account-wide rule for that tool). A tool left out is denied to the agent's
+    harness, never merely hidden."""
+
+    server_id: str = Field(pattern=MCP_SERVER_ID)
+    enabled_tools: Literal["all"] | tuple[McpToolName, ...] = "all"
+    tool_models: dict[McpToolName, "ModelChoice"] = Field(default_factory=dict, max_length=64)
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if self.enabled_tools != "all":
+            if len(set(self.enabled_tools)) != len(self.enabled_tools) or len(self.enabled_tools) > 512:
+                raise ValueError("an MCP binding names each tool once, at most 512")
+            if set(self.tool_models) - set(self.enabled_tools):
+                raise ValueError("a tool model rule names a tool this binding enables")
+        return self
+
+    def enables(self, tool: str) -> bool:
+        return self.enabled_tools == "all" or tool in self.enabled_tools
+
+
 class AgentRevision(WireModel):
     id: UUID
     revision: UUID
@@ -1397,6 +1428,8 @@ class AgentRevision(WireModel):
     criteria_weights: str = Field(default="", max_length=2048)
     resources: tuple[ConnectionResourceRef, ...] = Field(max_length=32)
     capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=1000)
+    #: The MCP servers this agent is connected to, each with its tool switches (`McpBinding`).
+    mcp: tuple[McpBinding, ...] = Field(default=(), max_length=32)
     created_at: datetime
 
     @property
@@ -1416,6 +1449,8 @@ class AgentRevision(WireModel):
             raise ValueError("connector agent tools must use an explicitly connected resource")
         if self.reports_to == self.id:
             raise ValueError("an agent cannot report to itself")
+        if len({binding.server_id for binding in self.mcp}) != len(self.mcp):
+            raise ValueError("an agent binds each MCP server once")
         if len(set(self.harness_tools)) != len(self.harness_tools) or any(not tool or len(tool) > 200 or any(char in tool for char in "\n\r\x00") for tool in self.harness_tools):
             raise ValueError("harness tool names must be unique nonempty single-line names")
         references = (self.prompt, *self.paradigms, *self.skill_paradigms)
