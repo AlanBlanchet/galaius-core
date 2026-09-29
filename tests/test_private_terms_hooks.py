@@ -68,3 +68,13 @@ def test_push_refuses_every_channel(work: Path, text: str, message: str, ref: st
 def test_push_lets_clean_commits_through(work: Path) -> None:
     commit_unchecked(work, "clean\n", "clean")
     assert git(work, "push", "origin", "HEAD:refs/heads/main").returncode == 0
+
+
+def test_force_push_over_a_remote_tip_this_clone_never_saw_is_still_scanned(work: Path, tmp_path: Path) -> None:
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "remote.git"), str(other)], check=True)
+    commit_unchecked(other, "theirs\n", "theirs")
+    assert git(other, "push", "-q", "origin", "HEAD:refs/heads/main").returncode == 0
+    commit_unchecked(work, f"{TERM}\n", "clean")
+    result = git(work, "push", "--force", "origin", "HEAD:refs/heads/main")
+    assert result.returncode != 0 and "private term in a diff" in result.stderr

@@ -11,7 +11,13 @@ zero=0000000000000000000000000000000000000000
 status=0
 while read -r _local_ref local_sha _remote_ref remote_sha; do
   [ "$local_sha" = "$zero" ] && continue                      # deleting a remote branch
-  if [ "$remote_sha" = "$zero" ]; then range="$local_sha --not --remotes"; else range="$remote_sha..$local_sha"; fi
+  # A new branch, or a remote tip this clone never saw (a force-push over rewritten history): scan
+  # everything no known remote already has, never an empty range.
+  if [ "$remote_sha" = "$zero" ] || ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    range="$local_sha --not --remotes"
+  else
+    range="$remote_sha..$local_sha"
+  fi
   # shellcheck disable=SC2086
   added="$(git log -p --no-color --format= $range -- . ':(exclude).githooks' | grep -E '^\+' | grep -Ev '^\+\+\+' || true)"
   # shellcheck disable=SC2086
