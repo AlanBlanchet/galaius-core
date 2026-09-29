@@ -58,7 +58,8 @@ class ResourceSummary(WireModel):
     audience: Audience
     shared_count: int = Field(default=0, ge=0)
     projects: tuple[UUID, ...] = ()
-    updated_at: datetime
+    #: None: the kind keeps no change time (a place, a built-in template); listed after dated rows.
+    updated_at: datetime | None = None
     counts: dict[str, int] = Field(default_factory=dict)
 
 
@@ -189,6 +190,19 @@ class Project(WireModel):
     created_by: UUID
     created_at: datetime
     rules: tuple[ProjectRule, ...] = Field(max_length=64)
+
+    def names(self, kind: Literal["workflow", "chat", "agent"], resource: UUID) -> bool:
+        """A rule binds this workflow / chat / agent to the project."""
+        return any(isinstance(rule, ResourceRule) and rule.kind == kind and rule.id == resource for rule in self.rules)
+
+    def holds_folder(self, root: str) -> bool:
+        """Work prompted in `root` (a session root folder) is at or below one of its folders."""
+        root = root.rstrip("/")
+        return bool(root) and any(isinstance(rule, FolderRule) and (root == rule.path.rstrip("/") or root.startswith(rule.path.rstrip("/") + "/")) for rule in self.rules)
+
+    def claims_run(self, root: str, agent: UUID | None, workflow: UUID | None = None) -> bool:
+        """A run belongs to every project whose rule matches it: its folder, its agent, its workflow."""
+        return self.holds_folder(root) or agent is not None and self.names("agent", agent) or workflow is not None and self.names("workflow", workflow)
 
 
 class ProjectSuggestion(WireModel):
