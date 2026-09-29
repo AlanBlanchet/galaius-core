@@ -95,7 +95,11 @@
             "machine_agent.stopped",
             "machine_agent.answered",
             "machine_agent.continued",
-            "machine_agent.provider_switched"
+            "machine_agent.provider_switched",
+            "machine_place.level_changed",
+            "machine_place.widening_requested",
+            "machine_place.widening_withdrawn",
+            "machine_place.review_discarded"
           ],
           "title": "Action",
           "type": "string"

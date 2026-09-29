@@ -10,7 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -2570,10 +2570,166 @@ class AgentProviderSwitchRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "agent_settings"
 
 
+#: How far one folder of a PC is open to workflows, Data and agents, least first; each level
+#: implies the ones before it. `hidden`: not listed (every folder starts here); `see`: names, sizes
+#: and dates; `read`: bytes; `write_on_review`: writes land in a staging copy the owner accepts on
+#: the PC, by digest; `sandbox`: read + write in place, apart from every other root; `write`: read +
+#: write in place. Set on the PC; from the web a change to a LATER level waits on the PC for its
+#: owner's confirm (`interact machine approve`), a change to an earlier one applies at once.
+PlaceLevel = Literal["hidden", "see", "read", "write_on_review", "sandbox", "write"]
+PLACE_LEVELS: tuple[PlaceLevel, ...] = get_args(PlaceLevel)
+#: A folder of the PC relative to its working directory (its home folder): "/"-separated names, none
+#: hidden, empty, "." or "..".
+def _place_path(value: str) -> str:
+    parts = value.split("/")
+    if any(not part or part in {".", ".."} or part.startswith(".") or "\\" in part or ":" in part for part in parts):
+        raise ValueError("a place is a folder relative to the working directory: '/'-separated names, none hidden, empty, '.', '..', ':' or '\\'")
+    return value
+
+
+PlacePath = Annotated[str, Field(min_length=1, max_length=1024), AfterValidator(_place_path)]
+
+
+class MachinePlace(WireModel):
+    """One folder the owner set a level on. `refused`: why that level is not in force now (a
+    credential store, a link on the way, a sandbox overlapping another root), in plain words."""
+
+    path: str = Field(max_length=1024)
+    level: PlaceLevel
+    refused: str = Field(default="", max_length=400)
+
+
+class MachinePlaceChange(WireModel):
+    """A widening asked from the web, waiting on the PC until its owner confirms it there.
+    `digest`: sha256 of the canonical change (machine, path, level, previous, id), what the PC's
+    local log and the server's audit both keep."""
+
+    id: UUID
+    path: str = Field(max_length=1024)
+    level: PlaceLevel
+    previous: PlaceLevel
+    asked_at: datetime
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class MachinePlaceEntry(WireModel):
+    """One name in a whole-PC browse page, with the level in force on it (names only, never bytes)."""
+
+    name: str = Field(min_length=1, max_length=255)
+    kind: Literal["folder", "file"]
+    level: PlaceLevel
+
+
+class MachineReviewFile(WireModel):
+    path: str = Field(max_length=1024)
+    change: Literal["added", "changed", "deleted"]
+    size: int | None = Field(default=None, ge=0)
+
+
+class MachinePlaceReview(WireModel):
+    """Writes into a `write_on_review` folder, held in a staging copy on the PC. `working`: its
+    agent still runs; `ready`: the owner may accept `digest` on the PC; `blocked`: it cannot be
+    applied (`reason`: e.g. it touches `.git` internals), only discarded."""
+
+    id: UUID
+    place: str = Field(max_length=1024)
+    origin: Literal["agent", "workflow"]
+    run_id: UUID | None = None
+    created_at: datetime
+    state: Literal["working", "ready", "blocked"]
+    reason: str = Field(default="", max_length=400)
+    files: tuple[MachineReviewFile, ...] = Field(default=(), max_length=500)
+    truncated: bool = False
+    digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class MachineFence(WireModel):
+    """Whether agent CLIs on this PC run inside an OS fence built from the levels. `on`: the owner
+    switched it on there (`interact machine fence on`); `available`: this PC can build one
+    (`reason` says why not); agents are fenced only when both hold."""
+
+    platform: str = Field(max_length=40)
+    available: bool
+    on: bool
+    reason: str = Field(default="", max_length=400)
+
+
+class MachinePlacesView(WireModel):
+    """The PC's levels as the PC holds them now, the widenings waiting on it, whether whole-PC
+    browsing is on (`interact machine browse on`), its fence, and the folder it suggests as a
+    sandbox."""
+
+    places: tuple[MachinePlace, ...] = Field(default=(), max_length=256)
+    pending: tuple[MachinePlaceChange, ...] = Field(default=(), max_length=64)
+    browse: bool = False
+    fence: MachineFence
+    suggested_sandbox: str = Field(default="", max_length=240)
+
+
+class PlacesRequest(MachineAgentRequestBase):
+    """The levels, pending widenings, browse switch and fence of this PC."""
+
+    op: Literal["places"] = "places"
+    feature: ClassVar[str] = "places"
+
+
+class PlaceLevelRequest(MachineAgentRequestBase):
+    """Set one folder's level: an earlier level applies at once; a later one waits on the PC."""
+
+    op: Literal["place_level"] = "place_level"
+    path: PlacePath
+    level: PlaceLevel
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "places"
+
+
+class PlaceCancelRequest(MachineAgentRequestBase):
+    """Withdraw a widening still waiting on the PC."""
+
+    op: Literal["place_cancel"] = "place_cancel"
+    change_id: UUID
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "places"
+
+
+class PlaceBrowseRequest(MachineAgentRequestBase):
+    """One page of names beneath `path` ("" the working directory), only while browsing is on."""
+
+    op: Literal["place_browse"] = "place_browse"
+    path: str = Field(default="", max_length=1024)
+    cursor: int = Field(default=0, ge=0, le=100_000)
+    feature: ClassVar[str] = "places"
+
+
+class PlaceReviewsRequest(MachineAgentRequestBase):
+    op: Literal["place_reviews"] = "place_reviews"
+    seconds: ClassVar[float] = 30
+    feature: ClassVar[str] = "places"
+
+
+class PlaceReviewRequest(MachineAgentRequestBase):
+    """One review and its unified diff (`lines`), for reading; accepting happens on the PC."""
+
+    op: Literal["place_review"] = "place_review"
+    review_id: UUID
+    seconds: ClassVar[float] = 30
+    feature: ClassVar[str] = "places"
+
+
+class PlaceDiscardRequest(MachineAgentRequestBase):
+    """Drop a review's staged writes (nothing reaches the folder)."""
+
+    op: Literal["place_discard"] = "place_discard"
+    review_id: UUID
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "places"
+
+
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
-    | AgentSettingsRequest | AgentProviderSwitchRequest,
+    | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
+    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -2666,6 +2822,8 @@ class MachineAgentRun(WireModel):
     kind: AgentRunKind = "agent"
     #: Approvals this session waits for, oldest first.
     pending: tuple[AgentInteraction, ...] = Field(default=(), max_length=16)
+    #: Started inside the PC's OS fence built from its levels (None: not recorded).
+    fenced: bool | None = None
 
 
 class MachineAgentAnswer(WireModel):
@@ -2694,6 +2852,19 @@ class MachineAgentAnswer(WireModel):
     #: `settings`: the CLIs agents may run through here, and each tool's model here.
     providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
     tool_models: tuple[ToolRoleModels, ...] = Field(default=(), max_length=16)
+    #: `places` / `place_level` / `place_cancel`: the PC's levels after the request; `change`: the
+    #: widening now waiting on the PC (None: applied at once).
+    places: MachinePlacesView | None = None
+    change: MachinePlaceChange | None = None
+    #: `place_browse`: one page of names (`cursor`: where the next page starts, None: last page).
+    browse: tuple[MachinePlaceEntry, ...] = Field(default=(), max_length=500)
+    #: `place_reviews` / `place_review` (its diff in `lines`).
+    reviews: tuple[MachinePlaceReview, ...] = Field(default=(), max_length=100)
+    #: `start`: the agent runs inside the PC's OS fence (False: it can read every file its user can).
+    fenced: bool | None = None
+    #: A place change (`place_level` / `place_cancel` / `place_discard`): sha256 of what changed, as the
+    #: PC's own log keeps it; the server's audit keeps only this, never the path.
+    digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 def _port_slug(label: str) -> str:

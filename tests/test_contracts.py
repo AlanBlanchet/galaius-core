@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from interact_core import ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from interact_core import MACHINE_AGENT_REQUESTS, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 
 from interact_core import (
@@ -342,3 +342,17 @@ def test_every_model_task_names_each_port_once(placement: str) -> None:
     for task in get_args(ModelTask):
         names = [port.name for port in model_task_ports(task, placement)]
         assert len(names) == len(set(names)), task
+
+
+@pytest.mark.parametrize(("path", "valid"), [
+    ("Documents", True), ("Documents/Clients 2026", True),
+    ("", False), ("/etc", False), ("a/", False), ("a//b", False), (".ssh", False), ("code/.git", False), ("a/..", False), ("C:/Users", False), ("a\\b", False),
+])
+def test_a_place_is_a_plain_folder_path_below_the_working_directory(path: str, valid: bool) -> None:
+    fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "place_level", "path": path, "level": "read"}
+    if valid:
+        assert MACHINE_AGENT_REQUESTS.validate_python(fields).feature == "places"
+    else:
+        with pytest.raises(ValidationError):
+            MACHINE_AGENT_REQUESTS.validate_python(fields)
