@@ -155,3 +155,25 @@ def test_updates_are_wire_requests_with_bounded_numbers() -> None:
         PaidProviderUpdate(enabled=True, monthly_cap_usd=-1)
     with pytest.raises(ValidationError):
         PaidUseCapUpdate(monthly_cap_usd=-0.5)
+
+
+# ---------------------------------------------------------------------------------------------
+# visual-critic r1 FAIL rows that land on this contract
+# ---------------------------------------------------------------------------------------------
+
+def test_a_provider_row_says_unknown_rather_than_zero_when_nobody_attributed_its_spend() -> None:
+    """visual-critic r1: every metered row showed 0.20794 — the MONTH total, repeated per
+    provider. A figure nobody attributed is unknown, never zero and never the total."""
+    row = ProviderChargeState(provider="openai", charge="metered_api", allowed=False)
+    assert row.spent_usd is None
+
+
+def test_a_refusal_states_a_fact_and_leaves_the_sentence_to_the_reader_language() -> None:
+    """visual-critic r1, HIGH, routed to the backend: the English refusal was printed verbatim in
+    the French UI, and it said "switch it on in Billing" while shown inside Billing. The wire
+    carries the CODE, the provider and the figures; the words a reader sees are the client's."""
+    refusal = PaidUseRefusal(code="paid_use_not_enabled", provider="openai",
+                             message="paid use of openai is not enabled for this workspace")
+    assert refusal.code == "paid_use_not_enabled"
+    for pointer in ("Billing", "switch it on", "raise the ceiling", "Facturation"):
+        assert pointer not in refusal.message

@@ -159,9 +159,18 @@ class ProviderChargeState(WireModel):
     provider: str = Field(min_length=1, max_length=40)
     charge: ChargeKind
     allowed: bool
-    spent_usd: float = Field(default=0.0, ge=0)
-    #: Why a call would be refused right now, in one sentence, or None when it would go through.
+    #: What THIS provider cost this month, when the ledger attributes it. `None` is UNKNOWN —
+    #: never 0, and never the month's total standing in for a per-provider figure (visual-critic
+    #: r1 read 0.20794, the whole month, on every metered row).
+    spent_usd: float | None = Field(default=None, ge=0)
+    #: Why a call would be refused right now. A STATEMENT of fact, in one sentence, for a log and
+    #: for a client with no localization of its own — the words a reader sees come from `refused`
+    #: + the figures, in the reader's language, and carry the action. This sentence names no
+    #: screen to go to: it gets shown INSIDE that screen (visual-critic r1).
     refusal: str | None = Field(default=None, max_length=300)
+    #: Which refusal applies, for a client that writes its own sentence. None when the call would
+    #: go through.
+    refused: Literal["paid_use_not_enabled", "monthly_cap_reached"] | None = None
 
     @property
     def word(self) -> str:
