@@ -117,6 +117,26 @@ class McpDeclaredServer(WireModel):
     tools: tuple[McpTool, ...] = Field(default=(), max_length=512)
 
 
+class McpPopularity(WireModel):
+    """How popular one catalog entry is, and why the page puts it where it does.
+
+    The registry keeps no popularity of its own, so popularity is the stars of the server's OWN
+    GitHub repository — never those of a repository it shares with others, which says nothing
+    about it. `stars` is a number exactly when there is a count to show."""
+
+    #: Its own repository's stars (None: there are none to read, or none read yet).
+    stars: int | None = Field(default=None, ge=0)
+    #: When they were read (None: never).
+    checked_at: datetime | None = None
+    #: own: it names a GitHub repository of its own, and that is what `stars` counts; shared: it
+    #: names one that is not its alone (the registry's own repository, or one several entries
+    #: claim) — nobody is counted from it; none: no GitHub repository at all to count.
+    repository: Literal["own", "shared", "none"] = "none"
+    #: What puts it where it is: official, one of the well-known servers interact names, published
+    #: under a namespace whose owner the registry verified; stars, its own count; none, neither.
+    ranked_by: Literal["official", "stars", "none"] = "none"
+
+
 class McpCatalogEntry(WireModel):
     """One server of the official MCP registry, as the picker shows it."""
 
@@ -136,18 +156,18 @@ class McpCatalogEntry(WireModel):
     auth: Literal["none", "api_key", "unknown"]
     mark: str | None = Field(default=None, max_length=64)
     repository: str | None = Field(default=None, max_length=2048)
-    #: Popularity: its GitHub repository's stars, when read (None: no GitHub repository, or not
-    #: read yet), and when they were read. The registry itself keeps no popularity.
-    stars: int | None = Field(default=None, ge=0)
-    stars_checked_at: datetime | None = None
+    #: How popular it is and why it ranks where it does.
+    popularity: McpPopularity = Field(default_factory=McpPopularity)
 
 
 class McpCatalogPage(WireModel):
-    """One registry page, most-starred first (entries whose stars are unknown last)."""
+    """One registry page in the order the picker shows it: the well-known servers interact names
+    first (`popularity.ranked_by == "official"`), then the entries whose own repository's stars are
+    known, most first, then the rest in the registry's own order."""
 
     entries: tuple[McpCatalogEntry, ...] = Field(max_length=100)
     next: str | None = Field(default=None, max_length=512)
-    ranked_by: Literal["github_stars"] = "github_stars"
+    ranked_by: Literal["official_then_stars"] = "official_then_stars"
 
 
 class McpToolModel(WireModel):
