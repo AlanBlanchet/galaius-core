@@ -14,7 +14,7 @@ until it is approved again."""
 import hashlib
 import json
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal, Self
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -122,7 +122,11 @@ class McpPopularity(WireModel):
 
     The registry keeps no popularity of its own, so popularity is the stars of the server's OWN
     GitHub repository — never those of a repository it shares with others, which says nothing
-    about it. `stars` is a number exactly when there is a count to show."""
+    about it. `stars` is a number exactly when there is a count to show.
+
+    A count of nought or one is not popularity: `popular` is true for a server interact names and
+    for an entry whose own count reaches the page's `popular_stars` floor, nobody else. The rest of
+    the registry is the fold's (`McpCatalogPage.fold_at`)."""
 
     #: Its own repository's stars (None: there are none to read, or none read yet).
     stars: int | None = Field(default=None, ge=0)
@@ -133,8 +137,11 @@ class McpPopularity(WireModel):
     #: claim) — nobody is counted from it; none: no GitHub repository at all to count.
     repository: Literal["own", "shared", "none"] = "none"
     #: What puts it where it is: official, one of the well-known servers interact names, published
-    #: under a namespace whose owner the registry verified; stars, its own count; none, neither.
+    #: under a namespace whose owner the registry verified (officials are ordered by their own count
+    #: too, the ones whose count is not known yet last); stars, its own count; none, neither.
     ranked_by: Literal["official", "stars", "none"] = "none"
+    #: Whether it belongs in the popular set at all (above the fold).
+    popular: bool = False
 
 
 class McpCatalogEntry(WireModel):
@@ -146,6 +153,13 @@ class McpCatalogEntry(WireModel):
     description: str = Field(default="", max_length=2000)
     #: The publisher's namespace (`com.notion`, `io.github.<owner>`).
     vendor: str = Field(max_length=200)
+    #: What to call it on screen — never the registry's leaf name, which is "mcp" for the Notion,
+    #: Stripe, Cloudflare, PayPal, GitLab, Webflow and Wix servers alike. An entry with nothing to
+    #: show under is not published at all.
+    label: str = Field(min_length=1, max_length=200)
+    #: Where `label` came from: title, the registry's own; vendor, the publisher its namespace names
+    #: (`com.notion` -> Notion); namespace, the namespace itself, when it names no publisher.
+    label_from: Literal["title", "vendor", "namespace"]
     version: str = Field(default="", max_length=64)
     #: remote: a hosted server a company can add; pc: a package a PC installs; both.
     transport: Literal["remote", "pc", "both"]
@@ -161,13 +175,28 @@ class McpCatalogEntry(WireModel):
 
 
 class McpCatalogPage(WireModel):
-    """One registry page in the order the picker shows it: the well-known servers interact names
-    first (`popularity.ranked_by == "official"`), then the entries whose own repository's stars are
-    known, most first, then the rest in the registry's own order."""
+    """One registry page in the order the picker shows it, decided once, when the page is built.
+
+    The well-known servers interact names first (`popularity.ranked_by == "official"`), by their own
+    star count; then the entries whose own repository reaches `popular_stars`, most first. That
+    prefix is the popular set, `entries[:fold_at]`. `entries[fold_at:]` is everything the page
+    cannot call popular — no count, or a count under the floor — for the picker to fold under "More
+    from the registry"; an entry claiming a repository that is not its own comes last of all.
+
+    HOW A CALLER RELIES ON THE ORDER: this answer's order is decided while it is built, from the
+    counts known at that moment (`ranked_at`), and nothing re-sorts it afterwards — a count landing
+    later belongs to the next answer. So show the entries in the order they arrived and KEEP it for
+    as long as the list is open: re-reading the page under the reader is what makes rows move."""
 
     entries: tuple[McpCatalogEntry, ...] = Field(max_length=100)
     next: str | None = Field(default=None, max_length=512)
     ranked_by: Literal["official_then_stars"] = "official_then_stars"
+    #: When this order was decided.
+    ranked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    #: Where the popular set ends: `entries[:fold_at]` are popular, the rest are the fold's.
+    fold_at: int = Field(default=0, ge=0)
+    #: The stars an entry interact does not name needs before the page calls it popular.
+    popular_stars: int = Field(default=0, ge=0)
 
 
 class McpToolModel(WireModel):
