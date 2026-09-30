@@ -174,6 +174,23 @@ from .workflows import (
 )
 from . import builtin_ops  # noqa: F401 - declares every builtin op into BUILTIN_OPS
 from .user_models import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
+from .paid_use import (
+    CHARGE_WORDS,
+    DEFAULT_MONTHLY_CAP_USD,
+    LOCAL_PROVIDERS,
+    ChargeKind,
+    PaidProviderSwitch,
+    PaidProviderUpdate,
+    PaidUseCapUpdate,
+    PaidUsePolicy,
+    PaidUseRefusal,
+    PaidUseSpend,
+    PaidUseState,
+    ProviderChargeState,
+    charge_kind,
+    charge_word,
+    month_start,
+)
 from .billing import (
     CREDIT_KINDS,
     DEBIT_KINDS,
@@ -228,6 +245,7 @@ from .pool import (
 )
 
 __all__ = [
+    "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "PaidUseRefusal", "PaidUseSpend", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "ToolTokenUsage", "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
