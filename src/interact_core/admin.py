@@ -179,7 +179,7 @@ class OperatorAuditEvent(WireModel):
         "run_failures.listed", "usage.inspected", "plan.saved", "subscription.assigned",
         "usage.recorded", "budget.evaluated",
         "group.created", "group.renamed", "group.permissions_updated", "group.deleted",
-        "group_member.added", "group_member.removed", "group.department_updated", "member.overrides_set", "agent.stewards_set",
+        "group_member.added", "group_member.removed", "group.department_updated", "group.budget_set", "group.credential_set", "member.overrides_set", "agent.stewards_set",
         "migration.operator_accounts_migrated", "subscription.group_granted", "subscription.group_revoked",
         "contact_message.listed", "contact_message.read", "contact_message.deleted",
         "signal.listed", "signal.status_changed", "signal.deleted",
