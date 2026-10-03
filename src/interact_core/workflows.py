@@ -2891,6 +2891,21 @@ class MachineAgentSettingsState(WireModel):
     detail: str = Field(default="", max_length=400)
 
 
+class MachineAgentSettingsView(WireModel):
+    """One PC's agent settings as its page shows them: what the PC last reported (None: it never
+    did - its interact predates web settings, or it never connected since), the web version still
+    waiting to reach it (None: none), who changed it and when, and whether its interact takes web
+    settings at all (`supported`)."""
+
+    state: MachineAgentSettingsState | None = None
+    pending: MachineAgentSettings | None = None
+    pending_version: int = Field(default=0, ge=0)
+    changed_by: UUID | None = None
+    changed_at: datetime | None = None
+    supported: bool = False
+    online: bool = False
+
+
 class MachineWorkspaceJob(WireModel):
     """One clone a PC was asked for: `running`, `ready` (a folder agents can start in, under
     `root`), or `failed` with why in plain words."""
