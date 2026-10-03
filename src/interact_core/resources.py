@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .wire import WireModel, WireRequest
+from .workflows import GitUrl
 
 #: What a person (or agent) may do with a resource. Each verb implies every verb before it.
 Verb = Literal["see", "read", "use", "write_on_review", "write", "manage"]
@@ -172,6 +173,8 @@ class ProjectCreate(WireRequest):
     name: str = Field(min_length=1, max_length=60)
     colour: ProjectColour
     rules: tuple[ProjectRule, ...] = Field(default=(), max_length=64)
+    #: Where its code lives: a PC without it clones it from there ("prepare a workspace").
+    repository: GitUrl | None = None
 
 
 class ProjectUpdate(WireRequest):
@@ -180,6 +183,7 @@ class ProjectUpdate(WireRequest):
     name: str | None = Field(default=None, min_length=1, max_length=60)
     colour: ProjectColour | None = None
     rules: tuple[ProjectRule, ...] | None = Field(default=None, max_length=64)
+    repository: GitUrl | None = None
 
 
 class Project(WireModel):
@@ -190,6 +194,7 @@ class Project(WireModel):
     created_by: UUID
     created_at: datetime
     rules: tuple[ProjectRule, ...] = Field(max_length=64)
+    repository: GitUrl | None = None
 
     def names(self, kind: Literal["workflow", "chat", "agent"], resource: UUID) -> bool:
         """A rule binds this workflow / chat / agent to the project."""

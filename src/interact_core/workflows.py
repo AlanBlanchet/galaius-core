@@ -2961,6 +2961,34 @@ class MachineAgentHistoryEntry(WireModel):
     changes: dict[str, tuple[Any, Any]] = Field(default_factory=dict)
 
 
+#: Where starting a project on a PC stands, in the order it is checked: the PC is not connected; its
+#: interact predates web settings (only an install on that PC fixes it); agents are off or it has no
+#: agent folder; the project names no repository; the project is not on that PC yet; being cloned;
+#: the last clone failed; ready to start in.
+ProjectReadinessState = Literal["offline", "outdated", "agents_off", "no_repository", "no_workspace", "preparing", "failed", "ready"]
+
+
+class MachineProjectReadiness(WireModel):
+    """Whether a project can be started on a PC now, and if not what is missing there in plain words
+    (`said`) and the one action that fixes it from here (`action`, None when none can: the PC is
+    off, or only an install on it can). `install`: the installer lines to run on the PC once
+    (state `outdated`). Ready: the folder to start in (`root`, `path`)."""
+
+    state: ProjectReadinessState
+    said: str = Field(max_length=600)
+    action: str | None = Field(default=None, max_length=200)
+    install: tuple[str, ...] = Field(default=(), max_length=4)
+    root: str | None = Field(default=None, max_length=240)
+    path: str = Field(default="", max_length=1024)
+    repository: str | None = Field(default=None, max_length=512)
+
+
+class ProjectPrepare(WireRequest):
+    """What the one-click fix may need that the project does not hold yet: its repository address."""
+
+    repository: GitUrl | None = None
+
+
 class MachineWorkspaceJob(WireModel):
     """One clone a PC was asked for: `running`, `ready` (a folder agents can start in, under
     `root`), or `failed` with why in plain words."""
