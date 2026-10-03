@@ -10,7 +10,7 @@ from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, PlainSerializer, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
 
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
@@ -2430,6 +2430,8 @@ MACHINE_AGENT_TAIL = 256 * 1024
 #: What an agent started from the web may do on a machine — the launcher's touch scopes
 #: (`interact.agents.vocabulary.TouchScope`), set on the machine by its owner.
 AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
+#: The touch scopes least first: a narrower one is earlier.
+AGENT_TOUCH_SCOPES: tuple[AgentTouchScope, ...] = get_args(AgentTouchScope)
 AgentRole = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 AgentModelId = Annotated[str, Field(pattern=r"^[A-Za-z0-9._:/@+-]+$", min_length=1, max_length=256)]
 AgentProvider = Literal["claude", "codex"]
@@ -2780,37 +2782,33 @@ WorkspaceName = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
 
 
 class GitRemote(WireModel):
-    """A repository a PC may clone, parsed once: `https://host[:port]/path`, `ssh://[user@]host[:port]/path`
-    or `user@host:path`. Never credentials in the address (they stay in the PC's own git setup),
-    never another transport (file, ext, git), never a leading '-' (no option injection)."""
+    """A repository a PC may clone, parsed once from its address: `https://host[:port]/path`,
+    `ssh://[user@]host[:port]/path` or `user@host:path`. Never credentials in the address (they stay
+    in the PC's own git setup), never another transport (file, ext, git), never a part starting
+    with '-' (no option injection), never '.' or '..' parts."""
 
-    model_config = ConfigDict(frozen=True)
     url: str = Field(min_length=1, max_length=512)
+    host: str = Field(max_length=253)
+    path: str = Field(max_length=512)
     _SHAPES: ClassVar[tuple[re.Pattern[str], ...]] = (
-        re.compile(r"^https://(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*)(?::(?P<port>[0-9]{1,5}))?/(?P<path>[A-Za-z0-9._~/-]+)$"),
-        re.compile(r"^ssh://(?:[A-Za-z0-9._-]+@)?(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*)(?::(?P<port>[0-9]{1,5}))?/(?P<path>[A-Za-z0-9._~/-]+)$"),
+        re.compile(r"^https://(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*)(?::[0-9]{1,5})?/(?P<path>[A-Za-z0-9._~/-]+)$"),
+        re.compile(r"^ssh://(?:[A-Za-z0-9._-]+@)?(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*)(?::[0-9]{1,5})?/(?P<path>[A-Za-z0-9._~/-]+)$"),
         re.compile(r"^[A-Za-z0-9._-]+@(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*):(?P<path>[A-Za-z0-9._~/-]+)$"),
     )
 
-    @model_validator(mode="after")
-    def one_shape(self) -> Self:
-        if self.url.startswith("-") or not any(shape.match(self.url) for shape in self._SHAPES):
+    @model_validator(mode="before")
+    @classmethod
+    def parsed(cls, value: object) -> object:
+        url = value if isinstance(value, str) else value.get("url") if isinstance(value, dict) else None
+        if not isinstance(url, str):
+            return value
+        match = next((found for shape in cls._SHAPES if (found := shape.match(url))), None)
+        if match is None:
             raise ValueError("a repository address is https://host/path, ssh://host/path or user@host:path, with no password in it")
-        if any(part in {".", ".."} or part.startswith("-") for part in self.path.split("/")):
-            raise ValueError("a repository path never holds '.', '..' or a part starting with '-'")
-        return self
-
-    @property
-    def _match(self) -> re.Match[str]:
-        return next(match for shape in self._SHAPES if (match := shape.match(self.url)))
-
-    @property
-    def host(self) -> str:
-        return self._match["host"].lower()
-
-    @property
-    def path(self) -> str:
-        return self._match["path"].strip("/")
+        path = match["path"].strip("/")
+        if any(part in {"", ".", ".."} or part.startswith("-") for part in path.split("/")):
+            raise ValueError("a repository path never holds an empty, '.' or '..' part, or one starting with '-'")
+        return {"url": url, "host": match["host"].lower(), "path": path}
 
     @property
     def origin(self) -> str:
@@ -2825,7 +2823,12 @@ class GitRemote(WireModel):
     def allowed_by(self, origins: Iterable[str]) -> bool:
         """Whether one of `origins` covers this repository: `host/owner/repo` exactly, or
         `host/owner/*` for every repository directly under it."""
-        return any(self.origin.lower() == origin.lower() or (origin.endswith("/*") and self.origin.lower().rsplit("/", 1)[0] == origin[:-2].lower()) for origin in origins)
+        mine = self.origin.lower()
+        return any(mine == origin.lower() or (origin.endswith("/*") and mine.rsplit("/", 1)[0] == origin[:-2].lower()) for origin in origins)
+
+
+#: A repository address on the wire (a plain string), parsed into a `GitRemote` where it is read.
+GitUrl = Annotated[GitRemote, BeforeValidator(lambda value: GitRemote(url=value) if isinstance(value, str) else value), PlainSerializer(lambda remote: remote.url, return_type=str)]
 
 
 #: One allowed clone origin: `host/owner/repo` or `host/owner/*`.
@@ -2846,19 +2849,28 @@ class MachineAgentSettings(WireModel):
     answer_approvals: bool = False
     clone_origins: tuple[CloneOrigin, ...] = Field(default=(), max_length=32)
 
+    def narrows(self, than: "MachineAgentSettings") -> bool:
+        """Whether these settings grant nothing `than` does not (agents off, fewer folders or
+        origins, a narrower scope, opt-ins off): such a change never needs to be built from the
+        PC's latest revision - it can only take power away."""
+        return ((not self.run_agents or than.run_agents) and set(self.agent_roots) <= set(than.agent_roots) and set(self.clone_origins) <= set(than.clone_origins)
+                and AGENT_TOUCH_SCOPES.index(self.agent_permission) <= AGENT_TOUCH_SCOPES.index(than.agent_permission)
+                and (not self.continue_conversations or than.continue_conversations) and (not self.answer_approvals or than.answer_approvals))
+
+
+class WebAgentSettings(MachineAgentSettings):
+    """Agent settings as the web may set them: never `full_access` (no sandbox), which the PC's
+    owner sets on the PC itself."""
+
+    agent_permission: WebAgentScope = "workspace_write"
+
 
 class MachineAgentSettingsChange(WireRequest):
     """The owner's web edit of one PC's agent settings, built from the state the PC last reported:
     `based_on` is that state's `revision`, so a change made on the PC since is never undone."""
 
-    settings: MachineAgentSettings
+    settings: WebAgentSettings
     based_on: int = Field(ge=0)
-
-    @model_validator(mode="after")
-    def web_scope(self) -> Self:
-        if self.settings.agent_permission not in get_args(WebAgentScope):
-            raise ValueError("full access (no sandbox) is set on the PC itself, never from the web")
-        return self
 
 
 class MachineAgentSettingsUpdate(WireModel):
@@ -2871,7 +2883,7 @@ class MachineAgentSettingsUpdate(WireModel):
     workspace_id: UUID
     version: int = Field(ge=1)
     based_on: int = Field(ge=0)
-    settings: MachineAgentSettings
+    settings: WebAgentSettings
     changed_by: UUID
     changed_at: datetime
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -2889,6 +2901,37 @@ class MachineAgentSettingsState(WireModel):
     settings: MachineAgentSettings
     refused: tuple[str, ...] = Field(default=(), max_length=64)
     detail: str = Field(default="", max_length=400)
+    #: The web version `detail` refused (0: none): the server stops offering it.
+    refused_version: int = Field(default=0, ge=0)
+
+
+class TranscriptMedia(WireModel):
+    """An image a run's step points at, where the reader can fetch it."""
+
+    name: str
+    label: str
+    kind: Literal["image"] = "image"
+
+
+class TranscriptItem(WireModel):
+    """One line of an agent run as a person reads it: what it said (`said`, its last word `final`),
+    a tool step, what was sent to it, a harness check, an error."""
+
+    at: float
+    kind: Literal["said", "final", "step", "sent", "check", "error"]
+    text: str
+    tool: str | None = None
+    input: str = ""
+    media: tuple[TranscriptMedia, ...] = ()
+
+
+class MachineRunEvents(WireModel):
+    """A window of a run on one of the owner's PCs: its lines after a byte cursor, and where the next starts."""
+
+    run_id: UUID
+    cursor: int | None = None
+    truncated: bool = False
+    items: tuple[TranscriptItem, ...] = ()
 
 
 class MachineAgentSettingsView(WireModel):
@@ -2925,14 +2968,9 @@ class WorkspacePrepareSpec(WireRequest):
     the PC's own git credentials; `name` defaults to the repository's."""
 
     root: str = Field(min_length=1, max_length=240)
-    url: str = Field(min_length=1, max_length=512)
+    url: GitUrl
     name: WorkspaceName | None = None
     submodules: bool = True
-
-    @model_validator(mode="after")
-    def a_repository(self) -> Self:
-        GitRemote(url=self.url)
-        return self
 
 
 class WorkspacePrepareRequest(MachineAgentRequestBase, WorkspacePrepareSpec):

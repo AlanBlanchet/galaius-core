@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from interact_core import MACHINE_AGENT_REQUESTS, GitRemote, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from interact_core import MACHINE_AGENT_REQUESTS, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 
 from interact_core import (
@@ -371,5 +371,20 @@ def test_a_clone_address_is_one_plain_repository_the_origins_list_can_name(url: 
         with pytest.raises(ValidationError):
             MACHINE_AGENT_REQUESTS.validate_python(fields)
         return
-    remote = GitRemote(url=MACHINE_AGENT_REQUESTS.validate_python(fields).url)
+    request = MACHINE_AGENT_REQUESTS.validate_python(fields)
+    remote = request.url
     assert remote.origin == origin and remote.allowed_by([origin.rsplit("/", 1)[0] + "/*"]) and not remote.allowed_by(["github.com/other/*"])
+    assert request.model_dump(mode="json")["url"] == url  # the wire (and its signature) keeps the plain address
+
+
+
+@pytest.mark.parametrize(("change", "narrows"), [
+    ({"run_agents": False}, True), ({"agent_roots": ()}, True), ({"agent_permission": "read_only"}, True),
+    ({"agent_roots": ("agents", "more")}, False), ({"agent_permission": "full_access"}, False), ({"answer_approvals": True}, False),
+    ({"clone_origins": ("github.com/owner/*", "github.com/other/*")}, False),
+])
+def test_a_settings_change_narrows_only_when_it_grants_nothing_new(change: dict, narrows: bool) -> None:
+    held = MachineAgentSettings(run_agents=True, agent_roots=("agents",), clone_origins=("github.com/owner/*",))
+    assert held.model_copy(update=change).narrows(held) is narrows
+    with pytest.raises(ValidationError):
+        MachineAgentSettingsChange.model_validate({"settings": {"agent_permission": "full_access"}, "based_on": 0})
