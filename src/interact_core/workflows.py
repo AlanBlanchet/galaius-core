@@ -2454,6 +2454,9 @@ class AgentStartSpec(WireRequest):
     #: role's criterion (agent) or the route's default (session) decides.
     model: AgentModelId | None = None
     text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
+    #: What this run may do, never more than the PC's own `agent_permission` (the PC clamps it).
+    #: Left out of the message when None, so a runner released before the field still verifies it.
+    permission: AgentTouchScope | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def role_for_an_agent(self) -> Self:
@@ -2760,11 +2763,181 @@ class PlaceDiscardRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "places"
 
 
+#: The scope the web may give agents on a PC: `full_access` (no sandbox) is set on the PC only.
+WebAgentScope = Literal["read_only", "workspace_write"]
+#: A folder name a workspace is cloned into, inside an agent root: no hidden, relative, or
+#: Windows-reserved name, no trailing dot.
+_RESERVED_NAMES = frozenset({"con", "prn", "aux", "nul", *(f"com{index}" for index in range(1, 10)), *(f"lpt{index}" for index in range(1, 10))})
+
+
+def _workspace_name(value: str) -> str:
+    if value.endswith(".") or value.split(".")[0].lower() in _RESERVED_NAMES:
+        raise ValueError("a workspace folder name never ends with '.' and is never a reserved device name")
+    return value
+
+
+WorkspaceName = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"), AfterValidator(_workspace_name)]
+
+
+class GitRemote(WireModel):
+    """A repository a PC may clone, parsed once: `https://host[:port]/path`, `ssh://[user@]host[:port]/path`
+    or `user@host:path`. Never credentials in the address (they stay in the PC's own git setup),
+    never another transport (file, ext, git), never a leading '-' (no option injection)."""
+
+    model_config = ConfigDict(frozen=True)
+    url: str = Field(min_length=1, max_length=512)
+    _SHAPES: ClassVar[tuple[re.Pattern[str], ...]] = (
+        re.compile(r"^https://(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*)(?::(?P<port>[0-9]{1,5}))?/(?P<path>[A-Za-z0-9._~/-]+)$"),
+        re.compile(r"^ssh://(?:[A-Za-z0-9._-]+@)?(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*)(?::(?P<port>[0-9]{1,5}))?/(?P<path>[A-Za-z0-9._~/-]+)$"),
+        re.compile(r"^[A-Za-z0-9._-]+@(?P<host>[A-Za-z0-9][A-Za-z0-9.-]*):(?P<path>[A-Za-z0-9._~/-]+)$"),
+    )
+
+    @model_validator(mode="after")
+    def one_shape(self) -> Self:
+        if self.url.startswith("-") or not any(shape.match(self.url) for shape in self._SHAPES):
+            raise ValueError("a repository address is https://host/path, ssh://host/path or user@host:path, with no password in it")
+        if any(part in {".", ".."} or part.startswith("-") for part in self.path.split("/")):
+            raise ValueError("a repository path never holds '.', '..' or a part starting with '-'")
+        return self
+
+    @property
+    def _match(self) -> re.Match[str]:
+        return next(match for shape in self._SHAPES if (match := shape.match(self.url)))
+
+    @property
+    def host(self) -> str:
+        return self._match["host"].lower()
+
+    @property
+    def path(self) -> str:
+        return self._match["path"].strip("/")
+
+    @property
+    def origin(self) -> str:
+        """`host/path` without a trailing `.git`: what `MachineAgentSettings.clone_origins` patterns match."""
+        return f"{self.host}/{self.path.removesuffix('.git')}"
+
+    @property
+    def name(self) -> str:
+        """The folder a clone lands in by default: the repository's last path part, `.git` dropped."""
+        return self.path.rsplit("/", 1)[-1].removesuffix(".git")
+
+    def allowed_by(self, origins: Iterable[str]) -> bool:
+        """Whether one of `origins` covers this repository: `host/owner/repo` exactly, or
+        `host/owner/*` for every repository directly under it."""
+        return any(self.origin.lower() == origin.lower() or (origin.endswith("/*") and self.origin.lower().rsplit("/", 1)[0] == origin[:-2].lower()) for origin in origins)
+
+
+#: One allowed clone origin: `host/owner/repo` or `host/owner/*`.
+CloneOrigin = Annotated[str, Field(pattern=r"^[A-Za-z0-9.-]+(?:/[A-Za-z0-9._~-]+)+(?:/\*)?$", max_length=200)]
+
+
+class MachineAgentSettings(WireModel):
+    """Everything about agents on one PC its owner may set from the web: whether agents run there,
+    the folders they may be started in (relative to the PC's working directory, a file root's
+    rules), the permission they start with, the two opt-ins, and the repositories the PC may clone
+    into an agent folder. Nothing else (file / script roots, script approvals, the token, the
+    server address, upgrades) is ever reachable from the web."""
+
+    run_agents: bool = False
+    agent_roots: tuple[PlacePath, ...] = Field(default=(), max_length=32)
+    agent_permission: AgentTouchScope = "workspace_write"
+    continue_conversations: bool = False
+    answer_approvals: bool = False
+    clone_origins: tuple[CloneOrigin, ...] = Field(default=(), max_length=32)
+
+
+class MachineAgentSettingsChange(WireRequest):
+    """The owner's web edit of one PC's agent settings, built from the state the PC last reported:
+    `based_on` is that state's `revision`, so a change made on the PC since is never undone."""
+
+    settings: MachineAgentSettings
+    based_on: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def web_scope(self) -> Self:
+        if self.settings.agent_permission not in get_args(WebAgentScope):
+            raise ValueError("full access (no sandbox) is set on the PC itself, never from the web")
+        return self
+
+
+class MachineAgentSettingsUpdate(WireModel):
+    """The server's signed desired agent settings for one PC (`type` inside the signed body). The
+    PC applies a `version` above the one it applied last, only when `based_on` is its current
+    `revision` and its owner has not switched web control off there."""
+
+    type: Literal["agent_settings"] = "agent_settings"
+    machine: MachineRef
+    workspace_id: UUID
+    version: int = Field(ge=1)
+    based_on: int = Field(ge=0)
+    settings: MachineAgentSettings
+    changed_by: UUID
+    changed_at: datetime
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class MachineAgentSettingsState(WireModel):
+    """What a PC holds now: `revision` counts every change of its agent settings (web or local),
+    `version` the last web version it applied (0: none), `remote` whether it takes web changes
+    (`interact machine remote on|off`, the PC's own kill switch), `refused` each folder it cannot
+    use and why, `detail` why the last web version was not applied (empty: it was)."""
+
+    revision: int = Field(ge=0)
+    version: int = Field(ge=0)
+    remote: bool
+    settings: MachineAgentSettings
+    refused: tuple[str, ...] = Field(default=(), max_length=64)
+    detail: str = Field(default="", max_length=400)
+
+
+class MachineWorkspaceJob(WireModel):
+    """One clone a PC was asked for: `running`, `ready` (a folder agents can start in, under
+    `root`), or `failed` with why in plain words."""
+
+    id: UUID
+    root: str = Field(max_length=240)
+    name: str = Field(max_length=64)
+    origin: str = Field(max_length=512)
+    state: Literal["running", "ready", "failed"]
+    detail: str = Field(default="", max_length=600)
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+class WorkspacePrepareSpec(WireRequest):
+    """Clone `url` (and its submodules) into a new folder `name` beneath agent root `root`, with
+    the PC's own git credentials; `name` defaults to the repository's."""
+
+    root: str = Field(min_length=1, max_length=240)
+    url: str = Field(min_length=1, max_length=512)
+    name: WorkspaceName | None = None
+    submodules: bool = True
+
+    @model_validator(mode="after")
+    def a_repository(self) -> Self:
+        GitRemote(url=self.url)
+        return self
+
+
+class WorkspacePrepareRequest(MachineAgentRequestBase, WorkspacePrepareSpec):
+    op: Literal["workspace_prepare"] = "workspace_prepare"
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "workspaces"
+
+
+class WorkspacesRequest(MachineAgentRequestBase):
+    """The clones this PC was asked for, newest first."""
+
+    op: Literal["workspaces"] = "workspaces"
+    feature: ClassVar[str] = "workspaces"
+
+
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
-    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest,
+    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspacesRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -2895,6 +3068,8 @@ class MachineAgentAnswer(WireModel):
     browse: tuple[MachinePlaceEntry, ...] = Field(default=(), max_length=500)
     #: `place_reviews` / `place_review` (its diff in `lines`).
     reviews: tuple[MachinePlaceReview, ...] = Field(default=(), max_length=100)
+    #: `workspaces` / `workspace_prepare`: the clones asked of this PC, newest first.
+    workspaces: tuple[MachineWorkspaceJob, ...] = Field(default=(), max_length=50)
     #: `start`: the agent runs inside the PC's OS fence (False: it can read every file its user can).
     fenced: bool | None = None
     #: A place change (`place_level` / `place_cancel` / `place_discard`): sha256 of what changed, as the

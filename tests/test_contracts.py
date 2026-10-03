@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from interact_core import MACHINE_AGENT_REQUESTS, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from interact_core import MACHINE_AGENT_REQUESTS, GitRemote, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 
 from interact_core import (
@@ -356,3 +356,20 @@ def test_a_place_is_a_plain_folder_path_below_the_working_directory(path: str, v
     else:
         with pytest.raises(ValidationError):
             MACHINE_AGENT_REQUESTS.validate_python(fields)
+
+
+@pytest.mark.parametrize(("url", "origin"), [
+    ("https://github.com/owner/repo.git", "github.com/owner/repo"), ("git@github.com:owner/repo.git", "github.com/owner/repo"),
+    ("ssh://git@gitlab.example:2222/group/repo", "gitlab.example/group/repo"),
+    ("https://user:secret@github.com/owner/repo", None), ("file:///srv/repo", None), ("ext::sh -c id", None), ("-uhttps://x/y", None),
+    ("git@github.com:-oProxyCommand=id/x", None), ("git@-oProxy:x/y", None), ("https://github.com/owner/../repo", None), ("http://github.com/owner/repo", None),
+])
+def test_a_clone_address_is_one_plain_repository_the_origins_list_can_name(url: str, origin: str | None) -> None:
+    fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "workspace_prepare", "root": "agents", "url": url}
+    if origin is None:
+        with pytest.raises(ValidationError):
+            MACHINE_AGENT_REQUESTS.validate_python(fields)
+        return
+    remote = GitRemote(url=MACHINE_AGENT_REQUESTS.validate_python(fields).url)
+    assert remote.origin == origin and remote.allowed_by([origin.rsplit("/", 1)[0] + "/*"]) and not remote.allowed_by(["github.com/other/*"])
