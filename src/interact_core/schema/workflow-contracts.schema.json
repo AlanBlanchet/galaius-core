@@ -311,6 +311,15 @@
           "title": "Id",
           "type": "string"
         },
+        "mcp": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/McpBinding"
+          },
+          "maxItems": 32,
+          "title": "Mcp",
+          "type": "array"
+        },
         "model": {
           "anyOf": [
             {
@@ -608,6 +617,168 @@
         "op"
       ],
       "title": "BuiltinImplementation",
+      "type": "object"
+    },
+    "CanvasGroup": {
+      "additionalProperties": true,
+      "description": "A frame drawn around steps on the board: its members move and fold with it.",
+      "properties": {
+        "collapsed": {
+          "default": false,
+          "title": "Collapsed",
+          "type": "boolean"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0,
+          "title": "Height",
+          "type": "number"
+        },
+        "id": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Label",
+          "type": "string"
+        },
+        "ports": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CanvasGroupPort"
+          },
+          "maxItems": 128,
+          "title": "Ports",
+          "type": "array"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0,
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 10000000.0,
+          "minimum": -10000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 10000000.0,
+          "minimum": -10000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "id",
+        "width",
+        "height"
+      ],
+      "title": "CanvasGroup",
+      "type": "object"
+    },
+    "CanvasGroupPort": {
+      "additionalProperties": true,
+      "description": "A port a collapsed group shows on its edge, standing for a member's port.",
+      "properties": {
+        "direction": {
+          "enum": [
+            "input",
+            "output"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PortAddress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "direction"
+      ],
+      "title": "CanvasGroupPort",
+      "type": "object"
+    },
+    "CanvasNote": {
+      "additionalProperties": true,
+      "description": "A note written on the board; it never runs.",
+      "properties": {
+        "id": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "maxLength": 10000,
+          "title": "Text",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 10000000.0,
+          "minimum": -10000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 10000000.0,
+          "minimum": -10000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "id"
+      ],
+      "title": "CanvasNote",
+      "type": "object"
+    },
+    "CanvasPoint": {
+      "additionalProperties": true,
+      "properties": {
+        "x": {
+          "maximum": 10000000.0,
+          "minimum": -10000000.0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 10000000.0,
+          "minimum": -10000000.0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "CanvasPoint",
       "type": "object"
     },
     "ConfiguredModelRef": {
@@ -1946,6 +2117,49 @@
       "title": "ManualTrigger",
       "type": "object"
     },
+    "McpBinding": {
+      "additionalProperties": true,
+      "description": "One MCP server an agent is connected to: which of its tools the agent may call (`all`: every\ntool the server lists, new ones included) and, per model-using tool, the model it asks for\n(overriding the account-wide rule for that tool). A tool left out is denied to the agent's\nharness, never merely hidden.",
+      "properties": {
+        "enabled_tools": {
+          "anyOf": [
+            {
+              "const": "all",
+              "type": "string"
+            },
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ],
+          "default": "all",
+          "title": "Enabled Tools"
+        },
+        "server_id": {
+          "pattern": "^(interact|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|pc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9_.-]{1,64})$",
+          "title": "Server Id",
+          "type": "string"
+        },
+        "tool_models": {
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[A-Za-z0-9_.-]{1,128}$": {
+              "$ref": "#/$defs/ModelChoice"
+            }
+          },
+          "title": "Tool Models",
+          "type": "object"
+        }
+      },
+      "required": [
+        "server_id"
+      ],
+      "title": "McpBinding",
+      "type": "object"
+    },
     "ModelChoice": {
       "additionalProperties": true,
       "description": "A model asked for by what it must DO and how it must SCORE, instead of by id \u2014 re-resolved\nevery run. Written in the ONE criteria grammar agents already use (`interact_core.criteria`):\n`constraints` are hard clauses (a model failing one, or with no known value for it, is out),\n`rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the\ntask's own primary benchmark(s), so the default follows the benchmark registry, not the day\nthe node was saved.",
@@ -3035,6 +3249,65 @@
         }
       },
       "title": "Placement",
+      "type": "object"
+    },
+    "Plumbing": {
+      "additionalProperties": true,
+      "description": "What makes a node kind PLUMBING rather than a step: it only carries a value to the next step\nin the form that step needs \u2014 its format converted (text <-> data), fields picked, set or\nrenamed, values merged or split, or passed on as is \u2014 deciding nothing and writing nothing the\nreader would call content (a step changes the value itself: its case, its words, which items\nare kept). The editor folds plumbing into the wire or step it serves, saying `badge` there; the\nworkflow and its runs are unchanged by it.\n\n`badge` / `badge_fr` are templates over the node's settings: `{name}` is setting `name` (an\nobject gives its keys, a list its items); \" \u00b7 \" parts whose setting is empty are left out.",
+      "properties": {
+        "badge": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Badge",
+          "type": "string"
+        },
+        "badge_fr": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Badge Fr",
+          "type": "string"
+        },
+        "only_if": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlumbingCondition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "badge",
+        "badge_fr"
+      ],
+      "title": "Plumbing",
+      "type": "object"
+    },
+    "PlumbingCondition": {
+      "additionalProperties": true,
+      "description": "Plumbing only while setting `field` matches `pattern`: a text template holding nothing but\n`{{fields}}` passes them on. The editor runs it (JavaScript): keep to syntax both engines read alike.",
+      "properties": {
+        "field": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Field",
+          "type": "string"
+        },
+        "pattern": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "pattern"
+      ],
+      "title": "PlumbingCondition",
       "type": "object"
     },
     "PortAddress": {
@@ -4968,8 +5241,25 @@
           "title": "Name",
           "type": "string"
         },
+        "name_fr": {
+          "default": "",
+          "maxLength": 120,
+          "title": "Name Fr",
+          "type": "string"
+        },
         "placement": {
           "$ref": "#/$defs/Placement"
+        },
+        "plumbing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Plumbing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "ports": {
           "items": {
@@ -5026,6 +5316,12 @@
           "maxLength": 400,
           "title": "Summary",
           "type": "string"
+        },
+        "summary_fr": {
+          "default": "",
+          "maxLength": 400,
+          "title": "Summary Fr",
+          "type": "string"
         }
       },
       "required": [
@@ -5036,6 +5332,48 @@
         "reason"
       ],
       "title": "WorkflowBlockAvailability",
+      "type": "object"
+    },
+    "WorkflowCanvas": {
+      "additionalProperties": true,
+      "description": "How the editor draws the board beside the graph it runs \u2014 frames around steps (`groups`,\nwith `members`: node id -> group id), where the run block and each trigger sit (`placements`,\nkeyed by the editor's own ids), and notes. Saved with the revision so every browser and device\nshows the same board; the engine never reads it.",
+      "properties": {
+        "groups": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CanvasGroup"
+          },
+          "maxItems": 500,
+          "title": "Groups",
+          "type": "array"
+        },
+        "members": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 5000,
+          "title": "Members",
+          "type": "object"
+        },
+        "notes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CanvasNote"
+          },
+          "maxItems": 500,
+          "title": "Notes",
+          "type": "array"
+        },
+        "placements": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CanvasPoint"
+          },
+          "maxProperties": 1000,
+          "title": "Placements",
+          "type": "object"
+        }
+      },
+      "title": "WorkflowCanvas",
       "type": "object"
     },
     "WorkflowCapabilityActivity": {
@@ -5461,6 +5799,17 @@
     "WorkflowRevision": {
       "additionalProperties": true,
       "properties": {
+        "canvas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowCanvas"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "created_at": {
           "format": "date-time",
           "title": "Created At",

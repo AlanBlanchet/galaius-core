@@ -2459,6 +2459,11 @@ class AgentStartSpec(WireRequest):
     #: What this run may do, never more than the PC's own `agent_permission` (the PC clamps it).
     #: Left out of the message when None, so a runner released before the field still verifies it.
     permission: AgentTouchScope | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: The project this run works on.
+    project: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: Hand the project's secrets (the server's vault) to this run, as the .env of its checkout; off
+    #: unless asked for this start, so a run started without it has none to leak.
+    with_secrets: bool = Field(default=False, exclude_if=lambda value: value is False)
 
     @model_validator(mode="after")
     def role_for_an_agent(self) -> Self:
@@ -2518,8 +2523,89 @@ class AgentTailRequest(MachineAgentRequestBase):
     cursor: int | None = Field(default=None, ge=0)
 
 
+#: A project secret's name: an environment variable's, never one that steers the PC's own tools or
+#: the agent CLI itself (its path, its shell, its credentials, interact's own settings).
+_RESERVED_SECRET = re.compile("^(" + "|".join((
+    # the shell, the user, the system (POSIX and Windows)
+    r"PATH", r"HOME", r"SHELL", r"USER", r"LOGNAME", r"TERM", r"TMPDIR", r"TEMP", r"TMP", r"PWD", r"IFS", r"LANG", r"LC_.*", r"DISPLAY",
+    r"SYSTEMROOT", r"WINDIR", r"COMSPEC", r"PATHEXT", r"APPDATA", r"LOCALAPPDATA", r"USERPROFILE", r"XDG_.*", r"DBUS_.*",
+    # shell start-up and what runs before every command
+    r"BASH_ENV", r"ENV", r"ZDOTDIR", r"PROMPT_COMMAND", r"PS4", r"SHELLOPTS", r"BASHOPTS",
+    # how programs and libraries load
+    r"LD_.*", r"DYLD_.*", r"GLIBC_TUNABLES", r"GCONV_PATH", r"LOCPATH", r"MALLOC_.*", r"HOSTALIASES",
+    r"PYTHON.*", r"NODE_OPTIONS", r"NODE_PATH", r"NODE_EXTRA_CA_CERTS", r"NODE_TLS_REJECT_UNAUTHORIZED", r"PERL5.*", r"RUBYOPT", r"RUBYLIB",
+    r"JAVA_TOOL_OPTIONS", r"_JAVA_OPTIONS",
+    # where traffic goes and which certificates it trusts
+    r"HTTPS?_PROXY", r"https?_proxy", r"ALL_PROXY", r"all_proxy", r"NO_PROXY", r"no_proxy", r"SSL_CERT_.*", r"REQUESTS_CA_BUNDLE", r"CURL_CA_BUNDLE",
+    # package tools, editors, pagers, credentials helpers, containers
+    r"PIP_.*", r"UV_.*", r"NPM_CONFIG_.*", r"CARGO_.*", r"RUSTC_WRAPPER", r"GOPROXY", r"GOFLAGS", r"EDITOR", r"VISUAL", r"PAGER", r"LESSOPEN",
+    r"SUDO_ASKPASS", r"GNUPGHOME", r"DOCKER_.*", r"KUBECONFIG", r"GIT_.*", r"SSH_.*", r"GPG_.*",
+    # interact itself and every agent CLI it drives
+    r"INTERACT_.*", r"GALAIUS_.*", r"ANTHROPIC_.*", r"OPENAI_.*", r"CLAUDE_.*", r"CODEX_.*", r"GEMINI_.*", r"GOOGLE_GENAI_.*", r"MISTRAL_.*",
+    r"OPENROUTER_.*", r"GH_TOKEN", r"GITHUB_TOKEN", r"MCP_.*",
+)) + ")$")
+
+
+def _secret_name(value: str) -> str:
+    if _RESERVED_SECRET.match(value):
+        raise ValueError(f"{value} steers the PC's own tools or the agent itself; a project secret never sets it")
+    return value
+
+
+ProjectSecretName = Annotated[str, Field(pattern=r"^[A-Z_][A-Z0-9_]{0,127}$"), AfterValidator(_secret_name)]
+
+
+def _quotable(value: str) -> str:
+    """Written `NAME='value'` in the project's .env: a quote, a line break or a NUL would let a value
+    run code when the file is sourced or add another name - refused (a PEM key: store it base64)."""
+    if any(character in value for character in "'\r\n\0"):
+        raise ValueError("a secret value is one line without a single quote (store a multi-line key base64-encoded)")
+    return value
+
+
+ProjectSecretText = Annotated[str, Field(min_length=1, max_length=32 * 1024), AfterValidator(_quotable)]
+
+
+class ProjectSecretValue(WireRequest):
+    """A project secret's value as its owner sets it from the web (write-only: never read back)."""
+
+    value: SecretStr = Field(min_length=1, max_length=32 * 1024)
+
+    @field_validator("value")
+    @classmethod
+    def one_quotable_line(cls, value: SecretStr) -> SecretStr:
+        _quotable(value.get_secret_value())
+        return value
+
+
+class ProjectSecretInfo(WireModel):
+    """One secret of a project as the web shows it: its name, who set it, when - never its value."""
+
+    name: str = Field(max_length=128)
+    updated_by: UUID
+    updated_at: datetime
+
+
+class SealedSecrets(WireModel):
+    """A project's secrets sealed FOR ONE MACHINE (`interact_core.sealing.SecretsSeal`): AES-256-GCM
+    under a key derived from that machine's signing key, the request and project ids as associated
+    data. Keeps the values out of any frame log or proxy capture; it is no boundary against the
+    server, which can derive the same key. `origin`: the project's repository - the PC writes the
+    secrets only into a checkout of it. `revision`: the vault's state they come from."""
+
+    project: UUID
+    origin: str = Field(max_length=512)
+    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    nonce: str = Field(pattern=r"^[0-9a-f]{24}$")
+    ciphertext: str = Field(min_length=32, max_length=2 * (64 * 1024 + 16), pattern=r"^[0-9a-f]+$")
+    #: How many secrets are inside (what the run's log may say; never their names).
+    count: int = Field(ge=0, le=100)
+
+
 class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec):
     op: Literal["start"] = "start"
+    #: The named project's secrets, sealed for this machine by the server at start (None: none).
+    secrets: SealedSecrets | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
     #: The machine gives its launcher 120 s; the server waits longer, so it never gives up on a
     #: start that then happens anyway (a retry would start a second agent).

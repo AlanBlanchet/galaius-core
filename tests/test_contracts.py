@@ -12,6 +12,7 @@ from typing import get_args
 
 from interact_core import MACHINE_AGENT_REQUESTS, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
+from interact_core.sealing import SecretsSeal
 
 from interact_core import (
     Account,
@@ -388,3 +389,21 @@ def test_a_settings_change_narrows_only_when_it_grants_nothing_new(change: dict,
     assert held.model_copy(update=change).narrows(held) is narrows
     with pytest.raises(ValidationError):
         MachineAgentSettingsChange.model_validate({"settings": {"agent_permission": "full_access"}, "based_on": 0})
+
+
+
+@pytest.mark.parametrize(("name", "value", "kept"), [
+    ("DATABASE_URL", "postgres://u:p@h/db", True), ("AINO_TOKEN", "abc", True),
+    ("PATH", "x", False), ("HTTPS_PROXY", "x", False), ("ANTHROPIC_API_KEY", "x", False), ("BASH_ENV", "x", False), ("lower", "x", False),
+    ("API_KEY", "it's", False), ("API_KEY", "a\nB=1", False), ("API_KEY", "$(curl x|sh)", True),
+])
+def test_project_secrets_travel_sealed_and_only_as_safe_dotenv_lines(name: str, value: str, kept: bool) -> None:
+    seal, request, project = SecretsSeal.for_token("t" * 40), uuid4(), uuid4()
+    if not kept:
+        with pytest.raises(ValidationError):
+            seal.seal({name: value}, request=request, project=project, origin="github.com/o/r")
+        return
+    sealed = seal.seal({name: value}, request=request, project=project, origin="github.com/o/r")
+    assert value not in sealed.model_dump_json() and seal.open(sealed, request=request) == {name: value}
+    with pytest.raises(Exception):
+        seal.open(sealed, request=uuid4())  # replayed into another request: refused

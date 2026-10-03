@@ -98,6 +98,9 @@
             "machine_agent.provider_switched",
             "machine_agent.settings_changed",
             "machine_agent.workspace_prepared",
+            "project_secret.set",
+            "project_secret.deleted",
+            "project_secret.delivered",
             "machine_place.level_changed",
             "machine_place.widening_requested",
             "machine_place.widening_withdrawn",
@@ -157,7 +160,8 @@
             "contact_message",
             "signal",
             "machine",
-            "agent"
+            "agent",
+            "project"
           ],
           "title": "Target Kind",
           "type": "string"

@@ -1110,6 +1110,15 @@
           "title": "Email",
           "type": "string"
         },
+        "kind": {
+          "default": "personal",
+          "enum": [
+            "personal",
+            "company"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
         "locale": {
           "default": "en",
           "enum": [
@@ -1161,6 +1170,14 @@
           "title": "Is Default",
           "type": "boolean"
         },
+        "kind": {
+          "enum": [
+            "personal",
+            "company"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
         "name": {
           "maxLength": 120,
           "minLength": 1,
@@ -1186,7 +1203,8 @@
       "required": [
         "workspace_id",
         "name",
-        "role"
+        "role",
+        "kind"
       ],
       "title": "Workspace",
       "type": "object"
