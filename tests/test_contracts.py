@@ -13,6 +13,7 @@ from typing import get_args
 from interact_core import MACHINE_AGENT_REQUESTS, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from interact_core.sealing import SecretsSeal
+from cryptography.exceptions import InvalidTag
 
 from interact_core import (
     Account,
@@ -405,5 +406,7 @@ def test_project_secrets_travel_sealed_and_only_as_safe_dotenv_lines(name: str, 
         return
     sealed = seal.seal({name: value}, request=request, project=project, origin="github.com/o/r")
     assert value not in sealed.model_dump_json() and seal.open(sealed, request=request) == {name: value}
-    with pytest.raises(Exception):
+    with pytest.raises(InvalidTag):
         seal.open(sealed, request=uuid4())  # replayed into another request: refused
+    with pytest.raises(InvalidTag):
+        seal.open(sealed.model_copy(update={"origin": "github.com/o/other"}), request=request)  # pointed at another repository: refused

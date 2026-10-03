@@ -2542,7 +2542,7 @@ _RESERVED_SECRET = re.compile("^(" + "|".join((
     r"SUDO_ASKPASS", r"GNUPGHOME", r"DOCKER_.*", r"KUBECONFIG", r"GIT_.*", r"SSH_.*", r"GPG_.*",
     # interact itself and every agent CLI it drives
     r"INTERACT_.*", r"GALAIUS_.*", r"ANTHROPIC_.*", r"OPENAI_.*", r"CLAUDE_.*", r"CODEX_.*", r"GEMINI_.*", r"GOOGLE_GENAI_.*", r"MISTRAL_.*",
-    r"OPENROUTER_.*", r"GH_TOKEN", r"GITHUB_TOKEN", r"MCP_.*",
+    r"OPENROUTER_.*", r"GH_.*", r"GITHUB_TOKEN", r"MCP_.*", r"BUN_.*", r"NODE_.*", r"VIRTUAL_ENV", r"CONDA_.*",
 )) + ")$")
 
 
@@ -2563,13 +2563,18 @@ def _quotable(value: str) -> str:
     return value
 
 
-ProjectSecretText = Annotated[str, Field(min_length=1, max_length=32 * 1024), AfterValidator(_quotable)]
+#: A project's vault holds at most this many secrets, each value at most this long, all values
+#: together (as one delivery carries them) at most `SECRETS_TOTAL`.
+SECRETS_PER_PROJECT = 100
+SECRET_VALUE_MAX = 32 * 1024
+SECRETS_TOTAL = 64 * 1024
+ProjectSecretText = Annotated[str, Field(min_length=1, max_length=SECRET_VALUE_MAX), AfterValidator(_quotable)]
 
 
 class ProjectSecretValue(WireRequest):
     """A project secret's value as its owner sets it from the web (write-only: never read back)."""
 
-    value: SecretStr = Field(min_length=1, max_length=32 * 1024)
+    value: SecretStr = Field(min_length=1, max_length=SECRET_VALUE_MAX)
 
     @field_validator("value")
     @classmethod
@@ -2581,25 +2586,25 @@ class ProjectSecretValue(WireRequest):
 class ProjectSecretInfo(WireModel):
     """One secret of a project as the web shows it: its name, who set it, when - never its value."""
 
-    name: str = Field(max_length=128)
+    name: ProjectSecretName
     updated_by: UUID
     updated_at: datetime
 
 
 class SealedSecrets(WireModel):
     """A project's secrets sealed FOR ONE MACHINE (`interact_core.sealing.SecretsSeal`): AES-256-GCM
-    under a key derived from that machine's signing key, the request and project ids as associated
-    data. Keeps the values out of any frame log or proxy capture; it is no boundary against the
-    server, which can derive the same key. `origin`: the project's repository - the PC writes the
-    secrets only into a checkout of it. `revision`: the vault's state they come from."""
+    under a key derived from that machine's signing key, the request id, the project and its
+    repository origin as associated data. Keeps the values out of any frame log or proxy capture; it
+    is no boundary against the server, which can derive the same key. `origin`: the project's
+    repository - the PC writes the secrets only into a checkout of it. An empty set is sealed too:
+    it clears the checkout's .env."""
 
     project: UUID
     origin: str = Field(max_length=512)
-    revision: str = Field(pattern=r"^[0-9a-f]{64}$")
     nonce: str = Field(pattern=r"^[0-9a-f]{24}$")
-    ciphertext: str = Field(min_length=32, max_length=2 * (64 * 1024 + 16), pattern=r"^[0-9a-f]+$")
+    ciphertext: str = Field(min_length=32, max_length=2 * (SECRETS_TOTAL + 64), pattern=r"^[0-9a-f]+$")
     #: How many secrets are inside (what the run's log may say; never their names).
-    count: int = Field(ge=0, le=100)
+    count: int = Field(ge=0, le=SECRETS_PER_PROJECT)
 
 
 class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec):
