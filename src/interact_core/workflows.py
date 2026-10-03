@@ -3214,7 +3214,7 @@ class ConnectionResource(WireModel):
     root: str | None = Field(default=None, max_length=1024)
     endpoint: str | None = Field(default=None, max_length=2048)
     credential: CredentialRef | None = None
-    provider: Literal["openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted", "openai_compatible", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
+    provider: Literal["openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "elevenlabs", "self_hosted", "openai_compatible", "google_drive", "github", "slack", "notion", "gmail", "sharepoint", "onedrive", "s3_compatible", "azure_blob", "discord", "telegram", "whatsapp", "gitlab", "discord_webhook", "teams_webhook"] | None = None
     models: tuple[str, ...] = Field(default=(), max_length=256)
     capabilities: tuple[Literal["read", "write", "list", "http", "command"], ...]
     credential_expires_at: datetime | None = None
@@ -3249,7 +3249,7 @@ class ConnectionResource(WireModel):
             raise ValueError("provider connection requires a credential reference")
         if self.kind not in {"provider_api", "service_connector", "object_storage", "webhook"} and self.provider is not None:
             raise ValueError("provider kind is required only for provider, service, object-storage and webhook connections")
-        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "self_hosted", "openai_compatible"}:
+        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "elevenlabs", "self_hosted", "openai_compatible"}:
             raise ValueError("provider API kind requires a model provider")
         if self.kind not in {"service_connector", "ssh_server", "object_storage"} and self.credential_expires_at is not None:
             raise ValueError("credential expiry belongs only to connections with vendor-issued expiry")
