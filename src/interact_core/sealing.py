@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from .workflows import SECRETS_TOTAL, ProjectSecretName, ProjectSecretText, SealedSecrets
 
-_SECRETS: TypeAdapter[dict[ProjectSecretName, ProjectSecretText]] = TypeAdapter(dict[ProjectSecretName, ProjectSecretText])
+_SECRETS: TypeAdapter[dict[ProjectSecretName, ProjectSecretText]] = TypeAdapter(dict[ProjectSecretName, ProjectSecretText], config=ConfigDict(hide_input_in_errors=True))
 
 
 class SecretsSeal(BaseModel):
