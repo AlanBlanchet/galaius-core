@@ -184,6 +184,7 @@ class OperatorAuditEvent(WireModel):
         "contact_message.listed", "contact_message.read", "contact_message.deleted",
         "signal.listed", "signal.status_changed", "signal.deleted",
         "machine_agent.started", "machine_agent.messaged", "machine_agent.stopped", "machine_agent.answered", "machine_agent.continued", "machine_agent.provider_switched",
+        "machine_agent.settings_changed", "machine_agent.workspace_prepared",
         "machine_place.level_changed", "machine_place.widening_requested", "machine_place.widening_withdrawn", "machine_place.review_discarded",
     ]
     target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration", "contact_message", "signal", "machine", "agent"]

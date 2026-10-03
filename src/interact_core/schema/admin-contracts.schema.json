@@ -96,6 +96,8 @@
             "machine_agent.answered",
             "machine_agent.continued",
             "machine_agent.provider_switched",
+            "machine_agent.settings_changed",
+            "machine_agent.workspace_prepared",
             "machine_place.level_changed",
             "machine_place.widening_requested",
             "machine_place.widening_withdrawn",
