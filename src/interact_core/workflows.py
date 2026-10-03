@@ -3001,6 +3001,9 @@ class MachineWorkspaceJob(WireModel):
     detail: str = Field(default="", max_length=600)
     started_at: datetime
     finished_at: datetime | None = None
+    #: An existing checkout of the repository the PC found and registered as an agent folder (its
+    #: owner's own code: its agent settings load), instead of cloning it.
+    found: bool = False
 
 
 class WorkspacePrepareSpec(WireRequest):
