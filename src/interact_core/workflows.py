@@ -3008,10 +3008,11 @@ class TranscriptMedia(WireModel):
 
 class TranscriptItem(WireModel):
     """One line of an agent run as a person reads it: what it said (`said`, its last word `final`),
+    its « [role] … » opening line alone (`stated`: a label, or the whole answer of a one-line run),
     a tool step, what was sent to it, a harness check, an error."""
 
     at: float
-    kind: Literal["said", "final", "step", "sent", "check", "error"]
+    kind: Literal["said", "final", "stated", "step", "sent", "check", "error"]
     text: str
     tool: str | None = None
     input: str = ""
