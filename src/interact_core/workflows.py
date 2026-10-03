@@ -2588,6 +2588,8 @@ class ProjectSecretInfo(WireModel):
 
     name: ProjectSecretName
     updated_by: UUID
+    #: Who that is, as the workspace shows people (their name, else their email).
+    updated_by_name: str = Field(default="", max_length=320)
     updated_at: datetime
 
 
