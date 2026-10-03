@@ -2949,6 +2949,18 @@ class MachineAgentSettingsView(WireModel):
     online: bool = False
 
 
+class MachineAgentHistoryEntry(WireModel):
+    """One line of a PC's agent history on its page: a web settings version (`version`, and
+    `changes`: field -> [before, after] against the version before it) or another agent action the
+    owner took there (start, stop, a workspace prepared...), by whom and when."""
+
+    action: str = Field(max_length=60)
+    account_id: UUID | None = None
+    at: datetime
+    version: int | None = Field(default=None, ge=1)
+    changes: dict[str, tuple[Any, Any]] = Field(default_factory=dict)
+
+
 class MachineWorkspaceJob(WireModel):
     """One clone a PC was asked for: `running`, `ready` (a folder agents can start in, under
     `root`), or `failed` with why in plain words."""
