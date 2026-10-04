@@ -3199,6 +3199,19 @@ class MachineAgentSession(WireModel):
     live: bool = False
 
 
+class PassedOverCandidate(WireModel):
+    """A (CLI, model) the machine's launcher ranked ABOVE the one a run started on, and why it did
+    not start there: `reason` is the launcher's stable code (`quota_exceeded`, `cli_missing`,
+    `unauthenticated`...), `until` when a quota refusal clears (epoch seconds; None when the
+    reason names no instant). What lets the web say « Claude indisponible jusqu'à 22:01, lancé
+    avec Codex » instead of showing a Codex run as if Codex had been the choice."""
+
+    provider: str = Field(max_length=40)
+    model: str = Field(max_length=120)
+    reason: str = Field(max_length=40)
+    until: float | None = Field(default=None, ge=0)
+
+
 class MachineAgentRun(WireModel):
     """One run the machine started for the web, as the machine's registry has it now."""
 
@@ -3222,6 +3235,9 @@ class MachineAgentRun(WireModel):
     pending: tuple[AgentInteraction, ...] = Field(default=(), max_length=16)
     #: Started inside the PC's OS fence built from its levels (None: not recorded).
     fenced: bool | None = None
+    #: The ranked candidates passed over before `provider`/`model` started, best first (a client
+    #: older than this field sends none).
+    passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
 
 
 class MachineAgentAnswer(WireModel):
