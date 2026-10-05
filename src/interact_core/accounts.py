@@ -15,12 +15,12 @@ WorkspaceRole = Literal["owner", "admin", "member", "viewer"]
 #: personal workspace converts to a company one way (`POST .../convert-to-company`).
 WorkspaceKind = Literal["personal", "company"]
 
-_EMAIL = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+EMAIL_PATTERN = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 
 
 class Account(WireModel):
     account_id: UUID
-    email: str = Field(pattern=_EMAIL, max_length=320)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
     locale: Literal["en", "fr"]
     verified: bool
@@ -40,7 +40,7 @@ class Bootstrap(WireModel):
 
 
 class SignupRequest(WireRequest):
-    email: str = Field(pattern=_EMAIL, max_length=320)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
     password: SecretStr = Field(min_length=12, max_length=1024)
     locale: Literal["en", "fr"] = "en"
     #: "For yourself / For a company" — the kind of the workspace made with the account.
@@ -48,7 +48,7 @@ class SignupRequest(WireRequest):
 
 
 class LoginRequest(WireRequest):
-    email: str = Field(pattern=_EMAIL, max_length=320)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
     password: SecretStr = Field(min_length=1, max_length=1024)
 
 
@@ -57,7 +57,7 @@ class TokenRequest(WireRequest):
 
 
 class RecoveryRequest(WireRequest):
-    email: str = Field(pattern=_EMAIL, max_length=320)
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
 
 
 class PasswordResetRequest(TokenRequest):
@@ -161,9 +161,9 @@ class WorkspaceMember(WireModel):
 
 class WorkspaceInvitation(WireModel):
     id: UUID
-    email: str = Field(pattern=_EMAIL, max_length=320)
-    group_ids: tuple[UUID, ...]
-    """Groups the invitee joins on acceptance; empty = a read-only member."""
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
+    rights: tuple[Permission, ...]
+    """The company rights the invitee gets on acceptance, each still held by the inviter then."""
     status: Literal["pending", "accepted", "cancelled", "expired"]
     created_at: datetime
     expires_at: datetime
@@ -172,11 +172,6 @@ class WorkspaceInvitation(WireModel):
 class WorkspaceMembership(WireModel):
     members: tuple[WorkspaceMember, ...]
     invitations: tuple[WorkspaceInvitation, ...]
-
-
-class WorkspaceInvite(WireRequest):
-    email: str = Field(pattern=_EMAIL, max_length=320)
-    group_ids: tuple[UUID, ...] = ()
 
 
 PlatformErrorCode = Literal[
