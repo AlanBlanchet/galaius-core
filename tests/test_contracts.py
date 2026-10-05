@@ -1,5 +1,6 @@
 """Contract behavior and package-resource acceptance tests."""
 
+import base64
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from interact_core import MACHINE_AGENT_REQUESTS, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from interact_core import MACHINE_AGENT_REQUESTS, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from interact_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -374,12 +375,28 @@ def test_a_run_image_is_asked_by_its_key_never_by_a_path(name: str, valid: bool)
             MACHINE_AGENT_REQUESTS.validate_python(fields)
 
 
-def test_both_sides_name_a_step_image_alike() -> None:
-    line = '{"file_path": "/tmp/run/shot one.PNG", "also": "~/caps/b.jpg", "url": "see (/tmp/c.webp)"}'
-    assert media_paths(line) == ("/tmp/run/shot one.PNG", "~/caps/b.jpg", "/tmp/c.webp")
+@pytest.mark.parametrize(("text", "paths"), [
+    ('{"file_path": "/tmp/run/shot one.PNG", "also": "~/caps/b.jpg"}', ("/tmp/run/shot one.PNG", "~/caps/b.jpg")),
+    ('{"command": "see (/tmp/c.webp) and /tmp/d.gif;"}', ("/tmp/c.webp", "/tmp/d.gif")),
+    # A command naming two paths keeps each whole; a bare `~` or a URL is never an image path.
+    ('{"command": "open /tmp/a and then x.png"}', ()),
+    ('{"command": "ls ~ && cat /etc/x.png"}', ("/etc/x.png",)),
+    ('{"url": "https://example.com/b.png"}', ()),
+    ('{"command": "cp /tmp/a.png /tmp/b.png.bak"}', ("/tmp/a.png",)),
+])
+def test_both_sides_name_a_step_image_alike(text: str, paths: tuple[str, ...]) -> None:
+    assert media_paths(text) == paths
+
+
+def test_an_image_key_is_the_written_path_and_its_bytes_prove_its_type() -> None:
     assert media_key("/tmp/run/shot one.PNG").endswith(".png") and media_key("/a/x.png") != media_key("/a/./x.png")
     with pytest.raises(ValueError):
         media_key("/etc/passwd")
+    png = b"\x89PNG\r\n\x1a\n" + b"\0" * 8
+    assert AgentMedia(content_type="image/png", data=base64.b64encode(png).decode()).content == png
+    for content_type, data in (("image/jpeg", base64.b64encode(png).decode()), ("image/png", "not base64!"), ("image/webp", base64.b64encode(b"RIFF0000WAVE").decode())):
+        with pytest.raises(ValidationError):
+            AgentMedia(content_type=content_type, data=data)
 
 
 @pytest.mark.parametrize(("url", "origin"), [

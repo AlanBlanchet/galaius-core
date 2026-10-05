@@ -1,5 +1,6 @@
 """Provider-independent immutable workflow and execution wire contracts."""
 
+import base64
 import hashlib
 import json
 import re
@@ -2523,12 +2524,34 @@ class AgentTailRequest(MachineAgentRequestBase):
     cursor: int | None = Field(default=None, ge=0)
 
 
-#: An image path a run's step names (absolute or `~/`), as its transcript shows it.
-MEDIA_PATH = re.compile(r"(?P<path>(?:~|/)[^\"'<>]*?\.(?:png|jpe?g|webp|gif))(?=[\"'\s,;)\]]|$)", re.I)
+#: The images a run's step may name, one row per kind: suffixes, content type, the first bytes that
+#: prove it (WEBP: "RIFF" then "WEBP" at byte 8). Every image rule below is built from this table.
+IMAGE_TYPES: tuple[tuple[tuple[str, ...], str, tuple[bytes, ...]], ...] = (
+    ((".png",), "image/png", (b"\x89PNG\r\n\x1a\n",)),
+    ((".jpg", ".jpeg"), "image/jpeg", (b"\xff\xd8\xff",)),
+    ((".gif",), "image/gif", (b"GIF87a", b"GIF89a")),
+    ((".webp",), "image/webp", (b"RIFF",)),
+)
+ImageContentType = Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
+_IMAGE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffixes, _, _ in IMAGE_TYPES for suffix in suffixes)
+#: An image path a step names, as its input wrote it: a whole quoted string (spaces allowed, the way a
+#: JSON tool input carries `file_path`), or an unquoted absolute / `~/` path inside a command (no
+#: spaces; never the `//host/…` of a URL).
+MEDIA_PATH = re.compile(
+    rf'"(?P<quoted>(?:~/|/)[^"\n]+?\.(?:{_IMAGE_SUFFIX}))"'
+    rf"|(?<![\w/:.~-])(?P<bare>(?:~/|/)(?!/)[^\s\"'<>`|;&()]+?\.(?:{_IMAGE_SUFFIX}))(?![\w.])", re.I)
 #: A run's image as the web names it: `media_key` of the path its step wrote.
-MEDIA_KEY = r"^[0-9a-f]{20}\.(?:png|jpe?g|webp|gif)$"
+MEDIA_KEY = rf"^[0-9a-f]{{20}}\.(?:{_IMAGE_SUFFIX})$"
 #: Largest image one AgentMediaRequest carries back (raw bytes, before base64).
 MACHINE_AGENT_MEDIA = 6 * 1024 * 1024
+
+
+def image_type(data: bytes) -> ImageContentType | None:
+    """The content type `data`'s first bytes prove (`IMAGE_TYPES`), or None: never the file's name."""
+    for _, kind, signatures in IMAGE_TYPES:
+        if any(data.startswith(signature) for signature in signatures) and (kind != "image/webp" or data[8:12] == b"WEBP"):
+            return kind  # type: ignore[return-value]
+    return None
 
 
 def media_key(path: str) -> str:
@@ -2536,14 +2559,14 @@ def media_key(path: str) -> str:
     (never resolved: the server and the PC derive it from the same stream line), plus its suffix.
     The path itself never travels in a request."""
     suffix = PurePosixPath(path).suffix.lower()
-    if not re.fullmatch(r"\.(?:png|jpe?g|webp|gif)", suffix):
+    if not re.fullmatch(rf"\.(?:{_IMAGE_SUFFIX})", suffix):
         raise ValueError("not an image path")
     return hashlib.sha256(path.encode()).hexdigest()[:20] + suffix
 
 
 def media_paths(text: str) -> tuple[str, ...]:
     """The image paths one step's input names, in order, each once."""
-    return tuple(dict.fromkeys(match.group("path") for match in MEDIA_PATH.finditer(text)))
+    return tuple(dict.fromkeys(match["quoted"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
 
 
 class AgentMediaRequest(MachineAgentRequestBase):
@@ -2558,10 +2581,25 @@ class AgentMediaRequest(MachineAgentRequestBase):
 
 
 class AgentMedia(WireModel):
-    """An image's bytes (base64) and the content type its first bytes prove."""
+    """An image's bytes (base64) and the content type its first bytes prove: an answer whose bytes are
+    not base64, or not the image it claims, never validates."""
 
-    content_type: Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
+    content_type: ImageContentType
     data: str = Field(max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
+
+    @model_validator(mode="after")
+    def proven(self) -> Self:
+        try:
+            content = base64.b64decode(self.data, validate=True)
+        except ValueError:
+            raise ValueError("image bytes are not base64") from None
+        if image_type(content) != self.content_type:
+            raise ValueError(f"these bytes are not {self.content_type}")
+        return self
+
+    @property
+    def content(self) -> bytes:
+        return base64.b64decode(self.data)
 
 
 #: A project secret's name: an environment variable's, never one that steers the PC's own tools or
