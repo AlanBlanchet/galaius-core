@@ -57,6 +57,20 @@ class PersonProject(WireModel):
     may_change: bool
 
 
+class PersonAgent(WireModel):
+    """One agent the reader sees and what this person may do with it (`verb`: the highest verb they
+    reach it with by any way — a grant, the company audience, a department, stewardship — gated by
+    their rights: a grant of `use` without « Lancer les agents » reads `read`). `granted`: the verb
+    given to this person themself, the part `PersonChange.agents` moves."""
+
+    agent_id: UUID
+    name: str
+    verb: Verb | None
+    granted: Verb | None
+    #: The reader manages this agent (gives and takes back a person's grant on it).
+    may_change: bool
+
+
 class Person(WireModel):
     account_id: UUID
     name: str
@@ -70,6 +84,7 @@ class Person(WireModel):
     rights: tuple[PersonRight, ...]
     pcs: tuple[PersonPc, ...]
     projects: tuple[PersonProject, ...]
+    agents: tuple[PersonAgent, ...]
     may_edit: bool
     may_remove: bool
 
@@ -99,6 +114,8 @@ class PersonChange(WireRequest):
     rights: dict[Permission, bool] = Field(default_factory=dict)
     pcs: dict[UUID, bool] = Field(default_factory=dict)
     projects: dict[UUID, Verb | None] = Field(default_factory=dict)
+    #: The verb given to this person on each agent; None takes their own grant back.
+    agents: dict[UUID, Verb | None] = Field(default_factory=dict)
 
 
 class Refusal(WireModel):
@@ -132,11 +149,17 @@ class InviteProject(WireRequest):
     verb: Verb
 
 
+class InviteAgent(WireRequest):
+    agent_id: UUID
+    verb: Verb
+
+
 class PersonInvite(WireRequest):
     email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
     rights: tuple[Permission, ...] = ()
     pcs: tuple[UUID, ...] = ()
     projects: tuple[InviteProject, ...] = ()
+    agents: tuple[InviteAgent, ...] = ()
 
 
 class PcGrant(WireModel):

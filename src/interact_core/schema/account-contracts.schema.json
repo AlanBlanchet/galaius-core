@@ -616,6 +616,34 @@
       "title": "CompanyProfileUpdate",
       "type": "object"
     },
+    "InviteAgent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "format": "uuid",
+          "title": "Agent Id",
+          "type": "string"
+        },
+        "verb": {
+          "enum": [
+            "see",
+            "read",
+            "use",
+            "write_on_review",
+            "write",
+            "manage"
+          ],
+          "title": "Verb",
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id",
+        "verb"
+      ],
+      "title": "InviteAgent",
+      "type": "object"
+    },
     "InviteProject": {
       "additionalProperties": false,
       "properties": {
@@ -699,6 +727,14 @@
     "PersonInvite": {
       "additionalProperties": false,
       "properties": {
+        "agents": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InviteAgent"
+          },
+          "title": "Agents",
+          "type": "array"
+        },
         "email": {
           "maxLength": 320,
           "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
