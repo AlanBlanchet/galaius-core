@@ -2534,12 +2534,13 @@ IMAGE_TYPES: tuple[tuple[tuple[str, ...], str, tuple[bytes, ...]], ...] = (
 )
 ImageContentType = Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
 _IMAGE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffixes, _, _ in IMAGE_TYPES for suffix in suffixes)
-#: An image path a step names, as its input wrote it: a whole quoted string (spaces allowed, the way a
-#: JSON tool input carries `file_path`), or an unquoted absolute / `~/` path inside a command (no
-#: spaces; never the `//host/…` of a URL).
+#: An image path a step names, as its input wrote it: a whole quoted string, double or single (spaces
+#: allowed: JSON `"file_path": "…"`, the stream's own `file_path='…'`, a `file:` URL), or an unquoted
+#: absolute / `~/` path inside a command (no spaces; never the `//host/…` of a URL).
 MEDIA_PATH = re.compile(
-    rf'"(?P<quoted>(?:~/|/)[^"\n]+?\.(?:{_IMAGE_SUFFIX}))"'
-    rf"|(?<![\w/:.~-])(?P<bare>(?:~/|/)(?!/)[^\s\"'<>`|;&()]+?\.(?:{_IMAGE_SUFFIX}))(?![\w.])", re.I)
+    rf'"(?:file:(?://)?)?(?P<double>(?:~/|/)(?!/)[^"\n]+?\.(?:{_IMAGE_SUFFIX}))"'
+    rf"|'(?:file:(?://)?)?(?P<single>(?:~/|/)(?!/)[^'\n]+?\.(?:{_IMAGE_SUFFIX}))'"
+    rf"|(?:(?<=file:)|(?<=file://)|(?<![\w/:.~'\"-]))(?P<bare>(?:~/|/)(?!/)[^\s\"'<>`|;&()]+?\.(?:{_IMAGE_SUFFIX}))(?![\w.])", re.I)
 #: A run's image as the web names it: `media_key` of the path its step wrote.
 MEDIA_KEY = rf"^[0-9a-f]{{20}}\.(?:{_IMAGE_SUFFIX})$"
 #: Largest image one AgentMediaRequest carries back (raw bytes, before base64).
@@ -2566,7 +2567,7 @@ def media_key(path: str) -> str:
 
 def media_paths(text: str) -> tuple[str, ...]:
     """The image paths one step's input names, in order, each once."""
-    return tuple(dict.fromkeys(match["quoted"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
+    return tuple(dict.fromkeys(match["double"] or match["single"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
 
 
 class AgentMediaRequest(MachineAgentRequestBase):

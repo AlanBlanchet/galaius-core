@@ -377,6 +377,12 @@ def test_a_run_image_is_asked_by_its_key_never_by_a_path(name: str, valid: bool)
 
 @pytest.mark.parametrize(("text", "paths"), [
     ('{"file_path": "/tmp/run/shot one.PNG", "also": "~/caps/b.jpg"}', ("/tmp/run/shot one.PNG", "~/caps/b.jpg")),
+    # The stream's own rendering of a tool input (Read, screenshot, run_actions).
+    ("file_path='/tmp/s/input image.png' description='Read the image'", ("/tmp/s/input image.png",)),
+    ("[{'type': 'screenshot', 'path': '/tmp/s/a2-conv.png'}, {'type': 'wait'}]", ("/tmp/s/a2-conv.png",)),
+    ("{'path': 'pc-da/index-1440.png'}", ()),
+    ("target='file:/tmp/s/02-models cold.png' region='617,6'", ("/tmp/s/02-models cold.png",)),
+    ("open file:///tmp/s/b.png now", ("/tmp/s/b.png",)),
     ('{"command": "see (/tmp/c.webp) and /tmp/d.gif;"}', ("/tmp/c.webp", "/tmp/d.gif")),
     # A command naming two paths keeps each whole; a bare `~` or a URL is never an image path.
     ('{"command": "open /tmp/a and then x.png"}', ()),
