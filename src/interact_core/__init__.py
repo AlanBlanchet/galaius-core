@@ -95,6 +95,7 @@ from .permissions import (
     Permission,
     PERMISSION_CATALOG,
     PermissionGroup,
+    PermissionCategory,
     PermissionInfo,
     PermissionScope,
 )
@@ -256,7 +257,7 @@ __all__ = [
     "ModelCriteriaCatalog", "ModelProperty", "ModelEligibility", "ModelEligibilityEvidence", "WorkflowBlockAvailability",
     "BudgetDecision", "OperatorAuditEvent", "OperatorAuthority", "OperatorRunFailure", "OperatorServiceSummary", "OperatorWorkspaceSummary",
     "SubscriptionLimit", "SubscriptionPlanDefinition", "SubscriptionPlanRef", "UsageProvenanceSummary", "UsageRecord", "UsageSourceRef", "UsageTotals", "WorkspaceSubscription", "WorkspaceSubscriptionUpdate",
-    "DEFAULT_COMPANY_GROUPS", "AgentStewards", "AgentStewardsUpdate", "EffectivePermissions", "GroupCreate", "GroupKind", "GroupMembership", "GroupMemberView", "GroupUpdate", "DepartmentUpdate", "MemberKind", "MemberOverride", "MemberOverridesUpdate", "MembershipSource", "OverrideEffect", "RightExplanation", "RightSource", "RightSourceKind", "Permission", "PERMISSION_CATALOG", "PermissionGroup", "PermissionInfo", "PermissionScope",
+    "DEFAULT_COMPANY_GROUPS", "AgentStewards", "AgentStewardsUpdate", "EffectivePermissions", "GroupCreate", "GroupKind", "GroupMembership", "GroupMemberView", "GroupUpdate", "DepartmentUpdate", "MemberKind", "MemberOverride", "MemberOverridesUpdate", "MembershipSource", "OverrideEffect", "RightExplanation", "RightSource", "RightSourceKind", "Permission", "PERMISSION_CATALOG", "PermissionGroup", "PermissionCategory", "PermissionInfo", "PermissionScope",
     "Account", "AccountUpdate", "Bootstrap", "LoginRequest", "PasswordResetRequest", "RecoveryRequest",
     "PlatformError", "PlatformErrorCode", "SignupRequest", "TokenRequest", "Workspace", "WorkspaceCreate", "WorkspaceDeleteRequest", "WorkspaceInvitation", "WorkspaceMember", "WorkspaceMembership", "WorkspaceRole", "CompanyAccess", "WorkspaceUpdate",
     "PromptCatalogPage", "PromptChannelEntry", "PromptCreateRequest", "PromptExecutionRef", "PromptGitBundleManifest", "PromptKey", "PromptRevision",

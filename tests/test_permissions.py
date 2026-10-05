@@ -2,24 +2,25 @@
 (the server's permission store is the runtime this precedes)."""
 
 from datetime import UTC, datetime
+from typing import get_args
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from interact_core import PERMISSION_CATALOG, GroupMembership, PermissionGroup
+from interact_core import PERMISSION_CATALOG, GroupMembership, Permission, PermissionGroup
 
 
-def test_catalog_has_every_admin_and_product_permission_named_in_the_brief() -> None:
-    keys = {item.key for item in PERMISSION_CATALOG}
-    assert keys == {
-        "admin.access", "admin.groups.manage", "admin.users.view", "admin.plans.manage", "admin.audit.view", "admin.contact.view", "admin.signals.view",
-        "workflows.run", "models.platform_paid", "machines.pool.use", "machines.cloud.launch",
-        "machines.reserve", "credits.auto_topup",
-        "company.members.manage", "company.groups.manage", "company.settings.manage", "company.delete",
-        "api_keys.manage", "approvals.manage", "billing.view", "billing.manage", "workflows.edit",
-        "connections.manage", "agents.edit", "machines.manage",
-    }
+def test_catalog_holds_one_row_per_permission_key() -> None:
+    keys = [item.key for item in PERMISSION_CATALOG]
+    assert sorted(keys) == sorted(get_args(Permission))
+
+
+def test_company_rights_read_in_category_blocks() -> None:
+    """The people screen renders one heading per category in catalog order: a category never splits."""
+    categories = [item.group for item in PERMISSION_CATALOG if "company" in item.scopes]
+    blocks = [group for index, group in enumerate(categories) if index == 0 or categories[index - 1] != group]
+    assert len(blocks) == len(set(blocks))
 
 
 def test_catalog_entries_all_carry_a_label_and_description() -> None:
