@@ -28,6 +28,9 @@ PERSON_PRESETS: dict[Literal["member", "viewer"], tuple[str, ...]] = {
 #: The most a PC's owner hands someone else on it: agents that read (`read_only`) or also write in the
 #: folders it opens (`workspace_write`); never `full_access` (the agent runs as the owner's OS user).
 PcLevel = Literal["read_only", "workspace_write"]
+#: Where an invitation's email is: handed to the mail server, still being retried, given up on
+#: (the inviter sends the sign-in link themself), or none (an invitation older than its mail).
+InviteMail = Literal["sent", "retrying", "failed", "none"]
 
 
 class PersonRight(WireModel):
@@ -95,6 +98,7 @@ class PendingInvite(WireModel):
     rights: tuple[Permission, ...]
     invited_by: str
     created_at: datetime
+    mail: InviteMail
 
 
 class People(WireModel):
@@ -106,6 +110,8 @@ class People(WireModel):
     presets: dict[PresetName, tuple[Permission, ...]]
     people: tuple[Person, ...]
     invitations: tuple[PendingInvite, ...]
+    #: The address an invitee signs in at (what their mail links to), for the inviter to send by hand.
+    sign_in_link: str
 
 
 class PersonChange(WireRequest):
