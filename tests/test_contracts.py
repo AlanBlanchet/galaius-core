@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from interact_core import MACHINE_AGENT_REQUESTS, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from interact_core import MACHINE_AGENT_REQUESTS, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from interact_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -358,6 +358,28 @@ def test_a_place_is_a_plain_folder_path_below_the_working_directory(path: str, v
     else:
         with pytest.raises(ValidationError):
             MACHINE_AGENT_REQUESTS.validate_python(fields)
+
+
+@pytest.mark.parametrize(("name", "valid"), [
+    ("0b0532af5ed750b2c900.png", True), ("0b0532af5ed750b2c900.jpeg", True),
+    ("../0b0532af5ed750b2c90.png", False), ("0b0532af5ed750b2c900/x.png", False), ("0b0532af5ed750b2c900.svg", False), ("shot.png", False), ("", False),
+])
+def test_a_run_image_is_asked_by_its_key_never_by_a_path(name: str, valid: bool) -> None:
+    fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "media", "run_id": str(uuid4()), "name": name}
+    if valid:
+        assert MACHINE_AGENT_REQUESTS.validate_python(fields).feature == "agent_media"
+    else:
+        with pytest.raises(ValidationError):
+            MACHINE_AGENT_REQUESTS.validate_python(fields)
+
+
+def test_both_sides_name_a_step_image_alike() -> None:
+    line = '{"file_path": "/tmp/run/shot one.PNG", "also": "~/caps/b.jpg", "url": "see (/tmp/c.webp)"}'
+    assert media_paths(line) == ("/tmp/run/shot one.PNG", "~/caps/b.jpg", "/tmp/c.webp")
+    assert media_key("/tmp/run/shot one.PNG").endswith(".png") and media_key("/a/x.png") != media_key("/a/./x.png")
+    with pytest.raises(ValueError):
+        media_key("/etc/passwd")
 
 
 @pytest.mark.parametrize(("url", "origin"), [

@@ -2523,6 +2523,47 @@ class AgentTailRequest(MachineAgentRequestBase):
     cursor: int | None = Field(default=None, ge=0)
 
 
+#: An image path a run's step names (absolute or `~/`), as its transcript shows it.
+MEDIA_PATH = re.compile(r"(?P<path>(?:~|/)[^\"'<>]*?\.(?:png|jpe?g|webp|gif))(?=[\"'\s,;)\]]|$)", re.I)
+#: A run's image as the web names it: `media_key` of the path its step wrote.
+MEDIA_KEY = r"^[0-9a-f]{20}\.(?:png|jpe?g|webp|gif)$"
+#: Largest image one AgentMediaRequest carries back (raw bytes, before base64).
+MACHINE_AGENT_MEDIA = 6 * 1024 * 1024
+
+
+def media_key(path: str) -> str:
+    """The name an image path keeps on the web: sha256 of the path EXACTLY as the step wrote it
+    (never resolved: the server and the PC derive it from the same stream line), plus its suffix.
+    The path itself never travels in a request."""
+    suffix = PurePosixPath(path).suffix.lower()
+    if not re.fullmatch(r"\.(?:png|jpe?g|webp|gif)", suffix):
+        raise ValueError("not an image path")
+    return hashlib.sha256(path.encode()).hexdigest()[:20] + suffix
+
+
+def media_paths(text: str) -> tuple[str, ...]:
+    """The image paths one step's input names, in order, each once."""
+    return tuple(dict.fromkeys(match.group("path") for match in MEDIA_PATH.finditer(text)))
+
+
+class AgentMediaRequest(MachineAgentRequestBase):
+    """One image a run's step names (`media_key` of its path). The machine serves it only when a
+    tool step of THAT run (one it started for the web, or launched by one) names a path with this
+    key, and only a plain image file no larger than MACHINE_AGENT_MEDIA."""
+
+    op: Literal["media"] = "media"
+    run_id: UUID
+    name: str = Field(pattern=MEDIA_KEY)
+    feature: ClassVar[str] = "agent_media"
+
+
+class AgentMedia(WireModel):
+    """An image's bytes (base64) and the content type its first bytes prove."""
+
+    content_type: Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
+    data: str = Field(max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
+
+
 #: A project secret's name: an environment variable's, never one that steers the PC's own tools or
 #: the agent CLI itself (its path, its shell, its credentials, interact's own settings).
 _RESERVED_SECRET = re.compile("^(" + "|".join((
@@ -2999,11 +3040,13 @@ class MachineAgentSettingsState(WireModel):
 
 
 class TranscriptMedia(WireModel):
-    """An image a run's step points at, where the reader can fetch it."""
+    """An image a run's step points at, where the reader can fetch it (`src`: the app path that
+    serves it; "" for the server's own mirror of the run)."""
 
     name: str
     label: str
     kind: Literal["image"] = "image"
+    src: str = ""
 
 
 class TranscriptItem(WireModel):
@@ -3127,7 +3170,7 @@ MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
-    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspacesRequest,
+    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspacesRequest | AgentMediaRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -3281,6 +3324,8 @@ class MachineAgentAnswer(WireModel):
     #: A place change (`place_level` / `place_cancel` / `place_discard`): sha256 of what changed, as the
     #: PC's own log keeps it; the server's audit keeps only this, never the path.
     digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    #: `media`: the image asked for.
+    media: AgentMedia | None = None
 
 
 def _port_slug(label: str) -> str:
