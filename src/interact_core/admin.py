@@ -187,6 +187,7 @@ class OperatorAuditEvent(WireModel):
         "machine_agent.settings_changed", "machine_agent.workspace_prepared",
         "project_secret.set", "project_secret.deleted", "project_secret.delivered",
         "machine_place.level_changed", "machine_place.widening_requested", "machine_place.widening_withdrawn", "machine_place.review_discarded",
+        "machine.access_set", "member.access_changed", "member.invited", "member.removed",
     ]
     target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration", "contact_message", "signal", "machine", "agent", "project"]
     target_id: UUID | None = None
