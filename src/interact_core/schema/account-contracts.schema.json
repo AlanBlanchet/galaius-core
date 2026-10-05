@@ -171,25 +171,29 @@
               "admin.audit.view",
               "admin.contact.view",
               "admin.signals.view",
+              "agents.view",
+              "agents.run",
               "workflows.run",
-              "models.platform_paid",
-              "machines.pool.use",
-              "machines.cloud.launch",
-              "machines.reserve",
-              "credits.auto_topup",
+              "agents.edit",
+              "prompts.edit",
+              "tools.manage",
+              "workflows.edit",
+              "connections.manage",
+              "accounts.connect_own",
+              "machines.manage",
+              "billing.view",
+              "billing.manage",
+              "approvals.manage",
+              "api_keys.manage",
               "company.members.manage",
               "company.groups.manage",
               "company.settings.manage",
               "company.delete",
-              "api_keys.manage",
-              "approvals.manage",
-              "billing.view",
-              "billing.manage",
-              "workflows.edit",
-              "connections.manage",
-              "accounts.connect_own",
-              "agents.edit",
-              "machines.manage"
+              "models.platform_paid",
+              "machines.pool.use",
+              "machines.cloud.launch",
+              "machines.reserve",
+              "credits.auto_topup"
             ],
             "type": "string"
           },
@@ -612,6 +616,34 @@
       "title": "CompanyProfileUpdate",
       "type": "object"
     },
+    "InviteProject": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        },
+        "verb": {
+          "enum": [
+            "see",
+            "read",
+            "use",
+            "write_on_review",
+            "write",
+            "manage"
+          ],
+          "title": "Verb",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "verb"
+      ],
+      "title": "InviteProject",
+      "type": "object"
+    },
     "LoginRequest": {
       "additionalProperties": false,
       "properties": {
@@ -662,6 +694,79 @@
         "password"
       ],
       "title": "PasswordResetRequest",
+      "type": "object"
+    },
+    "PersonInvite": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "maxLength": 320,
+          "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+          "title": "Email",
+          "type": "string"
+        },
+        "pcs": {
+          "default": [],
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Pcs",
+          "type": "array"
+        },
+        "projects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/InviteProject"
+          },
+          "title": "Projects",
+          "type": "array"
+        },
+        "rights": {
+          "default": [],
+          "items": {
+            "enum": [
+              "admin.access",
+              "admin.groups.manage",
+              "admin.users.view",
+              "admin.plans.manage",
+              "admin.audit.view",
+              "admin.contact.view",
+              "admin.signals.view",
+              "agents.view",
+              "agents.run",
+              "workflows.run",
+              "agents.edit",
+              "prompts.edit",
+              "tools.manage",
+              "workflows.edit",
+              "connections.manage",
+              "accounts.connect_own",
+              "machines.manage",
+              "billing.view",
+              "billing.manage",
+              "approvals.manage",
+              "api_keys.manage",
+              "company.members.manage",
+              "company.groups.manage",
+              "company.settings.manage",
+              "company.delete",
+              "models.platform_paid",
+              "machines.pool.use",
+              "machines.cloud.launch",
+              "machines.reserve",
+              "credits.auto_topup"
+            ],
+            "type": "string"
+          },
+          "title": "Rights",
+          "type": "array"
+        }
+      },
+      "required": [
+        "email"
+      ],
+      "title": "PersonInvite",
       "type": "object"
     },
     "PlatformError": {
@@ -1261,6 +1366,11 @@
           "title": "Expires At",
           "type": "string"
         },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
         "rights": {
           "items": {
             "enum": [
@@ -1271,35 +1381,34 @@
               "admin.audit.view",
               "admin.contact.view",
               "admin.signals.view",
+              "agents.view",
+              "agents.run",
               "workflows.run",
-              "models.platform_paid",
-              "machines.pool.use",
-              "machines.cloud.launch",
-              "machines.reserve",
-              "credits.auto_topup",
+              "agents.edit",
+              "prompts.edit",
+              "tools.manage",
+              "workflows.edit",
+              "connections.manage",
+              "accounts.connect_own",
+              "machines.manage",
+              "billing.view",
+              "billing.manage",
+              "approvals.manage",
+              "api_keys.manage",
               "company.members.manage",
               "company.groups.manage",
               "company.settings.manage",
               "company.delete",
-              "api_keys.manage",
-              "approvals.manage",
-              "billing.view",
-              "billing.manage",
-              "workflows.edit",
-              "connections.manage",
-              "accounts.connect_own",
-              "agents.edit",
-              "machines.manage"
+              "models.platform_paid",
+              "machines.pool.use",
+              "machines.cloud.launch",
+              "machines.reserve",
+              "credits.auto_topup"
             ],
             "type": "string"
           },
           "title": "Rights",
           "type": "array"
-        },
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
         },
         "status": {
           "enum": [
@@ -1450,6 +1559,9 @@
     },
     {
       "$ref": "#/$defs/WorkspaceInvitation"
+    },
+    {
+      "$ref": "#/$defs/PersonInvite"
     },
     {
       "$ref": "#/$defs/WorkspaceMember"

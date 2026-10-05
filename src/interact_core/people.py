@@ -67,9 +67,9 @@ class Person(WireModel):
     last_seen_at: datetime | None
     #: Opaque digest of this person's access; `PUT` carries it in `If-Match` (409 when it moved).
     revision: str
-    rights: tuple[PersonRight, ...] = ()
-    pcs: tuple[PersonPc, ...] = ()
-    projects: tuple[PersonProject, ...] = ()
+    rights: tuple[PersonRight, ...]
+    pcs: tuple[PersonPc, ...]
+    projects: tuple[PersonProject, ...]
     may_edit: bool
     may_remove: bool
 
@@ -90,7 +90,7 @@ class People(WireModel):
     catalog: tuple[PermissionInfo, ...]
     presets: dict[PresetName, tuple[Permission, ...]]
     people: tuple[Person, ...]
-    invitations: tuple[PendingInvite, ...] = ()
+    invitations: tuple[PendingInvite, ...]
 
 
 class PersonChange(WireRequest):
@@ -106,13 +106,25 @@ class Refusal(WireModel):
     reason: str
 
 
+class ReachCount(WireModel):
+    before: int
+    after: int
+
+
+class ReachCounts(WireModel):
+    """What the person reaches before and after the change, counted only over what the actor may see."""
+
+    agents: ReachCount
+    pcs: ReachCount
+    projects: ReachCount
+
+
 class PersonEffect(WireModel):
-    gains: tuple[str, ...] = ()
-    loses: tuple[str, ...] = ()
-    #: (before, after) of what the person reaches, counted only over what the actor may see.
-    counts: dict[Literal["agents", "pcs", "projects"], tuple[int, int]]
-    refused: tuple[Refusal, ...] = ()
-    warnings: tuple[str, ...] = ()
+    gains: tuple[str, ...]
+    loses: tuple[str, ...]
+    counts: ReachCounts
+    refused: tuple[Refusal, ...]
+    warnings: tuple[str, ...]
 
 
 class InviteProject(WireRequest):
