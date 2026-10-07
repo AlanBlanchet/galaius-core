@@ -913,6 +913,7 @@
                 "replicate",
                 "roboflow",
                 "mistral",
+                "elevenlabs",
                 "self_hosted",
                 "openai_compatible",
                 "google_drive",
