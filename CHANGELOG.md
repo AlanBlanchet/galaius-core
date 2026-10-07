@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.45.0 — 2026-10-07
+
+- Renamed: the package is `galaius-core`, imported as `galaius_core` (was `interact-core` / `interact_core`).
+
 ## 0.42.0 — 2026-09-13
 
 - Shared trigger configuration snapshots and compare-before-save updates for schedule and webhook block editors.
