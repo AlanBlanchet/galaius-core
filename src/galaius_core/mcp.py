@@ -2,7 +2,7 @@
 
 Three places a server comes from, one shape (`McpServer`):
 
-- `interact`: the tools shipped with interact itself, listed from the package's own snapshot;
+- `galaius`: the tools shipped with galaius itself, listed from the package's own snapshot;
 - remote: a streamable-HTTP server a company adds once (https only, its token kept server-side);
 - PC: a local (stdio) server a PC declares for itself. The web lists it and may switch its tools
   off in a binding, never add or enable one.
@@ -59,7 +59,7 @@ class McpServer(WireModel):
     #: Brand-mark key (the client's mark registry) or a kind glyph key.
     mark: str = Field(max_length=64)
     transport: McpTransport
-    #: The tools shipped with interact: always listed, never removed.
+    #: The tools shipped with galaius: always listed, never removed.
     builtin: bool = False
     url: str | None = Field(default=None, max_length=2048)
     machine_id: UUID | None = None
@@ -124,7 +124,7 @@ class McpPopularity(WireModel):
     GitHub repository — never those of a repository it shares with others, which says nothing
     about it. `stars` is a number exactly when there is a count to show.
 
-    A count of nought or one is not popularity: `popular` is true for a server interact names and
+    A count of nought or one is not popularity: `popular` is true for a server galaius names and
     for an entry whose own count reaches the page's `popular_stars` floor, nobody else. The rest of
     the registry is the fold's (`McpCatalogPage.fold_at`)."""
 
@@ -136,7 +136,7 @@ class McpPopularity(WireModel):
     #: names one that is not its alone (the registry's own repository, or one several entries
     #: claim) — nobody is counted from it; none: no GitHub repository at all to count.
     repository: Literal["own", "shared", "none"] = "none"
-    #: What puts it where it is: official, one of the well-known servers interact names, published
+    #: What puts it where it is: official, one of the well-known servers galaius names, published
     #: under a namespace whose owner the registry verified (officials are ordered by their own count
     #: too, the ones whose count is not known yet last); stars, its own count; none, neither.
     ranked_by: Literal["official", "stars", "none"] = "none"
@@ -177,7 +177,7 @@ class McpCatalogEntry(WireModel):
 class McpCatalogPage(WireModel):
     """One registry page in the order the picker shows it, decided once, when the page is built.
 
-    The well-known servers interact names first (`popularity.ranked_by == "official"`), by their own
+    The well-known servers galaius names first (`popularity.ranked_by == "official"`), by their own
     star count; then the entries whose own repository reaches `popular_stars`, most first. That
     prefix is the popular set, `entries[:fold_at]`. `entries[fold_at:]` is everything the page
     cannot call popular — no count, or a count under the floor — for the picker to fold under "More
@@ -195,7 +195,7 @@ class McpCatalogPage(WireModel):
     ranked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     #: Where the popular set ends: `entries[:fold_at]` are popular, the rest are the fold's.
     fold_at: int = Field(default=0, ge=0)
-    #: The stars an entry interact does not name needs before the page calls it popular.
+    #: The stars an entry galaius does not name needs before the page calls it popular.
     popular_stars: int = Field(default=0, ge=0)
 
 

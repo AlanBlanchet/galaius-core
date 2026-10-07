@@ -2162,7 +2162,7 @@
     },
     "ModelChoice": {
       "additionalProperties": true,
-      "description": "A model asked for by what it must DO and how it must SCORE, instead of by id \u2014 re-resolved\nevery run. Written in the ONE criteria grammar agents already use (`interact_core.criteria`):\n`constraints` are hard clauses (a model failing one, or with no known value for it, is out),\n`rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the\ntask's own primary benchmark(s), so the default follows the benchmark registry, not the day\nthe node was saved.",
+      "description": "A model asked for by what it must DO and how it must SCORE, instead of by id \u2014 re-resolved\nevery run. Written in the ONE criteria grammar agents already use (`galaius_core.criteria`):\n`constraints` are hard clauses (a model failing one, or with no known value for it, is out),\n`rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the\ntask's own primary benchmark(s), so the default follows the benchmark registry, not the day\nthe node was saved.",
       "properties": {
         "constraints": {
           "default": [],

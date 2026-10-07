@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from interact_core import McpBinding, ModelChoice
-from interact_core.mcp import McpServerCreate, McpTool
+from galaius_core import McpBinding, ModelChoice
+from galaius_core.mcp import McpServerCreate, McpTool
 
 TOOLS = (McpTool(name="search", description="Search pages.", input_schema={"type": "object", "properties": {"q": {"type": "string"}}}),
          McpTool(name="fetch", description="Fetch one page."))
@@ -41,13 +41,13 @@ def test_a_remote_server_request(body, valid):
 
 
 @pytest.mark.parametrize(("binding", "valid"), [
-    ({"server_id": "interact"}, True),
+    ({"server_id": "galaius"}, True),
     ({"server_id": "0b5f3c1e-7d2a-4c11-9a51-2a8f6f0c1d3e", "enabled_tools": ["search"], "tool_models": {"search": {"task": "image-to-text"}}}, True),
     ({"server_id": "pc:0b5f3c1e-7d2a-4c11-9a51-2a8f6f0c1d3e:playwright", "enabled_tools": []}, True),
     ({"server_id": "../etc"}, False),
-    ({"server_id": "interact", "enabled_tools": ["a", "a"]}, False),
-    ({"server_id": "interact", "enabled_tools": ["a"], "tool_models": {"b": {"task": "image-to-text"}}}, False),  # a rule for a switched-off tool
-    ({"server_id": "interact", "enabled_tools": ["bad name"]}, False),
+    ({"server_id": "galaius", "enabled_tools": ["a", "a"]}, False),
+    ({"server_id": "galaius", "enabled_tools": ["a"], "tool_models": {"b": {"task": "image-to-text"}}}, False),  # a rule for a switched-off tool
+    ({"server_id": "galaius", "enabled_tools": ["bad name"]}, False),
 ])
 def test_an_agent_binding(binding, valid):
     if valid:

@@ -1,7 +1,7 @@
 """What running a workflow node COSTS, in USD — typed contracts only, no pricing DATA here.
 
 Every price is bound to a SOURCE, never hand-typed: `PriceSource.kind` names which one —
-`model_registry` (interact's litellm-derived model registry: token prices), `research_table` (a
+`model_registry` (galaius's litellm-derived model registry: token prices), `research_table` (a
 sourced, dated table of per-image/video-second/audio-second/call vendor prices), `machine_rate`
 (the workspace owner's own $/GPU-second setting for local runs), or `builtin_free` (a node that
 reaches nothing billable — a transform, a connector call, a free node). A node whose source has no

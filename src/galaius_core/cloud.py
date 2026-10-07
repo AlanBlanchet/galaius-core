@@ -1,7 +1,7 @@
 """On-demand cloud compute: resource requirements, the provisioned-machine wire shapes, and the
 pure placement decisions every scheduler (server or test) reuses.
 
-interact-core stays provider-independent and ships NO real-world compute catalog or compliance
+galaius-core stays provider-independent and ships NO real-world compute catalog or compliance
 data of its own — `CloudInstanceType` is a SHAPE; the actual Scaleway (or other provider) rows
 are a CSV-bound registry server-side ("CSV copied verbatim, loader binds to it"),
 never hand-copied into this package. `cheapest_fit`/`choose_placement` are pure functions over

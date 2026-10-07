@@ -10,19 +10,19 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel, ValidationError, create_model
 
-import interact_core
-from interact_core import AgentCatalogSnapshot, AgentGraphUpdate, AgentRevision, PromptExecutionRef, PromptKey, PromptRevision, WorkflowNode, WorkflowRevision
-from interact_core.builtin_ops import _Settings
-from interact_core.wire import ContractDump, ContractView, WireModel, WireRequest
+import galaius_core
+from galaius_core import AgentCatalogSnapshot, AgentGraphUpdate, AgentRevision, PromptExecutionRef, PromptKey, PromptRevision, WorkflowNode, WorkflowRevision
+from galaius_core.builtin_ops import _Settings
+from galaius_core.wire import ContractDump, ContractView, WireModel, WireRequest
 
-for module in pkgutil.iter_modules(interact_core.__path__):
-    importlib.import_module(f"interact_core.{module.name}")
+for module in pkgutil.iter_modules(galaius_core.__path__):
+    importlib.import_module(f"galaius_core.{module.name}")
 
 
 def contracts(root: type[BaseModel] = BaseModel) -> list[type[BaseModel]]:
     found = []
     for model in root.__subclasses__():
-        if model.__module__.startswith("interact_core"):
+        if model.__module__.startswith("galaius_core"):
             found.append(model)
         found.extend(contracts(model))
     return sorted(set(found), key=lambda model: model.__qualname__)
@@ -45,7 +45,7 @@ def test_a_reader_keeps_unknown_fields_and_an_author_refuses_them(model: type[Ba
 
 
 def test_contract_count_covers_every_module() -> None:
-    assert {model.__module__ for model in contracts()} >= {f"interact_core.{module.name}" for module in pkgutil.iter_modules(interact_core.__path__)} - {"interact_core.wire", "interact_core.__init__"}
+    assert {model.__module__ for model in contracts()} >= {f"galaius_core.{module.name}" for module in pkgutil.iter_modules(galaius_core.__path__)} - {"galaius_core.wire", "galaius_core.__init__"}
 
 
 def agent(**fields) -> tuple[AgentRevision, PromptRevision]:

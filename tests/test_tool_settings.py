@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from interact_core import PortableToolSettings, PortableToolSettingsUpdate, PortableToolSettingsValues
+from galaius_core import PortableToolSettings, PortableToolSettingsUpdate, PortableToolSettingsValues
 
 
 def test_sparse_settings_roundtrip_and_explicit_clear():

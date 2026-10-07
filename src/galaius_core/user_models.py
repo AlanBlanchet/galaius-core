@@ -3,7 +3,7 @@ from a Hugging Face repo, an uploaded weights file, an object-storage/SSH path, 
 Registered once (`UserModel`), runnable as a `model` node the same way a vendor's model is
 (`ModelImplementation(kind="model", provider="workspace", model=str(id))`, `placement.target ==
 "machine"`): the machine runner reads `origin` to fetch/mount the weights, `resources` to refuse
-placement on a machine that cannot meet it (`interact_core.cloud.resources_fit`, the same check a
+placement on a machine that cannot meet it (`galaius_core.cloud.resources_fit`, the same check a
 cloud launch uses)."""
 
 from datetime import datetime
@@ -21,7 +21,7 @@ UserModelOriginKind = Literal["huggingface_repo", "uploaded_weights", "object_st
 
 #: The only weight format this app ever deserializes for a workspace-supplied checkpoint
 #: (threat-model `cloud-compute-and-sovereignty-2026-09-24.md` #5: `torch.load`/pickle execute
-#: arbitrary code on load). Checked again at the byte level by `interact.model_safety` on the
+#: arbitrary code on load). Checked again at the byte level by `galaius.model_safety` on the
 #: machine (extension AND magic-byte/pickle-opcode detection) — this is the registration-time gate,
 #: never the only one.
 _SAFE_WEIGHT_SUFFIX = ".safetensors"
@@ -52,7 +52,7 @@ class UserModelOrigin(WireModel):
     #: huggingface_repo only, default False (the safe path): whether loading this repo needs its
     #: OWN custom Python (`trust_remote_code`-class execution) beyond deserializing named weight
     #: files. `True` makes `runs_bundled_code`/`sandbox_tier` below route every run of this model
-    #: through the SAME isolation a script node gets (`interact_core.pool.SandboxTier.gvisor`),
+    #: through the SAME isolation a script node gets (`galaius_core.pool.SandboxTier.gvisor`),
     #: never the workspace-private `"none"` tier — the threat model's "no trust_remote_code without
     #: the same sandboxing as script nodes."
     trusts_remote_code: bool = False
@@ -112,8 +112,8 @@ class UserModelRef(WireModel):
 
 class UserModel(WireModel):
     """One workspace-registered model: runnable as a `model` node on any machine whose reported
-    `interact_core.MachineResources`/accelerators satisfy `resources`
-    (`interact_core.cloud.resources_fit`). Immutable per revision, like every other resource this
+    `galaius_core.MachineResources`/accelerators satisfy `resources`
+    (`galaius_core.cloud.resources_fit`). Immutable per revision, like every other resource this
     app saves — editing licence/resources/origin makes a new revision, never an in-place mutation
     a running placement could silently start reading differently."""
 
@@ -126,7 +126,7 @@ class UserModel(WireModel):
     licence: str = Field(min_length=1, max_length=120)
     origin: UserModelOrigin
     #: The only format `origin`'s weight-bearing branches may declare — `Literal["safetensors"]`
-    #: today (`interact_core.pool.ModelWeightFormat`): naming it as a field, not a hardcoded
+    #: today (`galaius_core.pool.ModelWeightFormat`): naming it as a field, not a hardcoded
     #: constant, is where a second proven-safe format would be added, never a silent second path.
     weight_format: ModelWeightFormat = "safetensors"
     resources: ResourceRequirement

@@ -1,4 +1,4 @@
-"""`interact_core.paid_use` — the deny-by-default paid-API contract.
+"""`galaius_core.paid_use` — the deny-by-default paid-API contract.
 
 Written before the module: the edge cases that matter are the REFUSALS (a provider nobody
 switched on, a cap nobody set, a cap already crossed), not the happy path.
@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core.paid_use import (
+from galaius_core.paid_use import (
     CHARGE_WORDS,
     DEFAULT_MONTHLY_CAP_USD,
     PaidProviderSwitch,

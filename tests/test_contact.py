@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from interact_core.contact import ContactSubmission
+from galaius_core.contact import ContactSubmission
 
 VALID = {"name": "Ada Lovelace", "email": "ada@example.com", "company": "Analytical Engines", "message": "Hello\nthere", "locale": "fr"}
 

@@ -1,4 +1,4 @@
-"""Validation shared by immutable Interact wire contracts.
+"""Validation shared by immutable Galaius wire contracts.
 
 Direction decides strictness. A peer is upgraded independently of the one it talks to, so a
 model READ from the other side (every response, every record read back) keeps the fields its
@@ -47,7 +47,7 @@ class ContractView(BaseModel):
     release: str
     fields: Mapping[str, frozenset[str]]
 
-    _active: ClassVar[ContextVar["ContractView | None"]] = ContextVar("interact_contract_view", default=None)
+    _active: ClassVar[ContextVar["ContractView | None"]] = ContextVar("galaius_contract_view", default=None)
 
     @classmethod
     def active(cls) -> "ContractView | None":

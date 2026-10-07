@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 import pytest
-from interact_core import (
+from galaius_core import (
     BLOCKED_EGRESS_HOSTS,
     EgressAllowEntry,
     EgressPolicy,

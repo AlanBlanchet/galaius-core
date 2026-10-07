@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from interact_core.resources import VERBS, GrantRequest, Project, ProjectCreate, ProjectRule, Verb
+from galaius_core.resources import VERBS, GrantRequest, Project, ProjectCreate, ProjectRule, Verb
 
 
 def test_the_verb_ladder_is_the_literal_in_order():

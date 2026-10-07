@@ -8,12 +8,12 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core import (
+from galaius_core import (
     MACHINE_MODELS, VALUE_TYPES, VISION_MODEL_TASKS, MachineCommand, MachineFunctionSummary, NodeLibraryDefinition, WorkflowBlockAvailability,
     WorkflowNode, model_task_ports, value_type_accepts, provider_sovereignty, workflow_sovereignty,
     NodeSovereigntyRecord, SovereigntyRequired, actual_workflow_sovereignty, meets_requirement, workflow_data_tier,
 )
-from interact_core.workflows import ScriptImplementation, ValueType
+from galaius_core.workflows import ScriptImplementation, ValueType
 
 
 def port(name, direction, value_type="text", **extra):
@@ -179,7 +179,7 @@ def test_a_machine_command_carries_the_node_impl_config_and_inputs() -> None:
         MachineCommand.model_validate(command(NODES["script"][0], config={"source": "rm -rf ."}))
     with pytest.raises(ValidationError, match="registry"):
         MachineCommand.model_validate(command({"kind": "model", "provider": "huggingface", "model": "someone/else", "task": "object-detection"}, inputs={"images": ["a.png"]}))
-    # A workspace's own registered model (`interact_core.UserModel`) is never a `MACHINE_MODELS`
+    # A workspace's own registered model (`galaius_core.UserModel`) is never a `MACHINE_MODELS`
     # key — its id is a UUID the SERVER already validated at registration/save time; the
     # vendor-catalog registry check must never fire for it, or no `MachineCommand` for a workspace model could ever be constructed.
     own_model = MachineCommand.model_validate(command({"kind": "model", "provider": "workspace", "model": str(uuid4()), "task": "object-detection"},

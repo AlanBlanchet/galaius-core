@@ -1,4 +1,4 @@
-"""Adding a computer to an account from its terminal: `interact login` (RFC 8628 device grant shape).
+"""Adding a computer to an account from its terminal: `galaius login` (RFC 8628 device grant shape).
 
 The CLI asks for a sign-in (`DeviceLoginStart`), shows the short `user_code` and opens the server's
 /link page; the signed-in owner sees who asks (`DeviceLoginView`) and approves it for one workspace
@@ -59,7 +59,7 @@ class DeviceLoginStart(WireRequest):
     client_name: str
     platform: Literal["linux", "macos", "windows"]
     client_version: str = Field(min_length=1, max_length=40, pattern=r"^[0-9A-Za-z.+-]+$")
-    #: The CLI may also start workflow runs (`interact login --allow-runs`); otherwise it only reads.
+    #: The CLI may also start workflow runs (`galaius login --allow-runs`); otherwise it only reads.
     runs: bool = False
 
     @field_validator("client_name", mode="before")
@@ -109,7 +109,7 @@ class DeviceLoginView(WireModel):
     #: The viewer's browser and the computer reached this server from the same address. When not,
     #: the page asks the person to TYPE the code (a forwarded link alone never approves).
     same_network: bool
-    #: The computer asked to start workflow runs too (`interact login --allow-runs`), not only read.
+    #: The computer asked to start workflow runs too (`galaius login --allow-runs`), not only read.
     runs: bool
     #: Workspaces where the viewer may add a computer (`machines.manage`).
     workspaces: tuple[DeviceLoginWorkspace, ...]

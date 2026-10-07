@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core.billing import WalletLedgerEntry
+from galaius_core.billing import WalletLedgerEntry
 
 
 def _entry(**overrides) -> WalletLedgerEntry:

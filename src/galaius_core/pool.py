@@ -5,7 +5,7 @@ machine serving more than one workspace crosses a NEW trust boundary ("boundary 
 isolation on one host) that today's workspace-private machine model never had to defend. Every
 type here is the wire shape a pooled run's safeguard needs; the enforcement itself (a real
 per-run container, a real firewall, a real GPU scrub) lives in the runtime that reads these
-(`interact.sandbox`, `interact.gpu_scrub`) — this module carries no side effect.
+(`galaius.sandbox`, `galaius.gpu_scrub`) — this module carries no side effect.
 
 Workspace-private placement (`decisions.md` 2026-09-24) never constructs any of these; a pooled run
 does. `POOL_SHARING_ENABLED` gates the feature end to end — see its own docstring below for the
@@ -36,7 +36,7 @@ SandboxTier = Literal["gvisor", "none"]
 
 #: A GPU reset proof: the driver's own device reset (`nvidia-smi --gpu-reset`, unsupported on
 #: GeForce-class consumer cards — no SR-IOV) or this runtime's own whole-device fill+free scrub
-#: (`interact.gpu_scrub.scrub_all_free_memory`) when the driver reset is unavailable.
+#: (`galaius.gpu_scrub.scrub_all_free_memory`) when the driver reset is unavailable.
 GpuResetKind = Literal["device_reset", "scrubbed"]
 
 
@@ -53,7 +53,7 @@ class EgressPolicy(WireModel):
     """Default-deny egress for one pooled run. `allow` is empty by default: a run with no declared
     network need gets none at all — not even its own sandbox's loopback reaching anywhere beyond
     itself. `BLOCKED_EGRESS_HOSTS` binds unconditionally underneath any policy; no `allow` entry
-    can ever satisfy it (enforced in `interact.sandbox`, checked again here defensively)."""
+    can ever satisfy it (enforced in `galaius.sandbox`, checked again here defensively)."""
 
     allow: tuple[EgressAllowEntry, ...] = Field(default=())
 
@@ -114,7 +114,7 @@ def check_budget(check: RunBudgetCheck) -> RunBudgetDecision:
 
 #: A user-supplied model's weight format: `torch.load`/`pickle.load` execute arbitrary code as the
 #: model-serving process on deserialization (threat #5) — safetensors is the only format this
-#: codebase ever loads for a workspace-supplied checkpoint. `interact.model_safety` enforces this
+#: codebase ever loads for a workspace-supplied checkpoint. `galaius.model_safety` enforces this
 #: at the byte level (extension AND magic-byte/pickle-opcode detection, never extension alone).
 ModelWeightFormat = Literal["safetensors"]
 
@@ -126,15 +126,15 @@ class UnsafeModelWeightsError(Exception):
 
 #: Flipped 2026-09-25 once every one of the six threat-model safeguards had a passing adversarial
 #: test AND a real pooled dispatch existed to read it:
-#:   1 isolation  — interact/tests/test_pool_isolation.py (4 tests, real gVisor containers)
-#:   2 egress     — interact/tests/test_pool_egress.py (5 tests, real nft ruleset + listener)
-#:   3 GPU scrub  — interact/tests/test_gpu_scrub.py (3 tests, real CUDA) + the server's
+#:   1 isolation  — galaius/tests/test_pool_isolation.py (4 tests, real gVisor containers)
+#:   2 egress     — galaius/tests/test_pool_egress.py (5 tests, real nft ruleset + listener)
+#:   3 GPU scrub  — galaius/tests/test_gpu_scrub.py (3 tests, real CUDA) + the server's
 #:                  freshness gate on a real dispatch
 #:   4 budget     — the server refuses a pooled run that would cross the workspace ceiling
 #:   5 sovereignty — the server skips a non-sovereign owner when sovereignty is required
-#:   6 safetensors — interact/tests/test_model_safety.py (5 tests, real pickle RCE payload refused)
+#:   6 safetensors — galaius/tests/test_model_safety.py (5 tests, real pickle RCE payload refused)
 #: The real dispatch: the server's pooled dispatch, runner
-#: routing in `interact.machines.MachineRunner._execute`/`_run_script_pooled`. Scope note: pooled
+#: routing in `galaius.machines.MachineRunner._execute`/`_run_script_pooled`. Scope note: pooled
 #: dispatch today only offers SCRIPT nodes to the pool (the safetensors gate applies to model
 #: weight loading, not yet reachable from this specific dispatch path — MODEL/FUNCTION pooled
 #: dispatch is refused outright by the runner, not silently run unsandboxed). This flag gates the

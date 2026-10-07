@@ -281,7 +281,7 @@ def resources_fit(requirement: ResourceRequirement, resources: MachineResources 
 
 
 class MachineFunctionSummary(WireModel):
-    """One `@interact.function`-decorated Python callable or registered shell command a machine
+    """One `@galaius.function`-decorated Python callable or registered shell command a machine
     advertises on connect/heartbeat — typed exactly like a workflow node's own ports, so a
     function node (`FunctionImplementation`) copies `ports` verbatim when it is placed. `version` is a content
     hash (name + description + ports) the runner recomputes locally on every call: a node keeps
@@ -321,7 +321,7 @@ class MachineSummary(WireModel):
     #: never reported it — a placement check treats that like "unknown", never "enough".
     resources: MachineResources | None = None
     #: The folders (relative to the machine's working directory, '/'-separated) its file nodes may
-    #: read and write, as its runner reports them — set by the owner ON the machine (`interact
+    #: read and write, as its runner reports them — set by the owner ON the machine (`galaius
     #: machine file-roots`) and only the ones its runner accepts. A workflow path is usable iff it
     #: equals one or lies below one. `None`: the runner does not report them (older runner).
     file_roots: tuple[str, ...] | None = Field(default=None, max_length=32)
@@ -826,7 +826,7 @@ _SOVEREIGNTY_RANK: dict[Sovereignty, int] = {"self_hosted": 0, "vendor_cli_sessi
 
 #: The EU Cloud Sovereignty Framework v1.2.1 (European Commission DG DIGIT, Oct. 2025) grades a
 #: service SEAL-0..SEAL-4 on 8 weighted objectives (legal exposure, data confinement, supply
-#: chain...); interact_core projects that onto 3 buckets for a provider's DEFAULT endpoint/region
+#: chain...); galaius_core projects that onto 3 buckets for a provider's DEFAULT endpoint/region
 #: (`~/.github/research/cloud-compute-and-sovereignty-2026-09-24.md` §1c, sourced 2026-09-24):
 #: "eu_sovereign" (EU-HQ, no non-EU parent, data stored AND processed in the EU, SEAL >= 2);
 #: "eu_hosted_foreign_law" (EU-region processing available, but the provider or its parent is
@@ -838,7 +838,7 @@ DataSovereigntyTier = Literal["eu_sovereign", "eu_hosted_foreign_law", "non_eu"]
 class ProviderSovereignty(WireModel):
     """One provider's jurisdiction TIER at one connection's actual endpoint — the wire shape a
     CSV-bound registry populates server-side (bound to a sourced machine-readable table, never
-    hand-copied into this package: interact-core stays provider-independent and ships no
+    hand-copied into this package: galaius-core stays provider-independent and ships no
     real-world compliance data of its own). `tier` is a property of (provider, ENDPOINT) — Mistral
     on its EU-default endpoint reads `eu_sovereign`, on its opt-in US regional endpoint `non_eu`;
     OpenAI's default endpoint reads `non_eu`, its `eu.api.openai.com` endpoint
@@ -1365,7 +1365,7 @@ class MessageProviderChoice(WireModel):
 
 class HarnessToolDescriptor(WireModel):
     """One tool an agent's harness can be given (`AgentRevision.harness_tools` names), with the
-    category its server declares (interact's tools publish it in MCP `_meta`), for grouping."""
+    category its server declares (galaius's tools publish it in MCP `_meta`), for grouping."""
 
     name: str = Field(min_length=1, max_length=160)
     category: str = Field(min_length=1, max_length=40)
@@ -1375,7 +1375,7 @@ class HarnessToolDescriptor(WireModel):
 AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | SendMessageTool | WorkflowFunctionTool, Field(discriminator="kind")]
 
 
-#: A server an agent's MCP binding names: the tools shipped with interact (`interact`), a remote
+#: A server an agent's MCP binding names: the tools shipped with galaius (`galaius`), a remote
 #: server this company added (its UUID), or one a PC declared (`pc:<machine UUID>:<name>`).
 MCP_SERVER_ID = r"^(interact|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|pc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9_.-]{1,64})$"
 #: An MCP tool's name, as the protocol allows it.
@@ -1719,7 +1719,7 @@ class NoSettings(BaseModel):
 
 
 class BuiltinOpSpec:
-    """One builtin operation's contract, declared as data (`interact_core.builtin_ops`): what it
+    """One builtin operation's contract, declared as data (`galaius_core.builtin_ops`): what it
     is for, its settings model and the ports it fixes. Subclassing with an `op` registers it in
     `BUILTIN_OPS`; the server keys its runners by the same name. A node's `config` holds these
     settings AND the constants of its unwired input ports (checked by the port, not here)."""
@@ -1777,7 +1777,7 @@ class BuiltinOpSpec:
             raise ValueError("; ".join(f"{'.'.join(str(part) for part in item['loc']) or cls.op}: {item['msg']}" for item in error.errors())) from None
 
 
-#: Every builtin op's spec, by op (filled by `interact_core.builtin_ops`, imported with the package).
+#: Every builtin op's spec, by op (filled by `galaius_core.builtin_ops`, imported with the package).
 BUILTIN_OPS: dict[str, type[BuiltinOpSpec]] = {}
 
 
@@ -1841,7 +1841,7 @@ class AgentImplementation(_Implementation):
 
 class ModelChoice(WireModel):
     """A model asked for by what it must DO and how it must SCORE, instead of by id — re-resolved
-    every run. Written in the ONE criteria grammar agents already use (`interact_core.criteria`):
+    every run. Written in the ONE criteria grammar agents already use (`galaius_core.criteria`):
     `constraints` are hard clauses (a model failing one, or with no known value for it, is out),
     `rank_by` orders the survivors by weighted normalised benchmark. An empty `rank_by` means the
     task's own primary benchmark(s), so the default follows the benchmark registry, not the day
@@ -1922,7 +1922,7 @@ class FunctionImplementation(_Implementation):
 
 class ScriptFile(WireRequest):
     """A script that already lives on its machine (`ScriptImplementation.origin == "machine_file"`):
-    its path inside the machine owner's script folders (`interact machine script-roots`, never
+    its path inside the machine owner's script folders (`galaius machine script-roots`, never
     where workflow file steps write), the sha256 of the file's bytes when it was picked, and how it
     is started. Paths are relative to the machine's working directory; the machine re-checks the
     folders and the file's digest before every run."""
@@ -2269,9 +2269,9 @@ class MachineCommand(WireModel):
     #: "owner": the machine's own workspace runs its own workflow — today's only shape, the
     #: runner's direct-subprocess path. "pooled": `workspace_id` is a DIFFERENT (tenant) workspace
     #: borrowing this machine, signed by the OWNER's key — the runner must route this through its
-    #: gVisor sandbox (`interact.sandbox.run_pooled`), never the direct path a same-workspace
+    #: gVisor sandbox (`galaius.sandbox.run_pooled`), never the direct path a same-workspace
     #: command gets. A pooled `EgressPolicy` travels inside `config["_pool_egress_allow"]` as a
-    #: plain list of `{host, port}` — not a typed field here, since `interact_core.pool` (which
+    #: plain list of `{host, port}` — not a typed field here, since `galaius_core.pool` (which
     #: owns `EgressPolicy`) imports FROM this module for `MachineRef`; a typed field would cycle.
     tenancy: Literal["owner", "pooled"] = "owner"
     #: The account the run acts for (`RunInitiator.account`): the runner's local audit log names it.
@@ -2429,14 +2429,14 @@ class MachineDataAnswer(WireModel):
 #: Largest window of one agent run's event stream a `tail` request carries.
 MACHINE_AGENT_TAIL = 256 * 1024
 #: What an agent started from the web may do on a machine — the launcher's touch scopes
-#: (`interact.agents.vocabulary.TouchScope`), set on the machine by its owner.
+#: (`galaius.agents.vocabulary.TouchScope`), set on the machine by its owner.
 AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
 #: The touch scopes least first: a narrower one is earlier.
 AGENT_TOUCH_SCOPES: tuple[AgentTouchScope, ...] = get_args(AgentTouchScope)
 AgentRole = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 AgentModelId = Annotated[str, Field(pattern=r"^[A-Za-z0-9._:/@+-]+$", min_length=1, max_length=256)]
 AgentProvider = Literal["claude", "codex"]
-#: `agent`: a role run by the launcher (`interact agents spawn`); `session`: an open conversation
+#: `agent`: a role run by the launcher (`galaius agents spawn`); `session`: an open conversation
 #: like the editor's chat, which ASKS before a command or a file change (the approvals the web
 #: answers); `continued`: a copy of one of the owner's own editor conversations, continued here.
 AgentRunKind = Literal["agent", "session", "continued"]
@@ -2604,7 +2604,7 @@ class AgentMedia(WireModel):
 
 
 #: A project secret's name: an environment variable's, never one that steers the PC's own tools or
-#: the agent CLI itself (its path, its shell, its credentials, interact's own settings).
+#: the agent CLI itself (its path, its shell, its credentials, galaius's own settings).
 _RESERVED_SECRET = re.compile("^(" + "|".join((
     # the shell, the user, the system (POSIX and Windows)
     r"PATH", r"HOME", r"SHELL", r"USER", r"LOGNAME", r"TERM", r"TMPDIR", r"TEMP", r"TMP", r"PWD", r"IFS", r"LANG", r"LC_.*", r"DISPLAY",
@@ -2620,7 +2620,7 @@ _RESERVED_SECRET = re.compile("^(" + "|".join((
     # package tools, editors, pagers, credentials helpers, containers
     r"PIP_.*", r"UV_.*", r"NPM_CONFIG_.*", r"CARGO_.*", r"RUSTC_WRAPPER", r"GOPROXY", r"GOFLAGS", r"EDITOR", r"VISUAL", r"PAGER", r"LESSOPEN",
     r"SUDO_ASKPASS", r"GNUPGHOME", r"DOCKER_.*", r"KUBECONFIG", r"GIT_.*", r"SSH_.*", r"GPG_.*",
-    # interact itself and every agent CLI it drives
+    # galaius itself and every agent CLI it drives
     r"INTERACT_.*", r"GALAIUS_.*", r"ANTHROPIC_.*", r"OPENAI_.*", r"CLAUDE_.*", r"CODEX_.*", r"GEMINI_.*", r"GOOGLE_GENAI_.*", r"MISTRAL_.*",
     r"OPENROUTER_.*", r"GH_.*", r"GITHUB_TOKEN", r"MCP_.*", r"BUN_.*", r"NODE_.*", r"VIRTUAL_ENV", r"CONDA_.*",
 )) + ")$")
@@ -2674,7 +2674,7 @@ class ProjectSecretInfo(WireModel):
 
 
 class SealedSecrets(WireModel):
-    """A project's secrets sealed FOR ONE MACHINE (`interact_core.sealing.SecretsSeal`): AES-256-GCM
+    """A project's secrets sealed FOR ONE MACHINE (`galaius_core.sealing.SecretsSeal`): AES-256-GCM
     under a key derived from that machine's signing key, the request id, the project and its
     repository origin as associated data. Keeps the values out of any frame log or proxy capture; it
     is no boundary against the server, which can derive the same key. `origin`: the project's
@@ -2764,7 +2764,7 @@ class AgentLogsRequest(MachineAgentRequestBase):
 
 
 class AgentSettingsRequest(MachineAgentRequestBase):
-    """Which CLIs may run agents here, and the model each of interact's own tools resolves to here
+    """Which CLIs may run agents here, and the model each of galaius's own tools resolves to here
     (its rule is the owner's, synced from his account; the keys that decide what clears it are this
     machine's)."""
 
@@ -2788,7 +2788,7 @@ class AgentProviderSwitchRequest(MachineAgentRequestBase):
 #: and dates; `read`: bytes; `write_on_review`: writes land in a staging copy the owner accepts on
 #: the PC, by digest; `sandbox`: read + write in place, apart from every other root; `write`: read +
 #: write in place. Set on the PC; from the web a change to a LATER level waits on the PC for its
-#: owner's confirm (`interact machine approve`), a change to an earlier one applies at once.
+#: owner's confirm (`galaius machine approve`), a change to an earlier one applies at once.
 PlaceLevel = Literal["hidden", "see", "read", "write_on_review", "sandbox", "write"]
 PLACE_LEVELS: tuple[PlaceLevel, ...] = get_args(PlaceLevel)
 #: A folder of the PC relative to its working directory (its home folder): "/"-separated names, none
@@ -2858,7 +2858,7 @@ class MachinePlaceReview(WireModel):
 
 class MachineFence(WireModel):
     """Whether agent CLIs on this PC run inside an OS fence built from the levels. `on`: the owner
-    switched it on there (`interact machine fence on`); `available`: this PC can build one
+    switched it on there (`galaius machine fence on`); `available`: this PC can build one
     (`reason` says why not); agents are fenced only when both hold."""
 
     platform: str = Field(max_length=40)
@@ -2869,7 +2869,7 @@ class MachineFence(WireModel):
 
 class MachinePlacesView(WireModel):
     """The PC's levels as the PC holds them now, the widenings waiting on it, whether whole-PC
-    browsing is on (`interact machine browse on`), its fence, and the folder it suggests as a
+    browsing is on (`galaius machine browse on`), its fence, and the folder it suggests as a
     sandbox."""
 
     places: tuple[MachinePlace, ...] = Field(default=(), max_length=256)
@@ -3065,7 +3065,7 @@ class MachineAgentSettingsUpdate(WireModel):
 class MachineAgentSettingsState(WireModel):
     """What a PC holds now: `revision` counts every change of its agent settings (web or local),
     `version` the last web version it applied (0: none), `remote` whether it takes web changes
-    (`interact machine remote on|off`, the PC's own kill switch), `refused` each folder it cannot
+    (`galaius machine remote on|off`, the PC's own kill switch), `refused` each folder it cannot
     use and why, `detail` why the last web version was not applied (empty: it was)."""
 
     revision: int = Field(ge=0)
@@ -3112,8 +3112,8 @@ class MachineRunEvents(WireModel):
 
 class MachineAgentSettingsView(WireModel):
     """One PC's agent settings as its page shows them: what the PC last reported (None: it never
-    did - its interact predates web settings, or it never connected since), the web version still
-    waiting to reach it (None: none), who changed it and when, and whether its interact takes web
+    did - its galaius predates web settings, or it never connected since), the web version still
+    waiting to reach it (None: none), who changed it and when, and whether its galaius takes web
     settings at all (`supported`)."""
 
     state: MachineAgentSettingsState | None = None
@@ -3138,7 +3138,7 @@ class MachineAgentHistoryEntry(WireModel):
 
 
 #: Where starting a project on a PC stands, in the order it is checked: the PC is not connected; its
-#: interact predates web settings (only an install on that PC fixes it); agents are off or it has no
+#: galaius predates web settings (only an install on that PC fixes it); agents are off or it has no
 #: agent folder; the project names no repository; the project is not on that PC yet; being cloned;
 #: the last clone failed; ready to start in.
 ProjectReadinessState = Literal["offline", "outdated", "agents_off", "no_repository", "no_workspace", "preparing", "failed", "ready"]
@@ -3241,7 +3241,7 @@ class MachineAgentModel(WireModel):
 
 
 class AgentProviderState(WireModel):
-    """One CLI interact can drive agents through, on this machine."""
+    """One CLI galaius can drive agents through, on this machine."""
 
     provider: AgentProvider
     #: The owner lets it run agents here (unmentioned: on).
@@ -3250,7 +3250,7 @@ class AgentProviderState(WireModel):
     available: bool
 
 
-#: interact's own tools that pick a model by rule: screenshots and images, UI element detection,
+#: galaius's own tools that pick a model by rule: screenshots and images, UI element detection,
 #: video, audio, and the quick (low / medium) review tier.
 ToolModelRole = Literal["image", "component", "video", "audio", "sovereign"]
 

@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core import ResourceRequirement, UserModel, UserModelOrigin
+from galaius_core import ResourceRequirement, UserModel, UserModelOrigin
 
 CONNECTION = {"id": str(uuid4()), "revision": str(uuid4()), "capability": "read"}
 

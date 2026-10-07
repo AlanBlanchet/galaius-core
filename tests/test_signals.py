@@ -6,7 +6,7 @@ import base64
 import pytest
 from pydantic import ValidationError
 
-from interact_core.signals import SignalRedaction, SignalScreenshot, SignalSubmission
+from galaius_core.signals import SignalRedaction, SignalScreenshot, SignalSubmission
 
 RUN = "3f2b8c1e-9a4d-4c7e-8b1a-0d2e4f6a8b9c"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64

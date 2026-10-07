@@ -4,7 +4,7 @@ an owner-only, irreversible workspace delete requires — the wire contract prec
 import pytest
 from pydantic import ValidationError
 
-from interact_core import WorkspaceDeleteRequest
+from galaius_core import WorkspaceDeleteRequest
 
 
 def test_workspace_delete_request_needs_a_nonblank_confirmation_name() -> None:

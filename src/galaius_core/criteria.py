@@ -1,4 +1,4 @@
-"""Shared syntax for model criteria stored by every Interact consumer."""
+"""Shared syntax for model criteria stored by every Galaius consumer."""
 
 from __future__ import annotations
 

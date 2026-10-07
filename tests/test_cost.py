@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core.cost import (
+from galaius_core.cost import (
     PLATFORM_PRICING,
     BudgetOverrun,
     NodeCostActual,

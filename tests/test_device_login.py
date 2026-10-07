@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from interact_core import DeviceLoginStart, UserCode
+from galaius_core import DeviceLoginStart, UserCode
 
 
 @pytest.mark.parametrize("typed, code", [("bcdf-ghjk", "BCDF-GHJK"), (" BCDF GHJK ", "BCDF-GHJK"), ("bcdfghjk", "BCDF-GHJK")])

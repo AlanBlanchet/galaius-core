@@ -4,7 +4,7 @@ A role field never names a model. It carries a CRITERION — a requirement strin
 reads against whatever the calling project actually has reachable (a saved provider key, or a
 logged-in CLI session) — never a pinned id that silently stops being the right choice, or a right
 choice nobody's key can reach. The resolver lives where the ranker and the availability facts
-both are (`interact.criteria.Criteria`, called from the server that also knows the project's
+both are (`galaius.criteria.Criteria`, called from the server that also knows the project's
 connections); this module only carries the requirement text and its bounds.
 """
 
@@ -17,7 +17,7 @@ from .wire import WireModel, WireRequest
 VLM_MIN_DIM_DEFAULT = 768
 VLM_MAX_DIM_DEFAULT = 1280
 MediaSessionProviderName = Literal["claude"]
-#: One requirement per role interact resolves a model for. A fallback CHAIN is no longer a
+#: One requirement per role galaius resolves a model for. A fallback CHAIN is no longer a
 #: separate field: `Criteria.qualifying` already returns every clearing model in rank order, so
 #: the second-ranked entry the resolver already computed IS the fallback — a second pinned list
 #: would just be a second, driftable copy of the same ranking.

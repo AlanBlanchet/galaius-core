@@ -9,8 +9,8 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core import BUILTIN_OPS, BuiltinOp, Plumbing, WorkflowBlockAvailability, WorkflowNode
-from interact_core.builtin_ops import BUILTIN_OP_SPECS, TemplateOp, TemplateSettings, switch_cases
+from galaius_core import BUILTIN_OPS, BuiltinOp, Plumbing, WorkflowBlockAvailability, WorkflowNode
+from galaius_core.builtin_ops import BUILTIN_OP_SPECS, TemplateOp, TemplateSettings, switch_cases
 
 OPS = sorted(BUILTIN_OPS)
 

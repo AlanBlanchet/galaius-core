@@ -11,12 +11,12 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from interact_core import MACHINE_AGENT_REQUESTS, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from galaius_core import MACHINE_AGENT_REQUESTS, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
-from interact_core.sealing import SecretsSeal
+from galaius_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
 
-from interact_core import (
+from galaius_core import (
     Account,
     AccountUpdate,
     PlatformError,
@@ -85,7 +85,7 @@ def test_account_update_distinguishes_omitted_locale_from_invalid_null() -> None
 def test_prompt_revision_rejects_content_digest_mismatch() -> None:
     with pytest.raises(ValidationError, match="digest does not match"):
         PromptRevision(
-            key=PromptKey(namespace="interact", slug="system"),
+            key=PromptKey(namespace="galaius", slug="system"),
             revision=uuid4(),
             digest="0" * 64,
             content="not the digest's content",
@@ -144,9 +144,9 @@ def test_contracts_are_immutable() -> None:
 
 
 def test_standalone_package_exports_contracts_and_bundles_all_schemas() -> None:
-    assert PromptCreateRequest.__module__ == "interact_core.prompts"
-    assert WorkflowKey.__module__ == "interact_core.workflows"
-    schema_dir = files("interact_core").joinpath("schema")
+    assert PromptCreateRequest.__module__ == "galaius_core.prompts"
+    assert WorkflowKey.__module__ == "galaius_core.workflows"
+    schema_dir = files("galaius_core").joinpath("schema")
     schema_names = {path.name for path in schema_dir.iterdir() if path.name.endswith(".json")}
     assert schema_names == {
         "account-contracts.schema.json",

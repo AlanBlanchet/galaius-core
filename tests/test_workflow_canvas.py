@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core.workflows import WorkflowRevision
+from galaius_core.workflows import WorkflowRevision
 
 NODE = str(uuid4())
 

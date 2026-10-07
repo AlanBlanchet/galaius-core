@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core import (
+from galaius_core import (
     AgentRevision,
     ConnectionResource,
     ConnectionResourceRef,

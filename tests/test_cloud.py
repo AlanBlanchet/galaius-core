@@ -1,6 +1,6 @@
 """Contract tests for on-demand cloud placement: a node's resource requirement fitting a
 connected machine's reported resources/accelerators, the cheapest catalog instance for a
-requirement over an EXPLICIT catalog (interact-core ships no real compute data of its own — a
+requirement over an EXPLICIT catalog (galaius-core ships no real compute data of its own — a
 server-side CSV-bound registry supplies it), the sovereignty-tier floor (threat-model #6, a hard
 constraint), and the pure scheduler decision (`choose_placement`) that picks a connected machine
 or signals a cloud launch is needed."""
@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from interact_core import (
+from galaius_core import (
     CloudInstanceType,
     CloudMachine,
     MachineAccelerator,

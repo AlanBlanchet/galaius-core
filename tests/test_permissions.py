@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from interact_core import PERMISSION_CATALOG, GroupMembership, Permission, PermissionGroup
+from galaius_core import PERMISSION_CATALOG, GroupMembership, Permission, PermissionGroup
 
 
 def test_catalog_holds_one_row_per_permission_key() -> None:
