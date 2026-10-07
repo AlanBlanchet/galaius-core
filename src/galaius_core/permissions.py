@@ -75,12 +75,13 @@ MemberKind = Literal["account", "workspace", "agent"]
 gives its agents no permission, it says which part of the company runs them)."""
 MembershipSource = Literal["manual", "subscription"]
 
-GroupKind = Literal["group", "department"]
+GroupKind = Literal["group", "department", "company"]
 """`group`: an access group (Owners, Admins, Billing...), permissions only. `department`: a part of
 the company (Sales, Support...) — same permissions its PEOPLE inherit, plus a reporting line
 (`parent_id`), an owner (transfers / deletes it) and a manager ("responsable": accountable for it,
-adds and removes its people and the agents they own or manage). Platform groups are always
-`group`."""
+adds and removes its people and the agents they own or manage). `company`: the company itself, the
+root of its tree, one per company, made with it: what it gives every member gets, nobody sits at it,
+it has no owner, manager or parent. Platform groups are always `group`."""
 
 
 class PermissionInfo(WireModel):
@@ -163,6 +164,8 @@ class GroupCreate(WireRequest):
 
     @model_validator(mode="after")
     def department_has_stewards(self) -> Self:
+        if self.kind == "company":
+            raise ValueError("the company node exists once, made with the company")
         if self.kind == "department" and (self.owner_account_id is None or self.manager_account_id is None):
             raise ValueError("a department needs an owner and a manager")
         if self.kind == "group" and (self.parent_id, self.owner_account_id, self.manager_account_id) != (None, None, None):
@@ -255,12 +258,13 @@ class MemberOverridesUpdate(WireRequest):
         return self
 
 
-RightSourceKind = Literal["group", "department", "allow", "deny", "manager"]
+RightSourceKind = Literal["group", "department", "company", "allow", "deny", "manager"]
 
 
 class RightSource(WireModel):
     """WHERE one right comes from (or, `deny`, what takes it away): an access group, a department,
-    a per-person override, or (`manager`) the agent's manager it is capped by."""
+    the company itself (what every member gets), a per-person override, or (`manager`) the agent's
+    manager it is capped by."""
 
     kind: RightSourceKind
     id: UUID | None = None
