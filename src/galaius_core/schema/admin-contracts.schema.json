@@ -92,6 +92,9 @@
             "signal.listed",
             "signal.status_changed",
             "signal.deleted",
+            "error_report.listed",
+            "error_report.status_changed",
+            "error_report.deleted",
             "machine_agent.started",
             "machine_agent.messaged",
             "machine_agent.stopped",
@@ -165,6 +168,7 @@
             "migration",
             "contact_message",
             "signal",
+            "error_report",
             "machine",
             "agent",
             "project"

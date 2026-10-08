@@ -39,7 +39,9 @@ class SignalRedaction:
     )
     _QUERY: ClassVar[re.Pattern[str]] = re.compile(r"([?&])([^=&#\s?]{1,64})=[^&#\s]*")
     _SECRET_QUERY: ClassVar[re.Pattern[str]] = re.compile(r"(?i)([?&])((?:[a-z_]*token|code|state|[a-z_]*key|secret|password|sig|signature|auth[a-z_]*|session)=)[^&#\s]*")
-    _EMAIL: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+    # Bounded runs (RFC 5321: 64-character local part, 253-character domain): an unbounded `+` retried
+    # from every start of a long run without `@` made a 64 000-character line cost seconds (quadratic).
+    _EMAIL: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}")
     _BLOB: ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z0-9+/_=-]{32,}")
     _UUID: ClassVar[re.Pattern[str]] = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
