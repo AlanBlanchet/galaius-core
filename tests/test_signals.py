@@ -26,6 +26,11 @@ CONTEXT = {
     ("blob " + "x9Kf" * 12, "[redacted]", "x9Kf" * 12),
     (f"run {RUN} failed", RUN, "[redacted]"),
     (f"/#workflows/{RUN}/runs/{RUN}", f"workflows/{RUN}/runs/{RUN}", "[redacted]"),
+    # A PC's log: its machine token and an OAuth callback's code go, an exit code and a state word stay.
+    ("connect Bearer iwm_9fQ2xLmT0aB7cD4e", "[redacted]", "iwm_9fQ2xLmT0aB7cD4e"),
+    ("callback /v1/auth/google/callback?code=4/0AbCdEf&state=xyz12", "code=[redacted]", "4/0AbCdEf"),
+    ("claude exited with exit code: 137 (state: failed)", "exit code: 137 (state: failed)", "[redacted]"),
+    pytest.param("adversarial " + "a@" + "a." * 120_000, "adversarial", "never-there", id="240k-chars-without-spaces-stays-linear"),
 ])
 def test_captured_text_is_redacted_and_ids_survive(raw: str, kept: str, gone: str) -> None:
     clean = SignalRedaction.anonymous(raw)

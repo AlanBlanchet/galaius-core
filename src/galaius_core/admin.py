@@ -171,6 +171,10 @@ class OperatorRunFailure(WireModel):
     updated_at: datetime
 
 
+AuditTargetKind = Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration", "contact_message", "signal", "error_report", "machine", "agent", "project"]
+"""What an audited act was done to."""
+
+
 class OperatorAuditEvent(WireModel):
     id: UUID
     actor_account_id: UUID | None = None
@@ -190,6 +194,6 @@ class OperatorAuditEvent(WireModel):
         "machine_place.level_changed", "machine_place.widening_requested", "machine_place.widening_withdrawn", "machine_place.review_discarded",
         "machine.access_set", "member.access_changed", "member.invited", "member.removed",
     ]
-    target_kind: Literal["account", "workspace", "service", "run", "plan", "subscription", "usage", "group", "group_member", "migration", "contact_message", "signal", "error_report", "machine", "agent", "project"]
+    target_kind: AuditTargetKind
     target_id: UUID | None = None
     created_at: datetime

@@ -35,7 +35,7 @@ class SignalRedaction:
         (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}"), r"\1 [redacted]"),
         (re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"), "[redacted]"),
         (re.compile(r"\b(?:sk|pk|rk|iwk|iwm|iwh|ghp|gho|ghs|github_pat|xox[abprs]|AIza|ya29|glpat)[-_][A-Za-z0-9._-]{6,}"), "[redacted]"),
-        (re.compile(r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|token|secret|password|passwd|authorization|cookie|code|state|session)[\"']?\s*[:=]\s*[\"']?)[^\s\"'&,;}#]+"), r"\1[redacted]"),
+        (re.compile(r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|token|secret|password|passwd|authorization|cookie)[\"']?\s*[:=]\s*[\"']?)[^\s\"'&,;}#]+"), r"\1[redacted]"),
     )
     _QUERY: ClassVar[re.Pattern[str]] = re.compile(r"([?&])([^=&#\s?]{1,64})=[^&#\s]*")
     _SECRET_QUERY: ClassVar[re.Pattern[str]] = re.compile(r"(?i)([?&])((?:[a-z_]*token|code|state|[a-z_]*key|secret|password|sig|signature|auth[a-z_]*|session)=)[^&#\s]*")
