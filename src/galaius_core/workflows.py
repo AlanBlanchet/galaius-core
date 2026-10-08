@@ -310,6 +310,23 @@ def plain_file_roots(value: object) -> bool:
         isinstance(root, str) and 0 < len(root) <= 240 and not root.startswith("/") and ".." not in root.split("/") for root in value)
 
 
+MachineProblemCode = Literal["service_unavailable", "service_stopped", "channel_unreachable", "crashed"]
+
+
+class MachineProblem(WireModel):
+    """Why a computer that should be connected is not, as its own galaius saw it: its background
+    service could not be set up (`service_unavailable`), was set up but is not running
+    (`service_stopped`), runs but cannot open the machine channel (`channel_unreachable`), or its
+    connection crashed (`crashed`). Sent over HTTPS with its machine token (`POST
+    /v1/machine/problem`), which still answers when the channel does not; the server stamps `at`
+    and keeps the latest one until the channel next opens."""
+
+    code: MachineProblemCode
+    #: Its own words (an error, a log line), shown under the reason as they are; never parsed.
+    detail: str = Field(default="", max_length=500)
+    at: datetime | None = None
+
+
 class MachineSummary(WireModel):
     id: UUID
     name: str = Field(min_length=1, max_length=120)
@@ -326,6 +343,8 @@ class MachineSummary(WireModel):
     #: equals one or lies below one. `None`: the runner does not report them (older runner).
     file_roots: tuple[str, ...] | None = Field(default=None, max_length=32)
     last_seen_at: datetime | None = None
+    #: Why it is not connected, as it last said (`MachineProblem`); None once its channel opened.
+    problem: MachineProblem | None = None
 
     @field_validator("file_roots")
     @classmethod
