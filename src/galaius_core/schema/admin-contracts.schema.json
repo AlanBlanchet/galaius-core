@@ -93,6 +93,7 @@
             "signal.status_changed",
             "signal.deleted",
             "error_report.listed",
+            "error_report.read",
             "error_report.status_changed",
             "error_report.deleted",
             "machine_agent.started",

@@ -34,8 +34,8 @@ class SignalRedaction:
     _SECRETS: ClassVar[tuple[tuple[re.Pattern[str], str], ...]] = (
         (re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}"), r"\1 [redacted]"),
         (re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"), "[redacted]"),
-        (re.compile(r"\b(?:sk|pk|rk|iwk|ghp|gho|ghs|github_pat|xox[abprs]|AIza|ya29|glpat)[-_][A-Za-z0-9._-]{6,}"), "[redacted]"),
-        (re.compile(r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|token|secret|password|passwd|authorization|cookie)[\"']?\s*[:=]\s*[\"']?)[^\s\"'&,;}#]+"), r"\1[redacted]"),
+        (re.compile(r"\b(?:sk|pk|rk|iwk|iwm|iwh|ghp|gho|ghs|github_pat|xox[abprs]|AIza|ya29|glpat)[-_][A-Za-z0-9._-]{6,}"), "[redacted]"),
+        (re.compile(r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|token|secret|password|passwd|authorization|cookie|code|state|session)[\"']?\s*[:=]\s*[\"']?)[^\s\"'&,;}#]+"), r"\1[redacted]"),
     )
     _QUERY: ClassVar[re.Pattern[str]] = re.compile(r"([?&])([^=&#\s?]{1,64})=[^&#\s]*")
     _SECRET_QUERY: ClassVar[re.Pattern[str]] = re.compile(r"(?i)([?&])((?:[a-z_]*token|code|state|[a-z_]*key|secret|password|sig|signature|auth[a-z_]*|session)=)[^&#\s]*")
@@ -84,6 +84,12 @@ class SignalRedaction:
         redact = getattr(cls, clean)
         return Annotated[str, Field(max_length=limit, pattern=pattern), AfterValidator(lambda value: redact(value)[:limit])]
 
+    @classmethod
+    def lines(cls, limit: int) -> object:
+        """Captured text over several lines (a console message, a stack, a log tail) of at most `limit`
+        characters: tabs and newlines kept, other control characters refused, scrubbed like any capture."""
+        return cls.bounded("anonymous", limit, _TEXT)
+
 
 _LINE = r"^[^\x00-\x1f\x7f]*$"
 _TEXT = r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*$"
@@ -95,7 +101,7 @@ Captured400 = SignalRedaction.bounded("anonymous", 400, _LINE)
 Captured200 = SignalRedaction.bounded("anonymous", 200, _LINE)
 Captured160 = SignalRedaction.bounded("anonymous", 160, _LINE)
 """Text the browser captured on its own (labels, paths, ...): secrets and emails removed."""
-CapturedLines = SignalRedaction.bounded("anonymous", 500, _TEXT)
+CapturedLines = SignalRedaction.lines(500)
 Route = SignalRedaction.bounded("route", 600, _ROUTE)
 """An in-app address: kept whole but for secret-named query values and emails."""
 Written = SignalRedaction.bounded("secrets", 4000, _TEXT)

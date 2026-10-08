@@ -183,7 +183,7 @@ class OperatorAuditEvent(WireModel):
         "migration.operator_accounts_migrated", "subscription.group_granted", "subscription.group_revoked",
         "contact_message.listed", "contact_message.read", "contact_message.deleted",
         "signal.listed", "signal.status_changed", "signal.deleted",
-        "error_report.listed", "error_report.status_changed", "error_report.deleted",
+        "error_report.listed", "error_report.read", "error_report.status_changed", "error_report.deleted",
         "machine_agent.started", "machine_agent.messaged", "machine_agent.stopped", "machine_agent.answered", "machine_agent.continued", "machine_agent.provider_switched",
         "machine_agent.settings_changed", "machine_agent.workspace_prepared",
         "project_secret.set", "project_secret.deleted", "project_secret.delivered",
