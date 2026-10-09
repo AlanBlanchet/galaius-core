@@ -3081,6 +3081,23 @@ class MachineAgentSettingsUpdate(WireModel):
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+#: Every machine token starts so: the server finds a machine's token in an `Authorization` header by it.
+MACHINE_TOKEN_PREFIX = "iwm_"
+
+
+class MachineTokenSwap(WireModel):
+    """The replacement the server hands a machine for its one-time bootstrap token, sent once on the
+    machine channel to a connection opened with that bootstrap token (a token that travelled where
+    others can read it). Signed with the bootstrap token's key as every signed machine message is:
+    HMAC-SHA256 of the canonical JSON, `signature` left out, keyed by SHA-256 of the token. The
+    machine saves `token` and connects again with it; the bootstrap token is then spent."""
+
+    type: Literal["token_swap"] = "token_swap"
+    machine: MachineRef
+    token: str = Field(pattern=rf"^{MACHINE_TOKEN_PREFIX}[A-Za-z0-9_-]{{32,252}}$", repr=False)
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class MachineAgentSettingsState(WireModel):
     """What a PC holds now: `revision` counts every change of its agent settings (web or local),
     `version` the last web version it applied (0: none), `remote` whether it takes web changes
