@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from galaius_core import MACHINE_AGENT_REQUESTS, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -424,6 +424,25 @@ def test_a_clone_address_is_one_plain_repository_the_origins_list_can_name(url: 
     assert request.model_dump(mode="json")["url"] == url  # the wire (and its signature) keeps the plain address
 
 
+@pytest.mark.parametrize(("configured", "url"), [
+    ("https://x-access-token:ghp_secret@github.com/Owner/Repo.git", "https://github.com/Owner/Repo.git"), ("https://user@github.com/o/r", "https://github.com/o/r"),
+    ("ssh://git:secret@gitlab.example:2222/g/r", "ssh://git@gitlab.example:2222/g/r"), ("git@github.com:o/r.git", "git@github.com:o/r.git"),
+    ("HTTPS://x:secret@github.com/o/r", "https://github.com/o/r"), ("https://u:p@secret@h.com/o/r", "https://h.com/o/r"),
+    ("https://h.com/o/r?private_token=secret", None), ("http://oauth2:secret@gitlab.lan/o/r", None),
+])
+def test_a_checkout_origin_is_reported_without_its_credentials(configured: str, url: str | None) -> None:
+    remote = GitRemote.stripped(configured)
+    assert (remote and remote.url) == url and "secret" not in (remote.model_dump_json() if remote else "")
+    if url is None:
+        with pytest.raises(ValidationError) as refused:
+            GitRemote(url=configured)
+        assert "secret" not in str(refused.value)
+
+
+def test_a_clone_request_keeps_the_fields_a_released_runner_verifies() -> None:
+    assert set(WorkspacePrepareRequest.model_fields) == {"type", "id", "machine", "workspace_id", "initiator_account", "expires_at", "signature", "op", "root", "name", "url", "submodules"}
+
+
 
 @pytest.mark.parametrize(("change", "narrows"), [
     ({"run_agents": False}, True), ({"agent_roots": ()}, True), ({"agent_permission": "read_only"}, True),
@@ -455,3 +474,9 @@ def test_project_secrets_travel_sealed_and_only_as_safe_dotenv_lines(name: str, 
         seal.open(sealed, request=uuid4())  # replayed into another request: refused
     with pytest.raises(InvalidTag):
         seal.open(sealed.model_copy(update={"origin": "github.com/o/other"}), request=request)  # pointed at another repository: refused
+
+
+@pytest.mark.parametrize("name", ["aino", "a" * 64, "x." + "b" * 62])
+def test_every_name_a_taken_project_folder_tries_is_a_folder_name(name: str) -> None:
+    tried = list(WorkspaceSpec.candidates(name))
+    assert tried[0] == name and tried[-1].endswith("-99") and len(set(tried)) == WorkspaceSpec.TRIES and all(len(each) <= 64 for each in tried)

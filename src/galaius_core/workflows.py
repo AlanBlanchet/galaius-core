@@ -6,7 +6,7 @@ import json
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -2806,8 +2806,10 @@ class AgentProviderSwitchRequest(MachineAgentRequestBase):
 #: implies the ones before it. `hidden`: not listed (every folder starts here); `see`: names, sizes
 #: and dates; `read`: bytes; `write_on_review`: writes land in a staging copy the owner accepts on
 #: the PC, by digest; `sandbox`: read + write in place, apart from every other root; `write`: read +
-#: write in place. Set on the PC; from the web a change to a LATER level waits on the PC for its
-#: owner's confirm (`galaius machine approve`), a change to an earlier one applies at once.
+#: write in place. Set on the PC or from the web, applied at once either way; whatever the web asks,
+#: the PC keeps its home folder itself, everything outside it, hidden names and credential stores
+#: closed (runner feature `places_direct`; an older runner holds a widening as a `MachinePlaceChange`
+#: until its owner runs `galaius machine approve` there).
 PlaceLevel = Literal["hidden", "see", "read", "write_on_review", "sandbox", "write"]
 PLACE_LEVELS: tuple[PlaceLevel, ...] = get_args(PlaceLevel)
 #: A folder of the PC relative to its working directory (its home folder): "/"-separated names, none
@@ -2820,6 +2822,8 @@ def _place_path(value: str) -> str:
 
 
 PlacePath = Annotated[str, Field(min_length=1, max_length=1024), AfterValidator(_place_path)]
+#: A folder beneath another, by the same rules ("" the folder itself).
+FolderPath = Annotated[str, Field(max_length=1024), AfterValidator(lambda value: value and _place_path(value))]
 
 
 class MachinePlace(WireModel):
@@ -2832,7 +2836,7 @@ class MachinePlace(WireModel):
 
 
 class MachinePlaceChange(WireModel):
-    """A widening asked from the web, waiting on the PC until its owner confirms it there.
+    """A widening asked from the web, waiting on the PC until its owner confirms it there (`PlaceLevel`: older runners only).
     `digest`: sha256 of the canonical change (machine, path, level, previous, id), what the PC's
     local log and the server's audit both keep."""
 
@@ -2887,9 +2891,10 @@ class MachineFence(WireModel):
 
 
 class MachinePlacesView(WireModel):
-    """The PC's levels as the PC holds them now, the widenings waiting on it, whether whole-PC
-    browsing is on (`galaius machine browse on`), its fence, and the folder it suggests as a
-    sandbox."""
+    """The PC's levels as the PC holds them now, the widenings waiting on it (`PlaceLevel`: older
+    runners only), whether browsing lists file names and folders outside the home folder too
+    (`browse`, `galaius machine browse on`; folder names inside it are always listed, `places_direct`),
+    its fence, and the folder it suggests as a sandbox."""
 
     places: tuple[MachinePlace, ...] = Field(default=(), max_length=256)
     pending: tuple[MachinePlaceChange, ...] = Field(default=(), max_length=64)
@@ -2906,7 +2911,7 @@ class PlacesRequest(MachineAgentRequestBase):
 
 
 class PlaceLevelRequest(MachineAgentRequestBase):
-    """Set one folder's level: an earlier level applies at once; a later one waits on the PC."""
+    """Set one folder's level (`PlaceLevel`: applied at once)."""
 
     op: Literal["place_level"] = "place_level"
     path: PlacePath
@@ -2925,7 +2930,8 @@ class PlaceCancelRequest(MachineAgentRequestBase):
 
 
 class PlaceBrowseRequest(MachineAgentRequestBase):
-    """One page of names beneath `path` ("" the working directory), only while browsing is on."""
+    """One page of names beneath `path` ("" the working directory): folder names inside the home
+    folder always, file names and folders outside it only while `browse` is on (`MachinePlacesView`)."""
 
     op: Literal["place_browse"] = "place_browse"
     path: str = Field(default="", max_length=1024)
@@ -2961,16 +2967,20 @@ class PlaceDiscardRequest(MachineAgentRequestBase):
 WebAgentScope = Literal["read_only", "workspace_write"]
 #: A folder name a workspace is cloned into, inside an agent root: no hidden, relative, or
 #: Windows-reserved name, no trailing dot.
-_RESERVED_NAMES = frozenset({"con", "prn", "aux", "nul", *(f"com{index}" for index in range(1, 10)), *(f"lpt{index}" for index in range(1, 10))})
+#: The names Windows keeps for devices, lowercased: no file or folder is named so, whatever follows a
+#: dot. Microsoft, "Naming Files, Paths, and Namespaces" (learn.microsoft.com/windows/win32/fileio/naming-a-file),
+#: as recalled 2026-10-09, not re-fetched: COM0 / LPT0 added (later Windows versions list them; refusing more is safe).
+RESERVED_DEVICE_NAMES = frozenset({"con", "prn", "aux", "nul", "conin$", "conout$", *(f"{port}{index}" for port in ("com", "lpt") for index in (*range(10), "¹", "²", "³"))})
 
 
 def _workspace_name(value: str) -> str:
-    if value.endswith(".") or value.split(".")[0].lower() in _RESERVED_NAMES:
+    if value.endswith(".") or value.split(".")[0].lower() in RESERVED_DEVICE_NAMES:
         raise ValueError("a workspace folder name never ends with '.' and is never a reserved device name")
     return value
 
 
 WorkspaceName = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"), AfterValidator(_workspace_name)]
+WORKSPACE_NAME: TypeAdapter[str] = TypeAdapter(WorkspaceName)
 
 
 class GitRemote(WireModel):
@@ -2979,6 +2989,8 @@ class GitRemote(WireModel):
     in the PC's own git setup), never another transport (file, ext, git), never a part starting
     with '-' (no option injection), never '.' or '..' parts."""
 
+    #: A refused address is never echoed in the error: a checkout's remote may hold a token.
+    model_config = ConfigDict(hide_input_in_errors=True)
     url: str = Field(min_length=1, max_length=512)
     host: str = Field(max_length=253)
     path: str = Field(max_length=512)
@@ -3001,6 +3013,23 @@ class GitRemote(WireModel):
         if any(part in {"", ".", ".."} or part.startswith("-") for part in path.split("/")):
             raise ValueError("a repository path never holds an empty, '.' or '..' part, or one starting with '-'")
         return {"url": url, "host": match["host"].lower(), "path": path}
+
+    #: A URL's scheme, and everything up to the last '@' before the first '/' after it (its userinfo).
+    _USERINFO: ClassVar[re.Pattern[str]] = re.compile(r"^(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:(?P<userinfo>[^/]*)@)?")
+
+    @classmethod
+    def stripped(cls, url: str) -> Self | None:
+        """The repository a checkout's remote names, its credentials dropped: `https://user:token@host/…`
+        -> `https://host/…`, `ssh://user:password@host/…` -> `ssh://user@host/…` (an ssh user is a login
+        name, never a secret); None for a remote no PC clones (another transport, a query string...).
+        What a PC reports of a folder's origin; a password never leaves it, not even in an error."""
+        def kept(match: re.Match[str]) -> str:
+            scheme, user = match["scheme"].lower(), (match["userinfo"] or "").split(":", 1)[0]
+            return scheme + (f"{user}@" if scheme == "ssh://" and user else "")
+        try:
+            return cls(url=cls._USERINFO.sub(kept, url.strip(), count=1))
+        except ValueError:
+            return None
 
     @property
     def origin(self) -> str:
@@ -3201,14 +3230,120 @@ class ProjectPrepare(WireRequest):
     repository: GitUrl | None = None
 
 
+#: Why a PC could not put a project in place, as a code the server words for the owner (French):
+#: `git_missing` git is not installed there; `clone_auth_refused` the repository's host refused the
+#: PC's git sign-in or SSH key; `host_unknown` the PC never connected to that SSH host (its key is not
+#: known there); `host_unreachable` the host's name does not resolve, or it is not a public host;
+#: `repository_not_found` the host says no such repository (or the PC's account cannot see it);
+#: `disk_full` too little free space; `timeout` it took too long; `exists` every one of
+#: `WorkspaceSpec.candidates` is taken (an existing folder is never touched);
+#: `source_missing` the folder to copy is not there; `transfer_failed` the bytes did not arrive whole;
+#: `unsafe_archive` the copy names a path no PC writes (absolute, `..`, a link, `.git`, a reserved
+#: name); `interrupted` galaius restarted mid-way; `failed` anything else (`detail` says it).
+WorkspaceFailureCode = Literal["git_missing", "clone_auth_refused", "host_unknown", "host_unreachable", "repository_not_found", "disk_full",
+                               "timeout", "exists", "source_missing", "transfer_failed", "unsafe_archive", "interrupted", "failed"]
+#: A clone the PC made from the web, as a launch there found it: fast-forwarded to its remote
+#: (`updated`), already there (`current`), left as it was because it holds uncommitted changes or its
+#: git settings changed since the clone (`dirty`) or commits its remote lacks (`diverged`), or the
+#: remote could not be read (`unreachable`).
+WorkspaceRefresh = Literal["updated", "current", "dirty", "diverged", "unreachable"]
+#: The most a project copied from one PC to another may hold (its files' bytes, before compression), and its most files.
+WORKSPACE_COPY_MAX_BYTES = 1024**3
+WORKSPACE_COPY_MAX_FILES = 50_000
+#: The largest archive of such a copy: its files, a tar header with its long-name record per file
+#: (2 KiB at most for a 1024-character path), and gzip's own framing on data it cannot shrink.
+WORKSPACE_ARCHIVE_MAX_BYTES = WORKSPACE_COPY_MAX_BYTES + 2048 * WORKSPACE_COPY_MAX_FILES + 16 * 1024**2
+#: One part of a copy's archive on the wire: the source PC uploads it part by part, the target downloads it so.
+WORKSPACE_TRANSFER_PART = 8 * 1024 * 1024
+
+
+#: Why a copy leaves files out: `over_limit` past `WORKSPACE_COPY_MAX_BYTES` / `_FILES`; `link` a link
+#: or not a plain file; `credential_store` a key or credential file; `name` a name another system cannot hold.
+WorkspaceSkipReason = Literal["over_limit", "link", "credential_store", "name"]
+#: How many of the files left out for one reason a copy names.
+WORKSPACE_SKIP_EXAMPLES = 20
+
+
+class WorkspaceSkip(WireModel):
+    """Files a copy leaves out for one `reason`, how many, and the first few of them (paths in the folder)."""
+
+    reason: WorkspaceSkipReason
+    count: int = Field(ge=1)
+    examples: tuple[Annotated[str, Field(max_length=1024)], ...] = Field(default=(), max_length=WORKSPACE_SKIP_EXAMPLES)
+
+
+class WorkspacePack(WireModel):
+    """What copying one folder of a PC sends, measured before anything is sent: its files and their
+    bytes (within the copy limits, always), whether they are the git checkout's tracked files
+    (`tracked`; else the folder walked without hidden names, dependency and build folders), the
+    repository it comes from (`origin`, credentials dropped), and what it leaves out (`skipped`)."""
+
+    files: int = Field(ge=0, le=WORKSPACE_COPY_MAX_FILES)
+    size: int = Field(ge=0, le=WORKSPACE_COPY_MAX_BYTES)
+    tracked: bool
+    origin: GitRemote | None = None
+    skipped: tuple[WorkspaceSkip, ...] = Field(default=(), max_length=len(get_args(WorkspaceSkipReason)))
+
+    @model_validator(mode="after")
+    def one_per_reason(self) -> Self:
+        if len({skip.reason for skip in self.skipped}) != len(self.skipped):
+            raise ValueError("a copy lists its left-out files once per reason")
+        return self
+
+
+class WorkspaceArchive(WireModel):
+    """A folder's copy as it crossed the server: a gzip'd tar of plain files only, `size` bytes with
+    sha256 `digest`, held under transfer `transfer`. The source PC uploads it part by part
+    (`WORKSPACE_TRANSFER_PART` bytes each, `part_route`), then posts a `WorkspaceUpload` to `route`;
+    the target PC downloads the same parts and checks `digest` over them all."""
+
+    transfer: UUID
+    size: int = Field(ge=1, le=WORKSPACE_ARCHIVE_MAX_BYTES)
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    files: int = Field(ge=0, le=WORKSPACE_COPY_MAX_FILES)
+
+    @property
+    def parts(self) -> int:
+        return -(-self.size // WORKSPACE_TRANSFER_PART)
+
+    #: The server's routes for one transfer, under the machine's own token: `PUT` / `GET` one part,
+    #: `POST` the `WorkspaceUpload` that ends it.
+    ROUTE: ClassVar[str] = "/v1/machine/transfers/{transfer}"
+
+    @classmethod
+    def route(cls, transfer: UUID) -> str:
+        return cls.ROUTE.format(transfer=transfer)
+
+    @classmethod
+    def part_route(cls, transfer: UUID, index: int) -> str:
+        return f"{cls.route(transfer)}/{index}"
+
+
+class WorkspaceFailure(WireModel):
+    """Why a copy's upload stopped: `code` the server words for the owner, `detail` the PC's English for the log."""
+
+    code: WorkspaceFailureCode
+    detail: str = Field(default="", max_length=600)
+
+
+class WorkspaceUpload(WireModel):
+    """How a copy's upload ended, posted by the source PC to `WorkspaceArchive.route`: the archive
+    (every part uploaded), or why not."""
+
+    outcome: WorkspaceArchive | WorkspaceFailure
+
+
 class MachineWorkspaceJob(WireModel):
-    """One clone a PC was asked for: `running`, `ready` (a folder agents can start in, under
-    `root`), or `failed` with why in plain words."""
+    """One project folder a PC was asked to put in place (`source`: a `clone` of `origin`
+    (`workspace_prepare`), a `copy` received from another PC or an `empty` folder (`workspace_create`)): `running` (`done` of `total` bytes received for
+    a copy), `ready` (a folder agents can start in, under `root`), or `failed` with `code` (the
+    server's French words) and `detail` (the PC's own, for the log)."""
 
     id: UUID
     root: str = Field(max_length=240)
     name: str = Field(max_length=64)
-    origin: str = Field(max_length=512)
+    #: The repository a clone comes from (`host/owner/repo`); "" for a copy or an empty folder.
+    origin: str = Field(default="", max_length=512)
     state: Literal["running", "ready", "failed"]
     detail: str = Field(default="", max_length=600)
     started_at: datetime
@@ -3216,15 +3351,47 @@ class MachineWorkspaceJob(WireModel):
     #: An existing checkout of the repository the PC found and registered as an agent folder (its
     #: owner's own code: its agent settings load), instead of cloning it.
     found: bool = False
+    source: Literal["clone", "copy", "empty"] = "clone"
+    code: WorkspaceFailureCode | None = None
+    done: int | None = Field(default=None, ge=0)
+    total: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def coherent(self) -> Self:
+        if self.code is not None and self.state != "failed":
+            raise ValueError("only a failed job carries a failure code")
+        if (self.done is not None or self.total is not None) and (self.source != "copy" or self.done is None or self.total is None or self.done > self.total):
+            raise ValueError("a copy's progress is `done` of `total` bytes, nothing else's")
+        return self
 
 
-class WorkspacePrepareSpec(WireRequest):
+#: An agent root as a request names it (a released runner refuses one longer than 240 characters).
+AgentRootPath = Annotated[PlacePath, Field(max_length=240)]
+
+
+class WorkspaceSpec(WireRequest):
+    """A new project folder `name` beneath agent root `root` on one PC. An existing folder is never
+    touched: the PC takes the first free one of `candidates(name)`, and its job names the folder it used."""
+
+    root: AgentRootPath
+    name: WorkspaceName | None = None
+    #: How many names a taken one is tried as (`candidates`).
+    TRIES: ClassVar[int] = 99
+
+    @classmethod
+    def candidates(cls, name: str) -> Iterator[str]:
+        """`name`, then `name-2` ... `name-99`, each a `WorkspaceName` (the stem cut to make room for its suffix)."""
+        yield WORKSPACE_NAME.validate_python(name)
+        for index in range(2, cls.TRIES + 1):
+            suffix = f"-{index}"
+            yield WORKSPACE_NAME.validate_python(name[:64 - len(suffix)] + suffix)
+
+
+class WorkspacePrepareSpec(WorkspaceSpec):
     """Clone `url` (and its submodules) into a new folder `name` beneath agent root `root`, with
     the PC's own git credentials; `name` defaults to the repository's."""
 
-    root: str = Field(min_length=1, max_length=240)
     url: GitUrl
-    name: WorkspaceName | None = None
     submodules: bool = True
 
 
@@ -3234,8 +3401,40 @@ class WorkspacePrepareRequest(MachineAgentRequestBase, WorkspacePrepareSpec):
     feature: ClassVar[str] = "workspaces"
 
 
+class WorkspaceCreateSpec(WorkspaceSpec):
+    """Create the project folder `name` beneath agent root `root` from `copy_of`, a folder another
+    PC uploaded (`WorkspacePackRequest`), or empty when `copy_of` is None. The PC downloads the
+    archive, checks its digest, writes plain files only into a hidden partial folder, then renames it
+    into place; `copy_of.size` is the COMPRESSED size, so the PC holds the files it writes to
+    `copy_of.files` and their bytes to `WORKSPACE_COPY_MAX_BYTES` as it extracts them."""
+
+    name: WorkspaceName
+    copy_of: WorkspaceArchive | None = None
+
+
+class WorkspaceCreateRequest(MachineAgentRequestBase, WorkspaceCreateSpec):
+    op: Literal["workspace_create"] = "workspace_create"
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "workspace_copy"
+
+
+class WorkspacePackRequest(MachineAgentRequestBase):
+    """Measure one folder beneath agent root `root` for a copy to another PC (`WorkspacePack`), and
+    with `transfer` set also send it: the PC answers the measure at once and uploads the archive
+    in the background (`WorkspaceArchive`), ending with a `WorkspaceUpload`. Past the copy limits,
+    the files that fit are sent and the rest listed (`WorkspaceSkip` `over_limit`)."""
+
+    op: Literal["workspace_pack"] = "workspace_pack"
+    root: AgentRootPath
+    path: FolderPath = ""
+    transfer: UUID | None = None
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 60
+    feature: ClassVar[str] = "workspace_copy"
+
+
 class WorkspacesRequest(MachineAgentRequestBase):
-    """The clones this PC was asked for, newest first."""
+    """The project folders this PC was asked for, newest first."""
 
     op: Literal["workspaces"] = "workspaces"
     feature: ClassVar[str] = "workspaces"
@@ -3245,7 +3444,7 @@ MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
-    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspacesRequest | AgentMediaRequest,
+    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -3392,8 +3591,17 @@ class MachineAgentAnswer(WireModel):
     browse: tuple[MachinePlaceEntry, ...] = Field(default=(), max_length=500)
     #: `place_reviews` / `place_review` (its diff in `lines`).
     reviews: tuple[MachinePlaceReview, ...] = Field(default=(), max_length=100)
-    #: `workspaces` / `workspace_prepare`: the clones asked of this PC, newest first.
+    #: `workspaces` / `workspace_prepare`: the project folders asked of this PC, newest first.
     workspaces: tuple[MachineWorkspaceJob, ...] = Field(default=(), max_length=50)
+    #: `folders` naming a folder: the repository that folder is a checkout of (credentials dropped).
+    origin: GitRemote | None = None
+    #: `workspace_pack`: what copying the folder sends.
+    pack: WorkspacePack | None = None
+    #: A refusal the server words for the owner (with `error`, the PC's English for the log).
+    code: WorkspaceFailureCode | None = None
+    #: `start` in a project folder the PC cloned from the web: whether it was fast-forwarded to its
+    #: remote first (`WorkspaceRefresh`; None: not such a folder).
+    refresh: WorkspaceRefresh | None = None
     #: `start`: the agent runs inside the PC's OS fence (False: it can read every file its user can).
     fenced: bool | None = None
     #: A place change (`place_level` / `place_cancel` / `place_discard`): sha256 of what changed, as the
