@@ -480,3 +480,17 @@ def test_project_secrets_travel_sealed_and_only_as_safe_dotenv_lines(name: str, 
 def test_every_name_a_taken_project_folder_tries_is_a_folder_name(name: str) -> None:
     tried = list(WorkspaceSpec.candidates(name))
     assert tried[0] == name and tried[-1].endswith("-99") and len(set(tried)) == WorkspaceSpec.TRIES and all(len(each) <= 64 for each in tried)
+
+
+@pytest.mark.parametrize(("code", "kept"), [("ABCD-12345", True), ("WXYZ1234", True), ("abcd-1234", False), ("https://evil.example/x", False), ("AB-1", False)])
+def test_a_sign_in_carries_only_a_device_code_never_a_link(code: str, kept: bool) -> None:
+    """The web shows a program's sign-in code on its vendor's page, a constant of the server's: what a
+    PC reports is a code of plain capitals and digits, never an address."""
+    from galaius_core import AgentSignIn
+
+    if kept:
+        assert AgentSignIn(code=code, expires_at=datetime.now(UTC)).code == code
+    else:
+        with pytest.raises(ValidationError):
+            AgentSignIn(code=code, expires_at=datetime.now(UTC))
+    assert "url" not in AgentSignIn.model_fields

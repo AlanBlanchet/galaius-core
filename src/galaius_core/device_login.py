@@ -84,6 +84,9 @@ class DeviceLoginStarted(WireModel):
     verification_uri_complete: str
     expires_in: int = Field(gt=0)
     interval: int = Field(gt=0)
+    #: The number the computer shows next to the link, never in it: from another network the person
+    #: picks it among `DeviceLoginView.choices` (a forwarded link alone never approves).
+    match: str = Field(pattern=r"^\d{2}$")
 
     def revealed(self) -> dict[str, object]:
         """The JSON body a server sends (the device code written out: only the asking computer gets it)."""
@@ -107,8 +110,10 @@ class DeviceLoginView(WireModel):
     #: The address the request came from, as this server saw it.
     requested_from: str
     #: The viewer's browser and the computer reached this server from the same address. When not,
-    #: the page asks the person to TYPE the code (a forwarded link alone never approves).
+    #: the person picks the number the computer shows among `choices` (a forwarded link alone never approves).
     same_network: bool
+    #: Three numbers, one of them the computer's (`DeviceLoginStarted.match`); none on the same network.
+    choices: tuple[str, ...] = Field(default=(), max_length=3)
     #: The computer asked to start workflow runs too (`galaius login --allow-runs`), not only read.
     runs: bool
     #: Workspaces where the viewer may add a computer (`machines.manage`).
@@ -117,9 +122,9 @@ class DeviceLoginView(WireModel):
 
 class DeviceLoginApproval(WireRequest):
     workspace_id: UUID
-    #: What the person typed as the code, kept as typed: required when `DeviceLoginView.same_network`
-    #: is false, and a mistyped one is refused like a wrong one (`verification_failed`), not as a form error.
-    confirm_code: str | None = Field(default=None, max_length=32)
+    #: The number the person picked among `DeviceLoginView.choices`: required when `same_network` is
+    #: false; a wrong one refuses the request for good (`match_refused`, the computer asks again).
+    match: str | None = Field(default=None, pattern=r"^\d{2}$")
 
 
 class DeviceTokenRequest(WireRequest):

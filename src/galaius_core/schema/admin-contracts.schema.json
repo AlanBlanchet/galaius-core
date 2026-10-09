@@ -104,6 +104,7 @@
             "machine_agent.provider_switched",
             "machine_agent.settings_changed",
             "machine_agent.workspace_prepared",
+            "machine_agent.program_installed",
             "project_secret.set",
             "project_secret.deleted",
             "project_secret.delivered",

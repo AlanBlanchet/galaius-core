@@ -176,7 +176,7 @@ class WorkspaceMembership(WireModel):
 
 PlatformErrorCode = Literal[
     "authentication_failed", "csrf_failed", "invalid_origin", "invalid_request",
-    "last_sign_in_method", "link_expired", "not_found", "not_linked", "permission_denied", "rate_limited",
+    "last_sign_in_method", "link_expired", "match_refused", "not_found", "not_linked", "permission_denied", "rate_limited",
     "verification_failed", "recovery_failed", "unavailable", "upgrade_required",
 ]
 """The wire's complete failure vocabulary, and the single source the server's own raisable set

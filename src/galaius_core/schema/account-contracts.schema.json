@@ -816,6 +816,7 @@
             "invalid_request",
             "last_sign_in_method",
             "link_expired",
+            "match_refused",
             "not_found",
             "not_linked",
             "permission_denied",

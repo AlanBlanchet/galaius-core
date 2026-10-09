@@ -2792,6 +2792,25 @@ class AgentSettingsRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "agent_settings"
 
 
+class AgentProgramsRequest(MachineAgentRequestBase):
+    """Each agent program here: installed, signed in, an install or sign-in under way (`providers`)."""
+
+    op: Literal["programs"] = "programs"
+    feature: ClassVar[str] = "agent_programs"
+
+
+class AgentProgramInstallRequest(MachineAgentRequestBase):
+    """Install `provider`'s program for this PC's user with its vendor's own installer (fixed on the
+    PC, never sent), then start its sign-in; answered at once with its state (`providers`). Asked
+    again while under way or ready: the same state, nothing started twice; after a failure or an
+    expired sign-in: started again."""
+
+    op: Literal["program_install"] = "program_install"
+    provider: AgentProvider
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "agent_programs"
+
+
 class AgentProviderSwitchRequest(MachineAgentRequestBase):
     """Let one CLI run agents here, or stop it (VS Code: "Providers That Run Agents")."""
 
@@ -3452,7 +3471,8 @@ MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
-    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest,
+    | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
+    | AgentProgramsRequest | AgentProgramInstallRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -3483,14 +3503,55 @@ class MachineAgentModel(WireModel):
     model: str = Field(max_length=256)
 
 
+#: Where one agent program stands on a PC, installed from the web (`AgentProgramInstallRequest`):
+#: `missing` (not installed, nothing under way), `installing`, `signed_out` (installed, not signed
+#: in, no sign-in under way), `signing_in` (its sign-in waiting for the person), `ready` (installed
+#: and signed in), `failed` (`AgentProviderState.failure`).
+AgentProgramStep = Literal["missing", "installing", "signed_out", "signing_in", "ready", "failed"]
+#: Why an install or a sign-in from the web stopped, worded by the server for the owner: the sign-in
+#: waited its whole time (`sign_in_expired`), or the program's sign-in ended without signing in.
+AgentProgramFailure = Literal["download_failed", "install_failed", "unsupported_system", "sign_in_expired", "sign_in_failed"]
+#: A one-time code a program signs in with on its vendor's page (Codex: `N5ST-Z1ZME`).
+DEVICE_CODE = r"^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12})?$"
+
+
+class AgentSignIn(WireModel):
+    """A program's sign-in waiting for the person, until `expires_at`. It happens between the person
+    and the program's vendor: on the PC's own browser, or, for a program signing in by device code,
+    on the vendor's page (a constant the server holds, never a link the PC names) with `code`."""
+
+    code: str | None = Field(default=None, pattern=DEVICE_CODE)
+    expires_at: datetime
+
+
 class AgentProviderState(WireModel):
-    """One CLI galaius can drive agents through, on this machine."""
+    """One CLI galaius can drive agents through, on this machine: switched on, installed, and where
+    its install and sign-in from the web stand."""
 
     provider: AgentProvider
     #: The owner lets it run agents here (unmentioned: on).
     active: bool
     #: Its program is installed here.
     available: bool
+    step: AgentProgramStep = "missing"
+    #: Signed in (its own status command said so); None: not asked yet.
+    signed_in: bool | None = None
+    version: str = Field(default="", max_length=80)
+    #: Who it is signed in as, as its status command says (an e-mail, an organisation), once ready.
+    account: str = Field(default="", max_length=200)
+    sign_in: AgentSignIn | None = None
+    failure: AgentProgramFailure | None = None
+    #: The program's or installer's last line, for the log (English, never a secret).
+    detail: str = Field(default="", max_length=400)
+    changed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def consistent(self) -> Self:
+        if (self.step == "failed") != (self.failure is not None):
+            raise ValueError("a failed program names its failure, and only a failed one does")
+        if self.sign_in is not None and self.step != "signing_in":
+            raise ValueError("only a sign-in under way waits for the person")
+        return self
 
 
 #: galaius's own tools that pick a model by rule: screenshots and images, UI element detection,
@@ -3588,7 +3649,8 @@ class MachineAgentAnswer(WireModel):
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
     cursor: int | None = Field(default=None, ge=0)
     detail: str = Field(default="", max_length=400)
-    #: `settings`: the CLIs agents may run through here, and each tool's model here.
+    #: `settings` / `programs` / `program_install`: the CLIs agents may run through here (and, for
+    #: `settings`, each tool's model here).
     providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
     tool_models: tuple[ToolRoleModels, ...] = Field(default=(), max_length=16)
     #: `places` / `place_level` / `place_cancel`: the PC's levels after the request; `change`: the
