@@ -2979,7 +2979,9 @@ def _workspace_name(value: str) -> str:
     return value
 
 
-WorkspaceName = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"), AfterValidator(_workspace_name)]
+#: The longest project folder name.
+WORKSPACE_NAME_MAX = 64
+WorkspaceName = Annotated[str, Field(pattern=rf"^[A-Za-z0-9][A-Za-z0-9._-]{{0,{WORKSPACE_NAME_MAX - 1}}}$"), AfterValidator(_workspace_name)]
 WORKSPACE_NAME: TypeAdapter[str] = TypeAdapter(WorkspaceName)
 
 
@@ -3245,11 +3247,14 @@ WorkspaceFailureCode = Literal["git_missing", "clone_auth_refused", "host_unknow
 #: A clone the PC made from the web, as a launch there found it: fast-forwarded to its remote
 #: (`updated`), already there (`current`), left as it was because it holds uncommitted changes or its
 #: git settings changed since the clone (`dirty`) or commits its remote lacks (`diverged`), or the
-#: remote could not be read (`unreachable`).
+#: remote could not be read (`unreachable`). Its submodules stay as they were: an `updated` clone may
+#: hold submodules behind the commits it now names.
 WorkspaceRefresh = Literal["updated", "current", "dirty", "diverged", "unreachable"]
 #: The most a project copied from one PC to another may hold (its files' bytes, before compression), and its most files.
 WORKSPACE_COPY_MAX_BYTES = 1024**3
 WORKSPACE_COPY_MAX_FILES = 50_000
+#: Most paths a PC looks at when measuring a folder to copy (past it, `WorkspaceSkip.more`).
+WORKSPACE_COPY_EXAMINED = 4 * WORKSPACE_COPY_MAX_FILES
 #: The largest archive of such a copy: its files, a tar header with its long-name record per file
 #: (2 KiB at most for a 1024-character path), and gzip's own framing on data it cannot shrink.
 WORKSPACE_ARCHIVE_MAX_BYTES = WORKSPACE_COPY_MAX_BYTES + 2048 * WORKSPACE_COPY_MAX_FILES + 16 * 1024**2
@@ -3265,10 +3270,13 @@ WORKSPACE_SKIP_EXAMPLES = 20
 
 
 class WorkspaceSkip(WireModel):
-    """Files a copy leaves out for one `reason`, how many, and the first few of them (paths in the folder)."""
+    """Files a copy leaves out for one `reason`, how many, and the first few of them (paths in the
+    folder). `more`: the PC stopped looking (a folder of more than `WORKSPACE_COPY_EXAMINED` paths),
+    so `count` is a floor."""
 
     reason: WorkspaceSkipReason
     count: int = Field(ge=1)
+    more: bool = False
     examples: tuple[Annotated[str, Field(max_length=1024)], ...] = Field(default=(), max_length=WORKSPACE_SKIP_EXAMPLES)
 
 
@@ -3384,7 +3392,7 @@ class WorkspaceSpec(WireRequest):
         yield WORKSPACE_NAME.validate_python(name)
         for index in range(2, cls.TRIES + 1):
             suffix = f"-{index}"
-            yield WORKSPACE_NAME.validate_python(name[:64 - len(suffix)] + suffix)
+            yield WORKSPACE_NAME.validate_python(name[:WORKSPACE_NAME_MAX - len(suffix)] + suffix)
 
 
 class WorkspacePrepareSpec(WorkspaceSpec):
