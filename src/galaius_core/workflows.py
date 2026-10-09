@@ -3503,6 +3503,21 @@ class MachineAgentModel(WireModel):
     model: str = Field(max_length=256)
 
 
+#: One catalog row's name, `<catalog provider>/<model id>` (galaius `Model.catalog_id`).
+CatalogId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.:@/+-]+$", max_length=256)]
+
+
+class AgentRanking(WireModel):
+    """A model criterion as the server ranks it on its own benchmark board (`GET …/agent-rankings`):
+    the catalog ids clearing it, best first. A PC with no board of its own launches from it (a
+    board is fetched with its reader's own key); no score leaves the server."""
+
+    criterion: str = Field(max_length=4096)
+    weights: str = Field(default="", max_length=1024)
+    ranked: tuple[CatalogId, ...] = Field(default=(), max_length=1000)
+    ranked_at: datetime
+
+
 #: Where one agent program stands on a PC, installed from the web (`AgentProgramInstallRequest`):
 #: `missing` (not installed, nothing under way), `installing`, `signed_out` (installed, not signed
 #: in, no sign-in under way), `signing_in` (its sign-in waiting for the person), `ready` (installed
