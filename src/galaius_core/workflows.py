@@ -3641,6 +3641,18 @@ class MachineAgentRun(WireModel):
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
 
 
+class WebLoad(WireModel):
+    """A PC's conversations started from the web working now (`working`) against how many may at once (`limit`):
+    `full`, it refuses one more start until one ends."""
+
+    working: int = Field(ge=0)
+    limit: int = Field(ge=1)
+
+    @property
+    def full(self) -> bool:
+        return self.working >= self.limit
+
+
 class MachineAgentAnswer(WireModel):
     """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` and the
     startable `roles` when no root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
@@ -3660,10 +3672,8 @@ class MachineAgentAnswer(WireModel):
     session_reason: str = Field(default="", max_length=500)
     sessions: tuple[MachineAgentSession, ...] = Field(default=(), max_length=100)
     runs: tuple[MachineAgentRun, ...] = Field(default=(), max_length=200)
-    #: With `runs`: the conversations started from the web working here now, and how many may at once (the PC
-    #: refuses one more start beyond it). None: a PC too old to say.
-    web_working: int | None = Field(default=None, ge=0)
-    web_limit: int | None = Field(default=None, ge=1)
+    #: With `runs`: its conversations started from the web working now and its maximum (None: a PC too old to say).
+    web: WebLoad | None = None
     run_id: UUID | None = None
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
     cursor: int | None = Field(default=None, ge=0)
