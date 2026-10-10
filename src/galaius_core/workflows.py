@@ -2447,6 +2447,8 @@ class MachineDataAnswer(WireModel):
 
 #: Largest window of one agent run's event stream a `tail` request carries.
 MACHINE_AGENT_TAIL = 256 * 1024
+#: How many of a run's read messages a `tail` answer names (`MachineAgentAnswer.read_messages`).
+MACHINE_AGENT_READ = 50
 #: What an agent started from the web may do on a machine — the launcher's touch scopes
 #: (`galaius.agents.vocabulary.TouchScope`), set on the machine by its owner.
 AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
@@ -2515,6 +2517,13 @@ class MachineAgentRequestBase(WireRequest):
     #: What the machine's runner must say it supports (its hello's `features`) to be asked this:
     #: an older runner is told apart from a silent one.
     feature: ClassVar[str] = "agent_control"
+    #: What a runner says (its hello's `features`) when it takes this request idempotently: a
+    #: repeated id is never done twice, even across the runner's restart, and its answer tells of
+    #: that one act (as of the repeat: `reads_at`). The server asks again, under the same id, only
+    #: such a runner whose answer never came. None: never asked again.
+    idempotent_feature: ClassVar[str | None] = None
+    #: How long after its first delivery such a runner still knows the id: the server asks again only within it.
+    idempotent_seconds: ClassVar[float] = 0.0
 
 
 class AgentFoldersRequest(MachineAgentRequestBase):
@@ -2718,11 +2727,23 @@ class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec):
     seconds: ClassVar[float] = 135
 
 
+#: When the agent reads a message sent to its run (`MachineAgentAnswer.reads_at`): `now` it was between
+#: turns and a turn starts on it (asked again: it has read it already); `next_step` the turn running
+#: reads it after its current tool call; `turn_end` it waits until the turn running ends (an agent
+#: that cannot read mid-turn).
+ReadsAt = Literal["now", "next_step", "turn_end"]
+
+
 class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec):
+    """A message to one run. Its `id` is the message's id on both sides: the run's transcript keeps
+    it, `MachineAgentAnswer.read_messages` names it once the agent has read it."""
+
     op: Literal["send"] = "send"
     run_id: UUID
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 75
+    idempotent_feature: ClassVar[str | None] = "agent_send_once"
+    idempotent_seconds: ClassVar[float] = 3600.0
 
 
 class AgentStopRequest(MachineAgentRequestBase):
@@ -3677,7 +3698,13 @@ class MachineAgentAnswer(WireModel):
     run_id: UUID | None = None
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
     cursor: int | None = Field(default=None, ge=0)
+    #: `tail`: the newest messages to that run (`AgentSendRequest.id`) its agent has read — handed to
+    #: the turn running, or a turn opened on it — newest first. An older one drops off the list: an id
+    #: missing here once seen is still read.
+    read_messages: tuple[UUID, ...] = Field(default=(), max_length=MACHINE_AGENT_READ)
     detail: str = Field(default="", max_length=400)
+    #: `send`: when the agent reads it (None: a PC too old to say).
+    reads_at: ReadsAt | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `settings` / `programs` / `program_install`: the CLIs agents may run through here (and, for
     #: `settings`, each tool's model here).
     providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)

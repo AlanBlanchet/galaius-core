@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from galaius_core import MACHINE_AGENT_REQUESTS, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -373,6 +373,19 @@ def test_a_run_image_is_asked_by_its_key_never_by_a_path(name: str, valid: bool)
     else:
         with pytest.raises(ValidationError):
             MACHINE_AGENT_REQUESTS.validate_python(fields)
+
+
+@pytest.mark.parametrize("reads_at", [None, "now", "next_step", "turn_end"])
+def test_a_send_is_signed_as_before_and_its_answer_says_when_it_is_read(reads_at) -> None:
+    """A send asked again is signed as the first one (its idempotence is the runner's, never a field);
+    an answer from an older PC (no `reads_at`, no `read_messages`) reads the same as one saying nothing."""
+    fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "send", "run_id": str(uuid4()), "text": "and the footer"}
+    send = MACHINE_AGENT_REQUESTS.validate_python(fields)
+    assert (send.idempotent_feature, send.idempotent_seconds) == ("agent_send_once", 3600) and set(send.model_dump(mode="json")) == {*fields, "type"}
+    answer = MachineAgentAnswer(request_id=send.id, reads_at=reads_at, read_messages=(send.id,) if reads_at else ())
+    dumped = answer.model_dump(mode="json")
+    assert ("reads_at" in dumped) == (reads_at is not None) and MachineAgentAnswer.model_validate({**dumped, "later": 1}).reads_at == reads_at
 
 
 @pytest.mark.parametrize(("text", "paths"), [
