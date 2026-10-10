@@ -3660,6 +3660,10 @@ class MachineAgentAnswer(WireModel):
     session_reason: str = Field(default="", max_length=500)
     sessions: tuple[MachineAgentSession, ...] = Field(default=(), max_length=100)
     runs: tuple[MachineAgentRun, ...] = Field(default=(), max_length=200)
+    #: With `runs`: the conversations started from the web working here now, and how many may at once (the PC
+    #: refuses one more start beyond it). None: a PC too old to say.
+    web_working: int | None = Field(default=None, ge=0)
+    web_limit: int | None = Field(default=None, ge=1)
     run_id: UUID | None = None
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
     cursor: int | None = Field(default=None, ge=0)
