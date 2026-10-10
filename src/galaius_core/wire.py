@@ -17,7 +17,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
+from pydantic_core import to_jsonable_python
 
 M = TypeVar("M")
 
@@ -174,6 +175,17 @@ class ContractView(BaseModel):
         return data
 
 
+def _written_out(value: Any) -> Any:
+    """A Python-mode dump with each secret's value in place of the secret."""
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    if isinstance(value, dict):
+        return {key: _written_out(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_written_out(item) for item in value]
+    return value
+
+
 class WireModel(BaseModel):
     """A contract read from the other side: unknown fields are kept (see module docstring)."""
 
@@ -182,6 +194,11 @@ class WireModel(BaseModel):
     def model_dump(self, **options: Any) -> dict[str, Any]:
         data = super().model_dump(**options)
         return data if ContractView.active() is None else ContractDump(data, self)
+
+    def revealed(self) -> dict[str, Any]:
+        """The JSON body with every secret written out (a JSON dump masks each `SecretStr`): only for
+        the one party a secret is delivered to, never logged or stored."""
+        return to_jsonable_python(_written_out(self.model_dump()))
 
     @classmethod
     def projected(cls, data: dict[str, Any]) -> dict[str, Any]:

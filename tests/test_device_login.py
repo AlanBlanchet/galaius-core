@@ -29,3 +29,16 @@ def test_platform_and_version_are_closed_sets() -> None:
         DeviceLoginStart(client_name="pc", platform="plan9", client_version="1")
     with pytest.raises(ValidationError):
         DeviceLoginStart(client_name="pc", platform="linux", client_version="1 <b>")
+
+
+@pytest.mark.parametrize("replaces", [None, "iwm_" + "a" * 43])
+def test_the_old_token_goes_on_the_wire_written_out_never_masked(replaces: str | None) -> None:
+    """A SecretStr dumps as ******** in JSON mode: the start the CLI sends must carry the proof itself."""
+    start = DeviceLoginStart(client_name="pc", platform="windows", client_version="1", replaces=replaces)
+    assert start.revealed()["replaces"] == replaces and DeviceLoginStart.model_validate(start.revealed()) == start
+
+
+@pytest.mark.parametrize("replaces", ["", "iwm_short", "Bearer iwm_" + "a" * 43, "iwm_" + "a" * 43 + "/"])
+def test_only_a_machine_token_proves_a_pc(replaces: str) -> None:
+    with pytest.raises(ValidationError):
+        DeviceLoginStart(client_name="pc", platform="windows", client_version="1", replaces=replaces)

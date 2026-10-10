@@ -15,7 +15,7 @@ from uuid import UUID
 from pydantic import AfterValidator, Field, SecretStr, field_validator
 
 from .wire import WireModel, WireRequest
-from .workflows import MachineSummary, WorkspaceApiKeyScope
+from .workflows import MACHINE_TOKEN_PATTERN, MachineSummary, WorkspaceApiKeyScope
 
 #: A computer's name as the owner reads it on the approval page and in Machines: its hostname,
 #: reduced to letters, digits, '.', '_' and '-' (nothing a page could render as markup).
@@ -61,6 +61,17 @@ class DeviceLoginStart(WireRequest):
     client_version: str = Field(min_length=1, max_length=40, pattern=r"^[0-9A-Za-z.+-]+$")
     #: The CLI may also start workflow runs (`galaius login --allow-runs`); otherwise it only reads.
     runs: bool = False
+    #: The machine token this computer's earlier enrollment on THIS server left in its machine file,
+    #: sent when that file no longer reads: the proof it IS that PC, so an approval by that PC's owner
+    #: replaces its entry (`DeviceLoginView.replaces`). Never sent to another server.
+    replaces: SecretStr | None = None
+
+    @field_validator("replaces")
+    @classmethod
+    def machine_token(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and not re.fullmatch(MACHINE_TOKEN_PATTERN, value.get_secret_value()):
+            raise ValueError("replaces must be a machine token")
+        return value
 
     @field_validator("client_name", mode="before")
     @classmethod
@@ -88,14 +99,19 @@ class DeviceLoginStarted(WireModel):
     #: picks it among `DeviceLoginView.choices` (a forwarded link alone never approves).
     match: str = Field(pattern=r"^\d{2}$")
 
-    def revealed(self) -> dict[str, object]:
-        """The JSON body a server sends (the device code written out: only the asking computer gets it)."""
-        return {**self.model_dump(mode="json"), "device_code": self.device_code.get_secret_value()}
-
 
 class DeviceLoginWorkspace(WireModel):
     id: UUID
     name: str
+
+
+class DeviceLoginReplaced(WireModel):
+    """The PC a sign-in proved it is (`DeviceLoginStart.replaces`), named to its owner only: allowed
+    into `workspace_id`, the new entry takes its name, folders and settings, and this one is removed."""
+
+    id: UUID
+    name: str
+    workspace_id: UUID
 
 
 class DeviceLoginView(WireModel):
@@ -118,6 +134,8 @@ class DeviceLoginView(WireModel):
     runs: bool
     #: Workspaces where the viewer may add a computer (`machines.manage`).
     workspaces: tuple[DeviceLoginWorkspace, ...]
+    #: The viewer's own PC this computer proved it is; None when it proved none (a new PC).
+    replaces: DeviceLoginReplaced | None = None
 
 
 class DeviceLoginApproval(WireRequest):
@@ -125,6 +143,9 @@ class DeviceLoginApproval(WireRequest):
     #: The number the person picked among `DeviceLoginView.choices`: required when `same_network` is
     #: false; a wrong one refuses the request for good (`match_refused`, the computer asks again).
     match: str | None = Field(default=None, pattern=r"^\d{2}$")
+    #: The PC the page showed this computer replacing (`DeviceLoginView.replaces.id`): it is replaced only
+    #: when this names it, so nothing is replaced that the person did not see.
+    replaces: UUID | None = None
 
 
 class DeviceTokenRequest(WireRequest):
@@ -155,13 +176,6 @@ class DeviceLoginIssued(WireModel):
     machine: MachineSummary
     machine_token: SecretStr
     api_key: DeviceLoginKey
-
-    def revealed(self) -> dict[str, object]:
-        """The JSON body a server sends (secrets written out: this is their one delivery)."""
-        body = self.model_dump(mode="json")
-        body["machine_token"] = self.machine_token.get_secret_value()
-        body["api_key"]["secret"] = self.api_key.secret.get_secret_value()
-        return body
 
 
 class DeviceLogout(WireModel):

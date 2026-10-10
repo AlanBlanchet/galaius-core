@@ -3154,6 +3154,8 @@ class MachineAgentSettingsUpdate(WireModel):
 
 #: Every machine token starts so: the server finds a machine's token in an `Authorization` header by it.
 MACHINE_TOKEN_PREFIX = "iwm_"
+#: A whole machine token (the server mints `iwm_` + 43 URL-safe base64 characters).
+MACHINE_TOKEN_PATTERN = rf"^{MACHINE_TOKEN_PREFIX}[A-Za-z0-9_-]{{32,252}}$"
 
 
 class MachineTokenSwap(WireModel):
@@ -3165,7 +3167,7 @@ class MachineTokenSwap(WireModel):
 
     type: Literal["token_swap"] = "token_swap"
     machine: MachineRef
-    token: str = Field(pattern=rf"^{MACHINE_TOKEN_PREFIX}[A-Za-z0-9_-]{{32,252}}$", repr=False)
+    token: str = Field(pattern=MACHINE_TOKEN_PATTERN, repr=False)
     signature: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
