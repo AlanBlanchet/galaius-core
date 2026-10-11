@@ -1,11 +1,12 @@
 """Error reports: something went wrong in the app or on a linked PC, the person was asked « Envoyer le
 rapport ? » and said yes; the platform's admins read what was sent.
 
-Two senders, one report. The BROWSER holds what it caught (an uncaught script error, a request the
+Three senders, one report. The BROWSER holds what it caught (an uncaught script error, a request the
 server answered 500) until the person answers its dialog, then sends `ErrorReportSubmission`. A PC
 never sends its log on its own: it ASKS (`MachineErrorAsk`: what went wrong, one line), its owner
 answers on the PC's page in the web, and only an accepted ask is uploaded (`MachineErrorUpload`: the
-service log's tail, prepared and scrubbed on the PC). Every captured string is scrubbed again here on
+service log's tail, prepared and scrubbed on the PC). An INSTALL line that failed on a PC already connected
+asks the person at its terminal, and on a yes sends its own log with that PC's token (`InstallErrorReport`). Every captured string is scrubbed again here on
 arrival (`SignalRedaction.anonymous`: credentials, URL query values, long opaque runs, email
 addresses), whatever the sender did."""
 
@@ -18,16 +19,20 @@ from pydantic import Field
 from .signals import Captured600, SignalContext, SignalRedaction, SignalReporter, SignalStatus, SignalWorkspace
 from .wire import WireModel, WireRequest
 
-ErrorReportOrigin = Literal["web", "pc"]
+ErrorReportOrigin = Literal["web", "pc", "install"]
 WebErrorKind = Literal["script", "request"]
 """What a browser caught: a script error / unhandled rejection, or an app request answered 500."""
 MachineErrorKind = Literal["exception", "run_failed", "crashed", "service_unavailable", "service_stopped", "channel_unreachable"]
 """What a PC met: an unhandled exception in galaius, a run that failed, its connection crashing, or one
 of the reasons it could not connect (`MachineProblemCode`)."""
+InstallErrorKind = Literal["install_failed"]
+"""An install line (install.sh / install.ps1) that stopped at one of its steps."""
 WebReportText = SignalRedaction.lines(16_000)
 """What a browser adds to the error: its stack (the console and failed requests ride in the context)."""
 MachineReportText = SignalRedaction.lines(262_144)
 """What a PC adds: the tail of its galaius service log, at most 256 KiB."""
+InstallReportText = SignalRedaction.lines(65_536)
+"""What a failed install line adds: its own log's tail, at most 64 KiB (a whole run is a few hundred lines)."""
 
 
 class ErrorReportSubmission(WireRequest):
@@ -84,6 +89,16 @@ class MachineErrorUpload(WireRequest):
     detail: MachineReportText = Field(min_length=1)
 
 
+class InstallErrorReport(WireRequest):
+    """What a failed install line sends once the person at its terminal said yes (`POST
+    /v1/machine/install-report`, the PC's own token): the step that failed in one line and the run's log.
+    `id` is the script's own key (a retried send lands on the same report)."""
+
+    id: UUID
+    message: Captured600 = Field(min_length=1)
+    detail: InstallReportText = Field(min_length=1)
+
+
 class ErrorReportMachine(WireModel):
     id: UUID
     name: str
@@ -96,7 +111,7 @@ class ErrorReport(WireModel):
     id: UUID
     created_at: datetime
     origin: ErrorReportOrigin
-    kind: WebErrorKind | MachineErrorKind
+    kind: WebErrorKind | MachineErrorKind | InstallErrorKind
     message: str
     detail_size: int = Field(ge=0)
     context: SignalContext | None = None

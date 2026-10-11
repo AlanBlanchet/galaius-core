@@ -28,6 +28,7 @@ CONTEXT = {
     (f"/#workflows/{RUN}/runs/{RUN}", f"workflows/{RUN}/runs/{RUN}", "[redacted]"),
     # A PC's log: its machine token and an OAuth callback's code go, an exit code and a state word stay.
     ("connect Bearer iwm_9fQ2xLmT0aB7cD4e", "[redacted]", "iwm_9fQ2xLmT0aB7cD4e"),
+    ("uv: Failed to fetch https://alan:hunter22@pypi.example.org/simple", "https://[redacted]@pypi.example.org", "hunter22"),
     ("callback /v1/auth/google/callback?code=4/0AbCdEf&state=xyz12", "code=[redacted]", "4/0AbCdEf"),
     ("claude exited with exit code: 137 (state: failed)", "exit code: 137 (state: failed)", "[redacted]"),
     pytest.param("adversarial " + "a@" + "a." * 120_000, "adversarial", "never-there", id="240k-chars-without-spaces-stays-linear"),
