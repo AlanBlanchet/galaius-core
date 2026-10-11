@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import RunSubscription, SubscriptionAllowance, SubscriptionLimits, SubscriptionUse, UsageWindow
+from galaius_core import RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -39,3 +39,26 @@ def test_vendor_period_maps_to_nearest_window(minutes, window) -> None:
 def test_subscription_use_refuses_incoherent_requests(model, fields) -> None:
     with pytest.raises(ValidationError):
         model(**fields)
+
+
+def _choice(provider: str) -> dict:
+    return {"provider": provider, "subscription_id": uuid4(), "limits": SubscriptionLimits()}
+
+
+TWICE = _choice("claude")
+
+
+@pytest.mark.parametrize(("model", "fields"), [(SubscriptionChoices, {"subscriptions": (TWICE, TWICE)}),  # each subscription once
+                                             (SubscriptionChoices, {"lent": True, "subscriptions": (_choice("codex"),)}),
+                                             (SubscriptionRefusal, {"reason": "capped"}), (SubscriptionRefusal, {"reason": "lent", "cap": SubscriptionCap(
+                                                 window="weekly", used_percent=81, cap_percent=80, at_cap="cut")})])
+def test_choices_and_refusals_refuse_incoherent_shapes(model, fields) -> None:
+    with pytest.raises(ValidationError):
+        model(**fields)
+
+
+def test_a_start_offers_each_provider_its_own_subscriptions_in_his_order() -> None:
+    codex, first, second = _choice("codex"), _choice("claude"), _choice("claude")
+    choices = SubscriptionChoices(subscriptions=(codex, first, second))
+    assert (choices.of("claude"), choices.of("codex"), SubscriptionChoices().of("claude")) == ((SubscriptionChoice(**first), SubscriptionChoice(**second)), (SubscriptionChoice(**codex),), ())
+

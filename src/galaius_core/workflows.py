@@ -16,7 +16,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, PlainSerializer
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
-from .subscriptions import RunAllowance, RunSubscription, SubscriptionUse, UsageWindow
+from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from .wire import WireModel, WireRequest
 
@@ -2457,7 +2457,6 @@ AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
 AGENT_TOUCH_SCOPES: tuple[AgentTouchScope, ...] = get_args(AgentTouchScope)
 AgentRole = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 AgentModelId = Annotated[str, Field(pattern=r"^[A-Za-z0-9._:/@+-]+$", min_length=1, max_length=256)]
-AgentProvider = Literal["claude", "codex"]
 #: `agent`: a role run by the launcher (`galaius agents spawn`); `session`: an open conversation
 #: like the editor's chat, which ASKS before a command or a file change (the approvals the web
 #: answers); `continued`: a copy of one of the owner's own editor conversations, continued here.
@@ -2718,7 +2717,7 @@ class SealedSecrets(WireModel):
     count: int = Field(ge=0, le=SECRETS_PER_PROJECT)
 
 
-class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionUse):
+class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionChoices):
     op: Literal["start"] = "start"
     #: The named project's secrets, sealed for this machine by the server at start (None: none).
     secrets: SealedSecrets | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -2830,7 +2829,7 @@ class AgentProgramInstallRequest(MachineAgentRequestBase):
     op: Literal["program_install"] = "program_install"
     provider: AgentProvider
     #: Sign in inside this subscription's own folder on the PC (`~/.galaius/subscriptions/<id>/`),
-    #: never the PC's default login; asked of a runner saying "agent_subscriptions". None: the default login.
+    #: never the PC's default login; asked of a runner saying `SUBSCRIPTIONS_FEATURE`. None: the default login.
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
     feature: ClassVar[str] = "agent_programs"
@@ -2845,7 +2844,7 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     provider: AgentProvider
     subscription_id: UUID
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "agent_subscriptions"
+    feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
 
 
 class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
@@ -2854,7 +2853,7 @@ class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
 
     op: Literal["allowance"] = "allowance"
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "agent_subscriptions"
+    feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
 
 
 class AgentProviderSwitchRequest(MachineAgentRequestBase):
@@ -3717,6 +3716,10 @@ class MachineAgentAnswer(WireModel):
 
     request_id: UUID
     error: str | None = Field(default=None, max_length=400)
+    #: Why, typed, when the refusal is about a subscription (`SubscriptionRefusal`): the server words it.
+    subscription_refusal: SubscriptionRefusal | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: A started run's subscription, the one its launch walk pinned it to (None: the PC's own login, or lent).
+    subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     roots: tuple[str, ...] = Field(default=(), max_length=32)
     entries: tuple[MachineFileEntry, ...] = Field(default=(), max_length=500)
     truncated: bool = False
