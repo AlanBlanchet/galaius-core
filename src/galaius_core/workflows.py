@@ -3588,10 +3588,18 @@ DEVICE_CODE = r"^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12})?$"
 
 class AgentSignIn(WireModel):
     """A program's sign-in waiting for the person, until `expires_at`. It happens between the person
-    and the program's vendor: on the PC's own browser, or, for a program signing in by device code,
-    on the vendor's page (a constant the server holds, never a link the PC names) with `code`."""
+    and the program's vendor, never through galaius (no credential, token or code it asks for is
+    relayed): on the PC's own browser, or, for a program signing in by device code, on the vendor's
+    page (a constant the server holds) with `code`."""
 
     code: str | None = Field(default=None, pattern=DEVICE_CODE)
+    #: The vendor's sign-in address the program handed this PC's browser: it returns to the program
+    #: on this PC (a localhost callback), so it works opened on this PC only. The server shows it
+    #: only on a vendor host of its own list.
+    link: str | None = Field(default=None, max_length=4096, pattern=r"^https://")
+    #: The command that runs this same sign-in by hand in a terminal on this PC (its folder named),
+    #: set once a while passed with neither `link` nor `code`: no browser opened there.
+    command: str | None = Field(default=None, max_length=1024)
     expires_at: datetime
 
 
