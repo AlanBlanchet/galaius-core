@@ -150,7 +150,7 @@ from .cloud import (
 )
 from .criteria import CriteriaClause, CriteriaWeight, CriteriaError, parse_criteria, parse_criteria_weights, format_criteria, format_criteria_weights
 from .subscriptions import (
-    AtCap, RunAllowance, SubscriptionCap, SubscriptionLimits, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow,
+    AtCap, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionLimits, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow,
     UsageWindowName,
 )
 from .workflows import (
@@ -250,7 +250,7 @@ from .pool import (
 )
 
 __all__ = [
-    "AtCap", "RunAllowance", "SubscriptionCap", "SubscriptionLimits", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
+    "AtCap", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionLimits", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
     "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "PaidUseRefusal", "PaidUseSpend", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",

@@ -16,7 +16,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, PlainSerializer
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
-from .subscriptions import RunAllowance, SubscriptionCap, SubscriptionUse, UsageWindow
+from .subscriptions import RunAllowance, RunSubscription, SubscriptionUse, UsageWindow
 
 from .wire import WireModel, WireRequest
 
@@ -3602,6 +3602,9 @@ class AgentProviderState(WireModel):
     version: str = Field(default="", max_length=80)
     #: Who it is signed in as, as its status command says (an e-mail, an organisation), once ready.
     account: str = Field(default="", max_length=200)
+    #: Which login that is: a digest of its status answer, equal for the same vendor login wherever it
+    #: is signed in (the server refuses one login on two accounts); "" when not signed in.
+    login: str = Field(default="", pattern=r"^([0-9a-f]{16})?$", exclude_if=lambda value: not value)
     sign_in: AgentSignIn | None = None
     failure: AgentProgramFailure | None = None
     #: The program's or installer's last line, for the log (English, never a secret).
@@ -3691,12 +3694,8 @@ class MachineAgentRun(WireModel):
     #: The ranked candidates passed over before `provider`/`model` started, best first (a client
     #: older than this field sends none).
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
-    #: The subscription the run is pinned to (every turn, every child runs on it); None: the PC's default login.
-    subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: The cap its subscription reached during the run: held between turns (`finish`) or stopped (`cut`).
-    capped: SubscriptionCap | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: `RunAllowance.up_to_percent` its owner gave it, if any.
-    allowance: int | None = Field(default=None, ge=1, le=100, exclude_if=lambda value: value is None)
+    #: The subscription the run is pinned to, its caps, allowance and the cap it reached; None: the PC's default login.
+    subscription: RunSubscription | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class WebLoad(WireModel):

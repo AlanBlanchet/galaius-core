@@ -46,6 +46,14 @@ class SubscriptionCap(WireModel):
     resets_at: datetime | None = None
 
 
+class SubscriptionAllowance(WireModel):
+    """A run's owner letting it go past its subscription's cap on one window (the one it was held or
+    cut at), up to `up_to_percent` (the vendor's 100 % stays the ceiling)."""
+
+    window: UsageWindowName
+    up_to_percent: int = Field(ge=1, le=100)
+
+
 class SubscriptionLimits(WireModel):
     """The owner's caps on one subscription, in percent of each window (None: no cap, the vendor's
     own 100 % stays), and what a run does on reaching one."""
@@ -54,12 +62,12 @@ class SubscriptionLimits(WireModel):
     weekly_percent: int | None = Field(default=None, ge=1, le=100)
     at_cap: AtCap = "finish"
 
-    def cap(self, window: UsageWindowName, allowance: int | None = None) -> int | None:
-        """The cap in force on `window`; a run's `allowance` raises a cap, never sets one."""
+    def cap(self, window: UsageWindowName, allowance: SubscriptionAllowance | None = None) -> int | None:
+        """The cap in force on `window`; a run's `allowance` raises its own window's cap, never sets one."""
         own = {"five_hour": self.five_hour_percent, "weekly": self.weekly_percent}.get(window)
-        return own if own is None or allowance is None else max(own, allowance)
+        return own if own is None or allowance is None or allowance.window != window else max(own, allowance.up_to_percent)
 
-    def reached(self, usage: tuple[UsageWindow, ...], allowance: int | None = None) -> SubscriptionCap | None:
+    def reached(self, usage: tuple[UsageWindow, ...], allowance: SubscriptionAllowance | None = None) -> SubscriptionCap | None:
         """The first window of `usage` at or past its cap (the highest share first), else None."""
         for reading in sorted(usage, key=lambda item: item.used_percent, reverse=True):
             if (cap := self.cap(reading.window, allowance)) is not None and reading.used_percent >= cap:
@@ -88,9 +96,26 @@ class SubscriptionUse(WireRequest):
         return self
 
 
+class RunSubscription(SubscriptionUse):
+    """The subscription a run is pinned to, as the PC records and reports it: every turn and child
+    runs on it (`lent`: on none of the PC's CLI logins), under `limits`, raised on one window for this
+    run only by `allowance`; `capped` is the cap reached while it ran (held between turns at
+    `finish`, stopped at `cut`)."""
+
+    allowance: SubscriptionAllowance | None = None
+    capped: SubscriptionCap | None = None
+
+    @model_validator(mode="after")
+    def pinned_somewhere(self) -> Self:
+        if self.subscription_id is None and not self.lent:
+            raise ValueError("a run is pinned to a subscription, or lent: a default-login run carries none")
+        return self
+
+
 class RunAllowance(WireRequest):
-    """The run's owner lets one run go past its subscription's cap, up to `up_to_percent` of the
-    window (the vendor's 100 % stays the ceiling); it dies with the run."""
+    """The run's owner lets one run held or cut at its subscription's cap go past it, up to
+    `up_to_percent` of the window it was capped on (the vendor's 100 % stays the ceiling); it dies
+    with the run."""
 
     run_id: UUID
     up_to_percent: int = Field(ge=1, le=100)
