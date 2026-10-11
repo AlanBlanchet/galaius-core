@@ -16,6 +16,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, PlainSerializer
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
+from .subscriptions import RunAllowance, SubscriptionCap, SubscriptionUse, UsageWindow
 
 from .wire import WireModel, WireRequest
 
@@ -2717,7 +2718,7 @@ class SealedSecrets(WireModel):
     count: int = Field(ge=0, le=SECRETS_PER_PROJECT)
 
 
-class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec):
+class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionUse):
     op: Literal["start"] = "start"
     #: The named project's secrets, sealed for this machine by the server at start (None: none).
     secrets: SealedSecrets | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -2734,7 +2735,7 @@ class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec):
 ReadsAt = Literal["now", "next_step", "turn_end"]
 
 
-class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec):
+class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUse):
     """A message to one run. Its `id` is the message's id on both sides: the run's transcript keeps
     it, `MachineAgentAnswer.read_messages` names it once the agent has read it."""
 
@@ -2786,7 +2787,7 @@ class AgentSessionsRequest(MachineAgentRequestBase):
     seconds: ClassVar[float] = 30
 
 
-class AgentContinueRequest(MachineAgentRequestBase, AgentMessageSpec):
+class AgentContinueRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUse):
     """Continue one of the owner's editor conversations here: a copy of it resumes with `text`;
     the editor's own conversation is never written to."""
 
@@ -2828,8 +2829,32 @@ class AgentProgramInstallRequest(MachineAgentRequestBase):
 
     op: Literal["program_install"] = "program_install"
     provider: AgentProvider
+    #: Sign in inside this subscription's own folder on the PC (`~/.galaius/subscriptions/<id>/`),
+    #: never the PC's default login; asked of a runner saying "agent_subscriptions". None: the default login.
+    subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
     feature: ClassVar[str] = "agent_programs"
+
+
+class AgentSignOutRequest(MachineAgentRequestBase):
+    """Sign `provider` out of one subscription on this PC: its own sign-out run inside the
+    subscription's folder, then the folder removed (its credential with it). The PC's default
+    login is never touched. Answered with what remains (`providers`)."""
+
+    op: Literal["sign_out"] = "sign_out"
+    provider: AgentProvider
+    subscription_id: UUID
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "agent_subscriptions"
+
+
+class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
+    """`RunAllowance` for one run started here: it continues on the same subscription up to that
+    share of the window it was held or cut at; a run held between turns gets its next turn."""
+
+    op: Literal["allowance"] = "allowance"
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "agent_subscriptions"
 
 
 class AgentProviderSwitchRequest(MachineAgentRequestBase):
@@ -3495,7 +3520,7 @@ MachineAgentRequest = Annotated[
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
-    | AgentProgramsRequest | AgentProgramInstallRequest,
+    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentAllowanceRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -3582,6 +3607,10 @@ class AgentProviderState(WireModel):
     #: The program's or installer's last line, for the log (English, never a secret).
     detail: str = Field(default="", max_length=400)
     changed_at: datetime | None = None
+    #: The subscription this state is of (its own folder on the PC); None: the PC's default login.
+    subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: That subscription's last usage reading here (`SubscriptionUsage`), newest per window.
+    usage: tuple[UsageWindow, ...] = Field(default=(), max_length=8, exclude_if=lambda value: not value)
 
     @model_validator(mode="after")
     def consistent(self) -> Self:
@@ -3662,6 +3691,12 @@ class MachineAgentRun(WireModel):
     #: The ranked candidates passed over before `provider`/`model` started, best first (a client
     #: older than this field sends none).
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
+    #: The subscription the run is pinned to (every turn, every child runs on it); None: the PC's default login.
+    subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: The cap its subscription reached during the run: held between turns (`finish`) or stopped (`cut`).
+    capped: SubscriptionCap | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: `RunAllowance.up_to_percent` its owner gave it, if any.
+    allowance: int | None = Field(default=None, ge=1, le=100, exclude_if=lambda value: value is None)
 
 
 class WebLoad(WireModel):
