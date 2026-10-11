@@ -16,7 +16,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, PlainSerializer
 from .cost import NodeCostActual, NodeUsage, RunCostActual
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
-from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from .wire import WireModel, WireRequest
 
@@ -2847,6 +2847,15 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
 
 
+class AgentMoveRequest(MachineAgentRequestBase, RunMove):
+    """`RunMove` for one stopped run started here: its session carried to the other subscription's folder, resumed there."""
+
+    op: Literal["move"] = "move"
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 30
+    feature: ClassVar[str] = "agent_subscription_moves"
+
+
 class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
     """`RunAllowance` for one run started here: it continues on the same subscription up to that
     share of the window it was held or cut at; a run held between turns gets its next turn."""
@@ -3519,7 +3528,7 @@ MachineAgentRequest = Annotated[
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
-    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentAllowanceRequest,
+    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentAllowanceRequest | AgentMoveRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)

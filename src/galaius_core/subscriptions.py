@@ -151,20 +151,36 @@ class SubscriptionChoices(Lent):
 #: Why a PC (or the server) refused something about a subscription: at a cap (`cap` says which), a member's run on a lent
 #: PC, a subscription it holds no folder of, a turn or child naming another than its run's, a session or continued editor
 #: conversation (the default login's only), a turn of a run whose subscription was removed (or is not the sender's).
-SubscriptionRefusalReason = Literal["capped", "lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed"]
+#: `usage_limit`: the vendor's own usage limit stopped the run and its window has not reopened yet (`resets_at`); `session_missing`:
+#: the session to continue elsewhere is not in its subscription's folder.
+SubscriptionRefusalReason = Literal["capped", "lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed", "usage_limit", "session_missing"]
 
 
 class SubscriptionRefusal(WireModel):
-    """A PC's refusal about a subscription, typed: the server words it (`reason`, and `cap` when `capped`)."""
+    """A PC's refusal about a subscription, typed: the server words it (`reason`, `cap` when `capped`, `resets_at` when
+    the vendor's `usage_limit` window reopens)."""
 
     reason: SubscriptionRefusalReason
     cap: SubscriptionCap | None = None
+    resets_at: datetime | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def cap_of_capped(self) -> Self:
         if (self.reason == "capped") != (self.cap is not None):
             raise ValueError("a cap refusal names its cap, and only it does")
+        if self.resets_at is not None and self.reason != "usage_limit":
+            raise ValueError("only a usage limit refusal names when its window reopens apart from a cap")
         return self
+
+
+class RunMove(WireRequest):
+    """His « Continuer sur … » after a usage limit stopped a run: it continues its session on `subscription_id`, another
+    of his own subscriptions of the same provider on the same PC, under `limits` (contract A9: the PC carries the session's
+    transcript over, never a credential, and pins the run there). Never between accounts, never automatic."""
+
+    run_id: UUID
+    subscription_id: UUID
+    limits: SubscriptionLimits
 
 
 class RunSubscription(SubscriptionUse):
