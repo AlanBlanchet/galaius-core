@@ -109,6 +109,10 @@ class RunSubscription(SubscriptionUse):
     def pinned_somewhere(self) -> Self:
         if self.subscription_id is None and not self.lent:
             raise ValueError("a run is pinned to a subscription, or lent: a default-login run carries none")
+        if self.subscription_id is not None and self.limits is None:
+            raise ValueError("a run on a subscription carries its caps (limits; no cap: SubscriptionLimits())")
+        if self.lent and (self.allowance is not None or self.capped is not None):
+            raise ValueError("a lent run runs on no subscription: it has no cap to reach or go past")
         return self
 
 

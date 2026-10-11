@@ -33,7 +33,9 @@ def test_vendor_period_maps_to_nearest_window(minutes, window) -> None:
 
 
 @pytest.mark.parametrize(("model", "fields"), [(SubscriptionUse, {"limits": SubscriptionLimits()}), (SubscriptionUse, {"lent": True, "subscription_id": uuid4()}),
-                                             (RunSubscription, {}), (RunSubscription, {"lent": True, "subscription_id": uuid4()})])
+                                             (RunSubscription, {}), (RunSubscription, {"lent": True, "subscription_id": uuid4()}),
+                                             (RunSubscription, {"subscription_id": uuid4()}),
+                                             (RunSubscription, {"lent": True, "allowance": {"window": "weekly", "up_to_percent": 90}})])
 def test_subscription_use_refuses_incoherent_requests(model, fields) -> None:
     with pytest.raises(ValidationError):
         model(**fields)
