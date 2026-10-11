@@ -2498,6 +2498,32 @@ class AgentMessageSpec(WireRequest):
     text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
 
 
+#: Conversations started from the web that may work at once on one PC, unless its owner set another number on the web
+#: (`WebLimited.web_limit`, from 1 to `WEB_CONVERSATIONS_MAX`).
+WEB_CONVERSATIONS = 4
+WEB_CONVERSATIONS_MAX = 16
+#: A runner saying it honours `WebLimited.web_limit` (a runner not saying it refuses the field, and keeps `WEB_CONVERSATIONS`).
+WEB_LIMIT_FEATURE = "web_limit"
+
+
+class WebLimited(WireRequest):
+    """A request whose answer hangs on how many conversations started from the web may work at once on the PC: a start,
+    a continued conversation, the runs list reporting its `WebLoad`. `web_limit`: that number as its owner set it on the
+    web (absent: `WEB_CONVERSATIONS`). Asked of a runner saying `WEB_LIMIT_FEATURE`."""
+
+    web_limit: Annotated[int, Field(ge=1)] | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @staticmethod
+    def in_force(limit: int | None) -> int:
+        """The number a PC holds to for `limit` as its owner set it (None: never set, `WEB_CONVERSATIONS`); one above what
+        this side knows (a newer web) is held at `WEB_CONVERSATIONS_MAX`, never a refused request."""
+        return WEB_CONVERSATIONS if limit is None else min(limit, WEB_CONVERSATIONS_MAX)
+
+    @property
+    def web_conversations(self) -> int:
+        return self.in_force(self.web_limit)
+
+
 class MachineAgentRequestBase(WireRequest):
     """The machine OWNER, signed in on the web, drives coding agents on one of his computers the
     way the editor panel does. One subclass per op, chosen by `op`. Signed with the machine's key,
@@ -2540,7 +2566,7 @@ class AgentFoldersRequest(MachineAgentRequestBase):
         return self
 
 
-class AgentRunsRequest(MachineAgentRequestBase):
+class AgentRunsRequest(MachineAgentRequestBase, WebLimited):
     op: Literal["runs"] = "runs"
 
 
@@ -2717,7 +2743,7 @@ class SealedSecrets(WireModel):
     count: int = Field(ge=0, le=SECRETS_PER_PROJECT)
 
 
-class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionChoices):
+class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionChoices, WebLimited):
     op: Literal["start"] = "start"
     #: The named project's secrets, sealed for this machine by the server at start (None: none).
     secrets: SealedSecrets | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -2786,7 +2812,7 @@ class AgentSessionsRequest(MachineAgentRequestBase):
     seconds: ClassVar[float] = 30
 
 
-class AgentContinueRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUse):
+class AgentContinueRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUse, WebLimited):
     """Continue one of the owner's editor conversations here: a copy of it resumes with `text`;
     the editor's own conversation is never written to."""
 
@@ -3715,8 +3741,8 @@ class MachineAgentRun(WireModel):
 
 
 class WebLoad(WireModel):
-    """A PC's conversations started from the web working now (`working`) against how many may at once (`limit`):
-    `full`, it refuses one more start until one ends."""
+    """A PC's conversations started from the web working now (`working`) against how many may at once (`limit`, the
+    `WebLimited.web_conversations` it honours): `full`, it refuses one more start until one ends."""
 
     working: int = Field(ge=0)
     limit: int = Field(ge=1)
@@ -3724,6 +3750,11 @@ class WebLoad(WireModel):
     @property
     def full(self) -> bool:
         return self.working >= self.limit
+
+
+#: Why a PC refused an agent request, typed for the server to word (`MachineAgentAnswer.code`): a project folder's failure,
+#: or `web_full` its conversations started from the web work at their most (`WebLimited`; `MachineAgentAnswer.web` says them).
+AgentRefusalCode = WorkspaceFailureCode | Literal["web_full"]
 
 
 class MachineAgentAnswer(WireModel):
@@ -3780,7 +3811,7 @@ class MachineAgentAnswer(WireModel):
     #: `workspace_pack`: what copying the folder sends.
     pack: WorkspacePack | None = None
     #: A refusal the server words for the owner (with `error`, the PC's English for the log).
-    code: WorkspaceFailureCode | None = None
+    code: AgentRefusalCode | None = None
     #: `start` in a project folder the PC cloned from the web: whether it was fast-forwarded to its
     #: remote first (`WorkspaceRefresh`; None: not such a folder).
     refresh: WorkspaceRefresh | None = None

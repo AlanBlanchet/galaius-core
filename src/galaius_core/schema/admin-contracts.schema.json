@@ -108,6 +108,7 @@
             "machine_agent.subscription_signed_out",
             "machine_agent.allowance_given",
             "machine_agent.moved",
+            "machine_agent.web_limit_changed",
             "project_secret.set",
             "project_secret.deleted",
             "project_secret.delivered",
