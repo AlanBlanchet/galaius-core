@@ -3641,6 +3641,9 @@ class AgentProviderState(WireModel):
     step: AgentProgramStep = "missing"
     #: Signed in (its own status command said so); None: not asked yet.
     signed_in: bool | None = None
+    #: Signed out because the login saved here expired and could not be refreshed (its status command
+    #: says so): installed and once signed in, its owner signs in again, never installs it again.
+    expired: bool = Field(default=False, exclude_if=lambda value: not value)
     version: str = Field(default="", max_length=80)
     #: Who it is signed in as, as its status command says (an e-mail, an organisation), once ready.
     account: str = Field(default="", max_length=200)
@@ -3663,6 +3666,8 @@ class AgentProviderState(WireModel):
             raise ValueError("a failed program names its failure, and only a failed one does")
         if self.sign_in is not None and self.step != "signing_in":
             raise ValueError("only a sign-in under way waits for the person")
+        if self.expired and (self.step != "signed_out" or self.signed_in or not self.available):
+            raise ValueError("only an installed program signed out, nothing under way, has an expired login")
         return self
 
 
