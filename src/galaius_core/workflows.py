@@ -2782,6 +2782,31 @@ class AgentStopRequest(MachineAgentRequestBase):
 CompactionTrigger = Literal["auto", "manual"]
 
 
+class ContextGauge(BaseModel):
+    """How full one agent conversation is, as its CLI reported it, never guessed (None: not reported):
+    a run's gauge, and what one of its events reports of it (a snapshot of size and window, newest
+    wins; compactions counted). Mixed into each model carrying it, its fields at the top level."""
+
+    #: Tokens the conversation holds now: its newest main-thread model call, or the size a compaction left.
+    context_tokens: int | None = Field(default=None, ge=0)
+    #: The model's context window.
+    context_window: int | None = Field(default=None, gt=0)
+    #: Times its conversation was compacted (by its CLI as it filled, or on request); an event: those it reports.
+    compactions: int = Field(default=0, ge=0)
+
+    @classmethod
+    def reported(cls, **values: object) -> dict[str, int]:
+        """What a provider's stream gave for these fields (`context_tokens=…`), each kept only when it is
+        a count its field takes (a bool, a negative size or an empty window reads as not reported)."""
+        kept: dict[str, int] = {}
+        for field, value in values.items():
+            try:
+                kept[field] = TypeAdapter(Annotated[int, *cls.model_fields[field].metadata]).validate_python(value, strict=True)
+            except ValidationError:
+                continue
+        return kept
+
+
 class AgentCompactRequest(MachineAgentRequestBase):
     """Have one run's CLI replace its conversation so far with its own summary, freeing its context:
     a turn of its own, so a run at work compacts once its turn ends (`MachineAgentAnswer.reads_at`).
@@ -3782,7 +3807,7 @@ class PassedOverCandidate(WireModel):
     until: float | None = Field(default=None, ge=0)
 
 
-class MachineAgentRun(WireModel):
+class MachineAgentRun(WireModel, ContextGauge):
     """One run the machine started for the web, as the machine's registry has it now."""
 
     run_id: UUID
@@ -3810,10 +3835,6 @@ class MachineAgentRun(WireModel):
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
     #: The subscription the run is pinned to, its caps, allowance and the cap it reached; None: the PC's default login.
     subscription: RunSubscription | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: How full its conversation is: the prompt of its newest main-thread model call, and the model's
-    #: window as its CLI reported it; None while unreported (never guessed).
-    context_tokens: int | None = Field(default=None, ge=0)
-    context_window: int | None = Field(default=None, ge=0)
 
 
 class WebLoad(WireModel):

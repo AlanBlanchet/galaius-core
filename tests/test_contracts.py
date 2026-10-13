@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, AgentCompactRequest, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from galaius_core import MACHINE_AGENT_REQUESTS, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -519,3 +519,8 @@ def test_a_compaction_request_is_its_own_op_asked_only_of_a_runner_that_supports
     item = TranscriptItem(at=1.0, kind="compacted", text="", compaction="auto", compacted_from=969_118, context_tokens=20_143)
     assert TranscriptItem.model_validate_json(item.model_dump_json()) == item
     assert "compaction" not in TranscriptItem(at=1.0, kind="said", text="hi").model_dump()
+    # A provider's figure that is no count reads as not reported: never a 0 % ring, never a crash.
+    assert ContextGauge.reported(context_tokens=True, context_window=0) == {}
+    assert ContextGauge.reported(context_tokens=0, context_window=258_400) == {"context_tokens": 0, "context_window": 258_400}
+    with pytest.raises(ValidationError):
+        ContextGauge(context_window=0)
