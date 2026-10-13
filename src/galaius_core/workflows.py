@@ -2880,19 +2880,24 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
 
 
-class AgentSignInCodeRequest(MachineAgentRequestBase):
-    """The code `provider`'s vendor page showed the person once he accepted its sign-in (`AgentSignIn.paste`), sealed in his
-    browser to that sign-in's own key (`AgentSignIn.seal_key`): whatever carries it between his browser and this PC (the
-    server) never reads it. Opened here, checked (`SIGN_IN_CODE`), written once to the waiting program's input, kept
-    nowhere. Only the program holds what turns it into a login (its PKCE verifier). Answered with that login's state."""
+class SealedSignInCode(WireModel):
+    """The code a vendor's page showed the person once he accepted a program's sign-in there (`PasteSignIn`), sealed in his
+    browser to that sign-in's own key: whatever carries it between his browser and the PC (the server) never reads it."""
+
+    #: The sign-in it answers (`PasteSignIn.attempt`): any other program, a later one included, never gets it.
+    attempt: UUID
+    #: The code, RSA-OAEP (SHA-256) encrypted to `PasteSignIn.seal_key`, base64; never in a repr or a log.
+    sealed: str = Field(pattern=SEALED_CODE, repr=False)
+
+
+class AgentSignInCodeRequest(MachineAgentRequestBase, SealedSignInCode):
+    """`SealedSignInCode` for `provider`'s sign-in waiting on this PC (the default login, or `subscription_id`'s): opened
+    here, checked (`SIGN_IN_CODE`), written once to the waiting program's input, kept nowhere. Only the program holds what
+    turns it into a login (its PKCE verifier). Answered with that login's state (`providers`)."""
 
     op: Literal["sign_in_code"] = "sign_in_code"
     provider: AgentProvider
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: The sign-in it answers (`AgentSignIn.attempt`): any other program, a later one included, never gets it.
-    attempt: UUID
-    #: The code, RSA-OAEP (SHA-256) encrypted to `AgentSignIn.seal_key`, base64.
-    sealed: str = Field(pattern=SEALED_CODE, repr=False)
     action: ClassVar[bool] = True
     feature: ClassVar[str] = "sign_in_paste"
 
@@ -3637,6 +3642,19 @@ AgentProgramFailure = Literal["download_failed", "install_failed", "unsupported_
 DEVICE_CODE = r"^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12})?$"
 
 
+class PasteSignIn(WireModel):
+    """A sign-in waiting for the code its vendor's page shows (`AgentSignIn.paste`)."""
+
+    #: This sign-in's own program, the one that printed its address (made on the PC for it): a code comes back naming it,
+    #: so it is only ever written to the program whose address the person accepted (threat-modeler 2026-10-13 #3).
+    attempt: UUID
+    #: This attempt's own public key (RSA-OAEP, SHA-256; SubjectPublicKeyInfo DER, base64), made on the PC for it alone: his
+    #: browser seals the code to it, so only this PC opens it (threat-modeler 2026-10-13 #1).
+    seal_key: str = Field(max_length=1024, pattern=r"^[A-Za-z0-9+/]+={0,2}$")
+    #: A code was handed to the program: it is checking it with its vendor; no second one is taken.
+    pasted: bool = False
+
+
 class AgentSignIn(WireModel):
     """A program's sign-in waiting for the person, until `expires_at`. It happens between the person
     and the program's vendor, never through galaius (no credential, token or code it asks for is
@@ -3651,18 +3669,10 @@ class AgentSignIn(WireModel):
     #: The command that runs this same sign-in by hand in a terminal on this PC (its folder named),
     #: set once a while passed with neither `link` nor `code`: no browser opened there.
     command: str | None = Field(default=None, max_length=1024)
-    #: The program waits for the code its vendor's page shows once the person accepted there: `link` then
-    #: opens in any browser, on any device (its page shows the code instead of returning to this PC),
-    #: and the code comes back through `AgentSignInCodeRequest`.
-    paste: bool = Field(default=False, exclude_if=lambda value: not value)
-    #: This sign-in's own program, the one that printed `link` (made on the PC for it): a code comes back naming it,
-    #: so it is only ever written to the program whose address the person accepted (threat-modeler 2026-10-13 #3).
-    attempt: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: This attempt's own public key (RSA-OAEP, SHA-256; SubjectPublicKeyInfo DER, base64), made on the PC for it alone: his
-    #: browser seals the code to it, so only this PC opens it (threat-modeler 2026-10-13 #1).
-    seal_key: str | None = Field(default=None, max_length=1024, pattern=r"^[A-Za-z0-9+/]+={0,2}$", exclude_if=lambda value: value is None)
-    #: A code was handed to the program: it is checking it with its vendor; no second one is taken.
-    pasted: bool = Field(default=False, exclude_if=lambda value: not value)
+    #: The program waits for the code its vendor's page shows once the person accepted there: `link` then opens in any
+    #: browser, on any device (its page shows the code instead of returning to this PC); the code comes back sealed
+    #: (`AgentSignInCodeRequest`). None: no code is taken.
+    paste: PasteSignIn | None = Field(default=None, exclude_if=lambda value: value is None)
     expires_at: datetime
 
 
