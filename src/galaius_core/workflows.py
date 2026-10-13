@@ -2839,6 +2839,11 @@ class AgentSettingsRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "agent_settings"
 
 
+#: The code a vendor's page shows once the person accepted a program's sign-in there, to paste back into that program
+#: (Claude Code: `<authorization code>#<state>`, base64url): one line, no space, no control character.
+SIGN_IN_CODE = r"^[A-Za-z0-9_-]{8,512}(#[A-Za-z0-9_-]{8,512})?$"
+
+
 class AgentProgramsRequest(MachineAgentRequestBase):
     """Each agent program here: installed, signed in, an install or sign-in under way (`providers`)."""
 
@@ -2871,6 +2876,23 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     subscription_id: UUID
     action: ClassVar[bool] = True
     feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
+
+
+class AgentSignInCodeRequest(MachineAgentRequestBase):
+    """The code `provider`'s vendor page showed the person once he accepted its sign-in (`AgentSignIn.paste`), handed to
+    that program's sign-in waiting on this PC (the default login, or `subscription_id`'s): written once to its input, kept
+    nowhere. Only the program holds what turns it into a login (its PKCE verifier): the code alone signs nothing in.
+    Answered with that login's state (`providers`)."""
+
+    op: Literal["sign_in_code"] = "sign_in_code"
+    provider: AgentProvider
+    subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: The sign-in it answers (`AgentSignIn.attempt`): any other program, a later one included, never gets it.
+    attempt: UUID
+    #: One line, nothing a terminal would read as a second input or a control (`SIGN_IN_CODE`); never in a repr or a log.
+    code: str = Field(pattern=SIGN_IN_CODE, max_length=1100, repr=False)
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "sign_in_paste"
 
 
 class AgentMoveRequest(MachineAgentRequestBase, RunMove):
@@ -3554,7 +3576,7 @@ MachineAgentRequest = Annotated[
     | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
-    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentAllowanceRequest | AgentMoveRequest,
+    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -3607,7 +3629,8 @@ class AgentRanking(WireModel):
 AgentProgramStep = Literal["missing", "installing", "signed_out", "signing_in", "ready", "failed"]
 #: Why an install or a sign-in from the web stopped, worded by the server for the owner: the sign-in
 #: waited its whole time (`sign_in_expired`), or the program's sign-in ended without signing in.
-AgentProgramFailure = Literal["download_failed", "install_failed", "unsupported_system", "sign_in_expired", "sign_in_failed"]
+#: The program's sign-in ended right after the code the person pasted (`code_refused`: its vendor refused it).
+AgentProgramFailure = Literal["download_failed", "install_failed", "unsupported_system", "sign_in_expired", "sign_in_failed", "code_refused"]
 #: A one-time code a program signs in with on its vendor's page (Codex: `N5ST-Z1ZME`).
 DEVICE_CODE = r"^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12})?$"
 
@@ -3619,13 +3642,22 @@ class AgentSignIn(WireModel):
     page (a constant the server holds) with `code`."""
 
     code: str | None = Field(default=None, pattern=DEVICE_CODE)
-    #: The vendor's sign-in address the program handed this PC's browser: it returns to the program
-    #: on this PC (a localhost callback), so it works opened on this PC only. The server shows it
-    #: only on a vendor host of its own list.
+    #: The vendor's sign-in address: with `paste`, the one the program prints for any browser; else the
+    #: one it handed this PC's browser, returning to the program on this PC (a localhost callback), so
+    #: it works opened on this PC only. The server shows it only on a vendor host of its own list.
     link: str | None = Field(default=None, max_length=4096, pattern=r"^https://")
     #: The command that runs this same sign-in by hand in a terminal on this PC (its folder named),
     #: set once a while passed with neither `link` nor `code`: no browser opened there.
     command: str | None = Field(default=None, max_length=1024)
+    #: The program waits for the code its vendor's page shows once the person accepted there: `link` then
+    #: opens in any browser, on any device (its page shows the code instead of returning to this PC),
+    #: and the code comes back through `AgentSignInCodeRequest`.
+    paste: bool = Field(default=False, exclude_if=lambda value: not value)
+    #: This sign-in's own program, the one that printed `link` (made on the PC for it): a code comes back naming it,
+    #: so it is only ever written to the program whose address the person accepted (threat-modeler 2026-10-13 #3).
+    attempt: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: A code was handed to the program: it is checking it with its vendor; no second one is taken.
+    pasted: bool = Field(default=False, exclude_if=lambda value: not value)
     expires_at: datetime
 
 
