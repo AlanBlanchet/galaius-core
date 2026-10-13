@@ -2778,6 +2778,21 @@ class AgentStopRequest(MachineAgentRequestBase):
     action: ClassVar[bool] = True
 
 
+#: Who started a compaction: the provider on its own as the context filled (`auto`), or a request (`manual`).
+CompactionTrigger = Literal["auto", "manual"]
+
+
+class AgentCompactRequest(MachineAgentRequestBase):
+    """Have one run's CLI replace its conversation so far with its own summary, freeing its context:
+    a turn of its own, so a run at work compacts once its turn ends (`MachineAgentAnswer.reads_at`).
+    A CLI that cannot compact is refused."""
+
+    op: Literal["compact"] = "compact"
+    run_id: UUID
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = "agent_compact"
+
+
 class AgentOptionsRequest(MachineAgentRequestBase):
     """What can be started here: roles, models per CLI, and whether a session can open. With
     `role`: `models` is what that role's own rule picks on each CLI here (best first), so the owner
@@ -3291,11 +3306,15 @@ class TranscriptItem(WireModel):
     a tool step, what was sent to it, a harness check, an error."""
 
     at: float
-    kind: Literal["said", "final", "stated", "step", "sent", "check", "error"]
+    kind: Literal["said", "final", "stated", "step", "sent", "check", "error", "compacted"]
     text: str
     tool: str | None = None
     input: str = ""
     media: tuple[TranscriptMedia, ...] = ()
+    #: `compacted`: who started it, and the context's size before and after (None: the provider did not say).
+    compaction: CompactionTrigger | None = Field(default=None, exclude_if=lambda value: value is None)
+    compacted_from: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
+    context_tokens: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
 
 
 class MachineRunEvents(WireModel):
@@ -3580,7 +3599,7 @@ class WorkspacesRequest(MachineAgentRequestBase):
 
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
-    | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
+    | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest,
@@ -3791,6 +3810,10 @@ class MachineAgentRun(WireModel):
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
     #: The subscription the run is pinned to, its caps, allowance and the cap it reached; None: the PC's default login.
     subscription: RunSubscription | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: How full its conversation is: the prompt of its newest main-thread model call, and the model's
+    #: window as its CLI reported it; None while unreported (never guessed).
+    context_tokens: int | None = Field(default=None, ge=0)
+    context_window: int | None = Field(default=None, ge=0)
 
 
 class WebLoad(WireModel):
