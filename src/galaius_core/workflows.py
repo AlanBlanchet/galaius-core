@@ -6,7 +6,7 @@ import json
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Annotated, Any, ClassVar, Literal, Self, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -2794,14 +2794,15 @@ class ContextGauge(BaseModel):
     #: Times its conversation was compacted (by its CLI as it filled, or on request); an event: those it reports.
     compactions: int = Field(default=0, ge=0)
 
-    @classmethod
-    def reported(cls, **values: object) -> dict[str, int]:
-        """What a provider's stream gave for these fields (`context_tokens=…`), each kept only when it is
-        a count its field takes (a bool, a negative size or an empty window reads as not reported)."""
+    @staticmethod
+    def reported(values: Mapping[str, object]) -> dict[str, int]:
+        """The gauge fields `values` holds (a provider's report, a stored record, another model's fields:
+        `dict(model)`), each kept only when its field takes it: a bool, a negative size or an empty window
+        reads as not reported, never a 0 % ring nor a failed read."""
         kept: dict[str, int] = {}
-        for field, value in values.items():
+        for field, info in ContextGauge.model_fields.items():
             try:
-                kept[field] = TypeAdapter(Annotated[int, *cls.model_fields[field].metadata]).validate_python(value, strict=True)
+                kept[field] = TypeAdapter(Annotated[int, *info.metadata]).validate_python(values.get(field), strict=True)
             except ValidationError:
                 continue
         return kept
