@@ -188,7 +188,7 @@ class OperatorAuditEvent(WireModel):
         "contact_message.listed", "contact_message.read", "contact_message.deleted",
         "signal.listed", "signal.status_changed", "signal.deleted",
         "error_report.listed", "error_report.read", "error_report.status_changed", "error_report.deleted",
-        "machine_agent.started", "machine_agent.messaged", "machine_agent.stopped", "machine_agent.answered", "machine_agent.continued", "machine_agent.provider_switched",
+        "machine_agent.started", "machine_agent.messaged", "machine_agent.stopped", "machine_agent.compacted", "machine_agent.answered", "machine_agent.continued", "machine_agent.provider_switched",
         "machine_agent.settings_changed", "machine_agent.workspace_prepared", "machine_agent.program_installed", "machine_agent.sign_in_code_handed", "machine_agent.subscription_signed_out", "machine_agent.allowance_given", "machine_agent.moved", "machine_agent.web_limit_changed",
         "project_secret.set", "project_secret.deleted", "project_secret.delivered",
         "machine_place.level_changed", "machine_place.widening_requested", "machine_place.widening_withdrawn", "machine_place.review_discarded",
