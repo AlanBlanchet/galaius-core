@@ -2842,6 +2842,8 @@ class AgentSettingsRequest(MachineAgentRequestBase):
 #: The code a vendor's page shows once the person accepted a program's sign-in there, to paste back into that program
 #: (Claude Code: `<authorization code>#<state>`, base64url): one line, no space, no control character.
 SIGN_IN_CODE = r"^[A-Za-z0-9_-]{8,512}(#[A-Za-z0-9_-]{8,512})?$"
+#: A code sealed to a sign-in's key (`AgentSignInCodeRequest.sealed`): one RSA block, base64.
+SEALED_CODE = r"^[A-Za-z0-9+/]{300,700}={0,2}$"
 
 
 class AgentProgramsRequest(MachineAgentRequestBase):
@@ -2879,18 +2881,18 @@ class AgentSignOutRequest(MachineAgentRequestBase):
 
 
 class AgentSignInCodeRequest(MachineAgentRequestBase):
-    """The code `provider`'s vendor page showed the person once he accepted its sign-in (`AgentSignIn.paste`), handed to
-    that program's sign-in waiting on this PC (the default login, or `subscription_id`'s): written once to its input, kept
-    nowhere. Only the program holds what turns it into a login (its PKCE verifier): the code alone signs nothing in.
-    Answered with that login's state (`providers`)."""
+    """The code `provider`'s vendor page showed the person once he accepted its sign-in (`AgentSignIn.paste`), sealed in his
+    browser to that sign-in's own key (`AgentSignIn.seal_key`): whatever carries it between his browser and this PC (the
+    server) never reads it. Opened here, checked (`SIGN_IN_CODE`), written once to the waiting program's input, kept
+    nowhere. Only the program holds what turns it into a login (its PKCE verifier). Answered with that login's state."""
 
     op: Literal["sign_in_code"] = "sign_in_code"
     provider: AgentProvider
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     #: The sign-in it answers (`AgentSignIn.attempt`): any other program, a later one included, never gets it.
     attempt: UUID
-    #: One line, nothing a terminal would read as a second input or a control (`SIGN_IN_CODE`); never in a repr or a log.
-    code: str = Field(pattern=SIGN_IN_CODE, max_length=1100, repr=False)
+    #: The code, RSA-OAEP (SHA-256) encrypted to `AgentSignIn.seal_key`, base64.
+    sealed: str = Field(pattern=SEALED_CODE, repr=False)
     action: ClassVar[bool] = True
     feature: ClassVar[str] = "sign_in_paste"
 
@@ -3656,6 +3658,9 @@ class AgentSignIn(WireModel):
     #: This sign-in's own program, the one that printed `link` (made on the PC for it): a code comes back naming it,
     #: so it is only ever written to the program whose address the person accepted (threat-modeler 2026-10-13 #3).
     attempt: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: This attempt's own public key (RSA-OAEP, SHA-256; SubjectPublicKeyInfo DER, base64), made on the PC for it alone: his
+    #: browser seals the code to it, so only this PC opens it (threat-modeler 2026-10-13 #1).
+    seal_key: str | None = Field(default=None, max_length=1024, pattern=r"^[A-Za-z0-9+/]+={0,2}$", exclude_if=lambda value: value is None)
     #: A code was handed to the program: it is checking it with its vendor; no second one is taken.
     pasted: bool = Field(default=False, exclude_if=lambda value: not value)
     expires_at: datetime
