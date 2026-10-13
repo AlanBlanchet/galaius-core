@@ -210,6 +210,13 @@ class Project(WireModel):
         return self.holds_folder(root) or agent is not None and self.names("agent", agent) or workflow is not None and self.names("workflow", workflow)
 
 
+class ProjectListed(Project):
+    """A project as GET /projects lists it: the project, and when its latest conversation the reader's lists show moved
+    (`last_activity_at`, None: none yet). Read-time only, never stored."""
+
+    last_activity_at: datetime | None = None
+
+
 class ProjectSuggestion(WireModel):
     """A session root folder that runs came from and no project claims yet."""
 
