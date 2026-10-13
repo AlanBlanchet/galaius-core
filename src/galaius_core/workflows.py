@@ -2880,7 +2880,7 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
 
 
-class SealedSignInCode(WireModel):
+class SealedSignInCode(WireRequest):
     """The code a vendor's page showed the person once he accepted a program's sign-in there (`PasteSignIn`), sealed in his
     browser to that sign-in's own key: whatever carries it between his browser and the PC (the server) never reads it."""
 
