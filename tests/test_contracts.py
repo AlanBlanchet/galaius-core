@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -450,6 +450,21 @@ def test_a_checkout_origin_is_reported_without_its_credentials(configured: str, 
         with pytest.raises(ValidationError) as refused:
             GitRemote(url=configured)
         assert "secret" not in str(refused.value)
+
+
+@pytest.mark.parametrize(("root", "named"), [
+    (PROJECTS_ROOT, True), ("galaius/projets", True), (PROJECTS_DIR, False), (".galaius/subscriptions", False),
+    ("galaius:projets/../.galaius", False), ("galaius/../.galaius", False), ("other:projets", False),
+])
+def test_a_request_names_the_projects_root_by_its_token_never_a_hidden_path(root: str, named: bool) -> None:
+    spec = {"root": root, "name": "aino"}
+    if named:
+        assert WorkspaceSpec.model_validate(spec).root == root
+    else:
+        with pytest.raises(ValidationError):
+            WorkspaceSpec.model_validate(spec)
+    with pytest.raises(ValidationError):   # the web never adds, moves nor removes it
+        MachineAgentSettings(agent_roots=(PROJECTS_ROOT,))
 
 
 def test_a_clone_request_keeps_the_fields_a_released_runner_verifies() -> None:

@@ -3557,8 +3557,22 @@ class MachineWorkspaceJob(WireModel):
         return self
 
 
-#: An agent root as a request names it (a released runner refuses one longer than 240 characters).
-AgentRootPath = Annotated[PlacePath, Field(max_length=240)]
+#: The folder each PC keeps for projects put on it from the web, as a request names it: a token, never a path (the
+#: PC alone knows where it is, a hidden folder apart from its own settings and logins); the ":" keeps it apart from every
+#: `PlacePath`. Never an `agent_roots` or `places` entry: the web can neither add, move nor remove it.
+PROJECTS_ROOT = "galaius:projets"
+#: Where `PROJECTS_ROOT` is on each PC: this hidden folder of its working directory (its owner's home).
+PROJECTS_DIR = ".galaius-projets"
+#: A runner holding `PROJECTS_ROOT` (a runner not saying it takes project folders under an agent root the web adds).
+PROJECTS_ROOT_FEATURE = "projects_root"
+
+
+def _agent_root(value: str) -> str:
+    return value if value == PROJECTS_ROOT else _place_path(value)
+
+
+#: An agent root as a request names it: a `PlacePath` or `PROJECTS_ROOT` (a released runner refuses one longer than 240 characters).
+AgentRootPath = Annotated[str, Field(min_length=1, max_length=240), AfterValidator(_agent_root)]
 
 
 class WorkspaceSpec(WireRequest):
