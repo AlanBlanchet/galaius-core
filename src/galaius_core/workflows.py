@@ -3831,6 +3831,9 @@ class MachineAgentRun(WireModel, ContextGauge):
     pending: tuple[AgentInteraction, ...] = Field(default=(), max_length=16)
     #: Started inside the PC's OS fence built from its levels (None: not recorded).
     fenced: bool | None = None
+    #: Whether its PC compacts its conversation on request (`AgentCompactRequest`), by the same rule that refuses one
+    #: (None: its PC did not say).
+    compacts: bool | None = None
     #: The ranked candidates passed over before `provider`/`model` started, best first (a client
     #: older than this field sends none).
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
