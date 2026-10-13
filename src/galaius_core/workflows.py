@@ -1426,6 +1426,15 @@ class McpBinding(WireModel):
         return self.enabled_tools == "all" or tool in self.enabled_tools
 
 
+#: How hard a model thinks before it answers, as an agent's revision sets it and a run records it.
+ReasoningLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+
+
+#: The level a run RECORDS it ran at, read from the other side: a word outside the levels (a newer side's level, a record
+#: written by hand) reads as not known, never guessed, and never fails the message carrying it.
+RecordedReasoning = Annotated[ReasoningLevel | None, BeforeValidator(lambda value: next((level for level in get_args(ReasoningLevel) if level == value), None))]
+
+
 class AgentRevision(WireModel):
     id: UUID
     revision: UUID
@@ -1439,7 +1448,7 @@ class AgentRevision(WireModel):
     scope: str = Field(default="core", pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
     department: str | None = Field(default=None, min_length=1, max_length=120)
     reports_to: UUID | None = None
-    reasoning: Literal["minimal", "low", "medium", "high", "xhigh", "max", "ultra"] = "high"
+    reasoning: ReasoningLevel = "high"
     harness_tools: tuple[str, ...] = Field(default=(), max_length=256)
     prompt: PromptExecutionRef
     paradigms: tuple[PromptExecutionRef, ...] = Field(default=(), max_length=16)
@@ -3816,6 +3825,9 @@ class MachineAgentRun(WireModel, ContextGauge):
     role: str | None = Field(default=None, max_length=80)
     provider: str = Field(max_length=40)
     model: str | None = Field(default=None, max_length=120)
+    #: The reasoning effort its PC launched it at, as its record holds it (None: not recorded, e.g. a client older than
+    #: this field, an open conversation whose program does not say).
+    reasoning: RecordedReasoning = None
     status: str = Field(max_length=40)
     root: str = Field(max_length=240)
     path: str = Field(default="", max_length=1024)

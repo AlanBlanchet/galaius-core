@@ -1,6 +1,6 @@
 [project]
 name = "galaius-core"
-version = "0.47.0"
+version = "0.48.0"
 description = "Provider-independent wire contracts for Galaius clients and services"
 readme = "README.md"
 license = "MIT"
