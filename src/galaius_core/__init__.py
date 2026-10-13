@@ -151,7 +151,7 @@ from .cloud import (
 from .criteria import CriteriaClause, CriteriaWeight, CriteriaError, parse_criteria, parse_criteria_weights, format_criteria, format_criteria_weights
 from .subscriptions import (
     SUBSCRIPTIONS_FEATURE, SUBSCRIPTIONS_PER_PC, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
-    SubscriptionRefusal, SubscriptionRefusalReason, RunMove, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName,
+    SubscriptionRefusal, SubscriptionRefusalReason, RunMove, LoginUsage, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName,
 )
 from .workflows import (
     ValueType,
@@ -251,7 +251,7 @@ from .pool import (
 
 __all__ = [
     "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
-    "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
+    "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
     "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "PaidUseRefusal", "PaidUseSpend", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",

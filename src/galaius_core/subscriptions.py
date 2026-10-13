@@ -219,12 +219,32 @@ class SubscriptionUsage(WireModel):
     windows: tuple[UsageWindow, ...] = Field(default=(), max_length=8)
 
 
+class LoginUsage(WireModel):
+    """The last usage reading of one program's default login on a PC (the login its owner's own editor
+    sessions use, outside any subscription); no window: none now (signed out, not installed, a login
+    its vendor meters none for)."""
+
+    provider: AgentProvider
+    windows: tuple[UsageWindow, ...] = Field(default=(), max_length=8)
+
+
 class SubscriptionUsageReport(WireModel):
-    """What a PC pushes to its server when a subscription's usage moved (by `REPORT_POINTS` or more,
-    or `REPORT_SECONDS` after the last report of a change)."""
+    """What a PC pushes to its server when the usage of a subscription (`usage`) or of a program's default
+    login (`logins`) moved (`due`)."""
 
     type: Literal["subscription_usage"] = "subscription_usage"
-    usage: tuple[SubscriptionUsage, ...] = Field(max_length=64)
+    usage: tuple[SubscriptionUsage, ...] = Field(default=(), max_length=64)
+    logins: tuple[LoginUsage, ...] = Field(default=(), max_length=8)
 
     REPORT_POINTS: ClassVar[float] = 1.0
     REPORT_SECONDS: ClassVar[float] = 60.0
+
+    @classmethod
+    def due(cls, usage: tuple[UsageWindow, ...], reported: tuple[UsageWindow, ...], reported_at: datetime | None, now: datetime) -> bool:
+        """Whether `usage` goes to the server now, `reported` at `reported_at` last: a window moved `REPORT_POINTS`
+        or more, appeared or went, or anything changed and `REPORT_SECONDS` passed since that report."""
+        if usage == reported:
+            return False
+        last = {window.window: window.used_percent for window in reported}
+        moved = {window.window for window in usage} != set(last) or any(abs(window.used_percent - last[window.window]) >= cls.REPORT_POINTS for window in usage)
+        return moved or reported_at is None or (now - reported_at).total_seconds() >= cls.REPORT_SECONDS

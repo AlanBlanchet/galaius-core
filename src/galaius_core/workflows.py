@@ -3657,7 +3657,8 @@ class AgentProviderState(WireModel):
     changed_at: datetime | None = None
     #: The subscription this state is of (its own folder on the PC); None: the PC's default login.
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: That subscription's last usage reading here (`SubscriptionUsage`), newest per window.
+    #: This login's last usage reading here (a subscription's or the default login's), newest per window:
+    #: its CLI asked for it, or a run on it reported it.
     usage: tuple[UsageWindow, ...] = Field(default=(), max_length=8, exclude_if=lambda value: not value)
 
     @model_validator(mode="after")
