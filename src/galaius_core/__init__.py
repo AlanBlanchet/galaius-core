@@ -179,6 +179,7 @@ from .workflows import (
 )
 from . import builtin_ops  # noqa: F401 - declares every builtin op into BUILTIN_OPS
 from .user_models import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
+from .images import IMAGES_PER_REQUEST, GeneratedImage, ImageAnswer, ImageBackground, ImageQuality, ImageRequest, ImageSize
 from .paid_use import (
     CHARGE_WORDS,
     DEFAULT_MONTHLY_CAP_USD,
@@ -250,6 +251,7 @@ from .pool import (
 )
 
 __all__ = [
+    "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
     "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
