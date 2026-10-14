@@ -2781,9 +2781,29 @@ class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUs
     idempotent_seconds: ClassVar[float] = 3600.0
 
 
+#: Who stopped a run (`StopActor.kind`): a `person` pressing stop on the web, an `agent` (its role, its run), the PC's
+#: `terminal` with no run calling, the PC's agents switched off (`pc_switch`), a folder's level narrowed under a fenced run
+#: (`place_removed`).
+StopActorKind = Literal["person", "agent", "terminal", "pc_switch", "place_removed"]
+
+
+class StopActor(WireModel):
+    """Who stopped a run, recorded by the PC on the run as it stops it: the web says « You stopped it » only to the
+    person who did. `name`: the person's display name, or the agent's role; `run_id`: the stopping agent's run;
+    `account_id`: the account that pressed stop."""
+
+    kind: StopActorKind
+    name: str | None = Field(default=None, max_length=120)
+    run_id: str | None = Field(default=None, max_length=80)
+    account_id: UUID | None = None
+
+
 class AgentStopRequest(MachineAgentRequestBase):
     op: Literal["stop"] = "stop"
     run_id: UUID
+    #: Who asked: the person who pressed stop; None when the server stops it for no one (a member removed, a workflow
+    #: step ending) or a server older than this field.
+    by: StopActor | None = None
     action: ClassVar[bool] = True
 
 
@@ -3865,6 +3885,8 @@ class MachineAgentRun(WireModel, ContextGauge):
     passed_over: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=16)
     #: The subscription the run is pinned to, its caps, allowance and the cap it reached; None: the PC's default login.
     subscription: RunSubscription | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: Who stopped it, for a run stopped (`status` « stopped »); None otherwise, or not recorded (a run older than this).
+    stopped_by: StopActor | None = None
 
 
 class WebLoad(WireModel):
