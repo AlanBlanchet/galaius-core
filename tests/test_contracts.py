@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from importlib.resources import files
 from typing import get_args
@@ -11,7 +12,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria
+from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from cryptography.exceptions import InvalidTag
@@ -416,6 +417,21 @@ def test_an_image_key_is_the_written_path_and_its_bytes_prove_its_type() -> None
     for content_type, data in (("image/jpeg", base64.b64encode(png).decode()), ("image/png", "not base64!"), ("image/webp", base64.b64encode(b"RIFF0000WAVE").decode())):
         with pytest.raises(ValidationError):
             AgentMedia(content_type=content_type, data=data)
+
+
+def test_a_message_says_words_or_shows_images_and_asks_a_runner_that_takes_them() -> None:
+    png = AgentMedia(content_type="image/png", data=base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\0" * 8).decode())
+    assert AgentMedia.of(png.content) == png
+    shown = AgentMessageSpec(text="", images=(png,))
+    assert re.fullmatch(MEDIA_KEY, png.name) and png.name.endswith(".png")
+    assert "images" not in AgentMessageSpec(text="hi").model_dump(mode="json")
+    for text, images in (("", ()), ("  ", ()), ("hi", (png,) * (AGENT_IMAGES_MAX + 1)),
+                         ("hi", (AgentMedia(content_type="image/png", data=base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\0" * AGENT_IMAGE_BYTES).decode()),))):
+        with pytest.raises(ValidationError):
+            AgentMessageSpec(text=text, images=images)
+    fields = dict(id=uuid4(), machine={"id": uuid4()}, workspace_id=uuid4(), initiator_account=uuid4(), expires_at=datetime.now(UTC), signature="0" * 64, run_id=uuid4())
+    assert AgentSendRequest(**fields, text="hi").needs == {AgentSendRequest.feature}
+    assert AgentSendRequest(**fields, **shown.model_dump()).needs == {AgentSendRequest.feature, AGENT_IMAGES_FEATURE}
 
 
 @pytest.mark.parametrize(("url", "origin"), [

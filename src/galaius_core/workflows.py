@@ -2472,10 +2472,121 @@ AgentModelId = Annotated[str, Field(pattern=r"^[A-Za-z0-9._:/@+-]+$", min_length
 AgentRunKind = Literal["agent", "session", "continued"]
 
 
-class AgentStartSpec(WireRequest):
+#: The images a run's step may name, one row per kind: suffixes, content type, the first bytes that
+#: prove it (WEBP: "RIFF" then "WEBP" at byte 8). Every image rule below is built from this table.
+IMAGE_TYPES: tuple[tuple[tuple[str, ...], str, tuple[bytes, ...]], ...] = (
+    ((".png",), "image/png", (b"\x89PNG\r\n\x1a\n",)),
+    ((".jpg", ".jpeg"), "image/jpeg", (b"\xff\xd8\xff",)),
+    ((".gif",), "image/gif", (b"GIF87a", b"GIF89a")),
+    ((".webp",), "image/webp", (b"RIFF",)),
+)
+ImageContentType = Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
+_IMAGE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffixes, _, _ in IMAGE_TYPES for suffix in suffixes)
+#: An image path a step names, as its input wrote it: a whole quoted string, double or single (spaces
+#: allowed: JSON `"file_path": "…"`, the stream's own `file_path='…'`, a `file:` URL), or an unquoted
+#: absolute / `~/` path inside a command (no spaces; never the `//host/…` of a URL).
+MEDIA_PATH = re.compile(
+    rf'"(?:file:(?://)?)?(?P<double>(?:~/|/)(?!/)[^"\n]+?\.(?:{_IMAGE_SUFFIX}))"'
+    rf"|'(?:file:(?://)?)?(?P<single>(?:~/|/)(?!/)[^'\n]+?\.(?:{_IMAGE_SUFFIX}))'"
+    rf"|(?:(?<=file:)|(?<=file://)|(?<![\w/:.~'\"-]))(?P<bare>(?:~/|/)(?!/)[^\s\"'<>`|;&()]+?\.(?:{_IMAGE_SUFFIX}))(?![\w.])", re.I)
+#: A run's image as the web names it: `media_key` of the path its step wrote.
+MEDIA_KEY = rf"^[0-9a-f]{{20}}\.(?:{_IMAGE_SUFFIX})$"
+#: Largest image one AgentMediaRequest carries back (raw bytes, before base64).
+MACHINE_AGENT_MEDIA = 6 * 1024 * 1024
+
+
+def image_type(data: bytes) -> ImageContentType | None:
+    """The content type `data`'s first bytes prove (`IMAGE_TYPES`), or None: never the file's name."""
+    for _, kind, signatures in IMAGE_TYPES:
+        if any(data.startswith(signature) for signature in signatures) and (kind != "image/webp" or data[8:12] == b"WEBP"):
+            return kind  # type: ignore[return-value]
+    return None
+
+
+def media_key(path: str) -> str:
+    """The name an image path keeps on the web: sha256 of the path EXACTLY as the step wrote it
+    (never resolved: the server and the PC derive it from the same stream line), plus its suffix.
+    The path itself never travels in a request."""
+    suffix = PurePosixPath(path).suffix.lower()
+    if not re.fullmatch(rf"\.(?:{_IMAGE_SUFFIX})", suffix):
+        raise ValueError("not an image path")
+    return hashlib.sha256(path.encode()).hexdigest()[:20] + suffix
+
+
+def media_paths(text: str) -> tuple[str, ...]:
+    """The image paths one step's input names, in order, each once."""
+    return tuple(dict.fromkeys(match["double"] or match["single"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
+
+
+class AgentMedia(WireModel):
+    """An image's bytes (base64) and the content type its first bytes prove: an answer whose bytes are
+    not base64, or not the image it claims, never validates."""
+
+    content_type: ImageContentType
+    data: str = Field(max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
+
+    @model_validator(mode="after")
+    def proven(self) -> Self:
+        try:
+            content = base64.b64decode(self.data, validate=True)
+        except ValueError:
+            raise ValueError("image bytes are not base64") from None
+        if image_type(content) != self.content_type:
+            raise ValueError(f"these bytes are not {self.content_type}")
+        return self
+
+    @classmethod
+    def of(cls, content: bytes) -> Self:
+        """`content` as the image its first bytes prove; ValueError when they prove none."""
+        content_type = image_type(content)
+        if content_type is None:
+            raise ValueError("these bytes are no image")
+        return cls(content_type=content_type, data=base64.b64encode(content).decode("ascii"))
+
+    @property
+    def content(self) -> bytes:
+        return base64.b64decode(self.data)
+
+    @property
+    def name(self) -> str:
+        """Its name where a PC keeps it (`MEDIA_KEY`): the hash of its bytes, and the suffix its type takes."""
+        suffix = next(suffixes[0] for suffixes, kind, _ in IMAGE_TYPES if kind == self.content_type)
+        return hashlib.sha256(self.content).hexdigest()[:20] + suffix
+
+
+#: Images one message to an agent may show, each at most `AGENT_IMAGE_BYTES` (raw), `AGENT_IMAGE_DATA` once base64.
+AGENT_IMAGES_MAX = 6
+AGENT_IMAGE_BYTES = 2 * 1024 * 1024
+AGENT_IMAGE_DATA = (AGENT_IMAGE_BYTES * 4) // 3 + 8
+#: The largest message carrying them (the images, its words, the request's own fields): what a PC's channel and the
+#: server's request body take.
+AGENT_IMAGES_WIRE = AGENT_IMAGES_MAX * AGENT_IMAGE_DATA + 1024 * 1024
+#: A runner saying it takes messages showing images (`AgentMessageSpec.images`): it keeps each in the run's own folder
+#: and hands it to the agent.
+AGENT_IMAGES_FEATURE = "agent_images"
+
+
+class AgentMessageSpec(WireRequest):
+    """What the owner says to an agent: his words and the images he attached (pasted, dropped), at least one of the two.
+    `images` is left out of the message when empty, so a runner released before it still verifies an image-less request;
+    one carrying images is asked only of a runner saying `AGENT_IMAGES_FEATURE` (`MachineAgentRequestBase.needs`)."""
+
+    text: str = Field(default="", max_length=8000)
+    images: tuple[AgentMedia, ...] = Field(default=(), max_length=AGENT_IMAGES_MAX, exclude_if=lambda value: not value)
+
+    @model_validator(mode="after")
+    def said_or_shown(self) -> Self:
+        if not self.text.strip() and not self.images:
+            raise ValueError("a message says something or shows an image")
+        if any(len(image.data) > AGENT_IMAGE_DATA for image in self.images):
+            raise ValueError(f"an image sent to an agent is at most {AGENT_IMAGE_BYTES // (1024 * 1024)} MiB")
+        return self
+
+
+class AgentStartSpec(AgentMessageSpec):
     """What the owner asks for when starting an agent on one of his machines: the folder (an agent
     root, and a path beneath it), the role, the CLI (None: the best available by the role's
-    criterion) and the brief."""
+    criterion) and the brief (`text`, `images`)."""
 
     root: str = Field(min_length=1, max_length=240)
     path: str = Field(default="", max_length=1024)
@@ -2486,7 +2597,6 @@ class AgentStartSpec(WireRequest):
     #: A model this machine offers (`MachineAgentAnswer.models` / `session_models`); None: the
     #: role's criterion (agent) or the route's default (session) decides.
     model: AgentModelId | None = None
-    text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
     #: What this run may do, never more than the PC's own `agent_permission` (the PC clamps it).
     #: Left out of the message when None, so a runner released before the field still verifies it.
     permission: AgentTouchScope | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -2501,10 +2611,6 @@ class AgentStartSpec(WireRequest):
         if (self.kind == "agent") != (self.role is not None):
             raise ValueError("an agent names its role; a session names none")
         return self
-
-
-class AgentMessageSpec(WireRequest):
-    text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
 
 
 #: Conversations started from the web that may work at once on one PC, unless its owner set another number on the web
@@ -2560,6 +2666,12 @@ class MachineAgentRequestBase(WireRequest):
     #: How long after its first delivery such a runner still knows the id: the server asks again only within it.
     idempotent_seconds: ClassVar[float] = 0.0
 
+    @property
+    def needs(self) -> frozenset[str]:
+        """Every runner feature asking this needs: its kind's (`feature`), and `AGENT_IMAGES_FEATURE` for a message
+        showing images."""
+        return frozenset({self.feature, *((AGENT_IMAGES_FEATURE,) if isinstance(self, AgentMessageSpec) and self.images else ())})
+
 
 class AgentFoldersRequest(MachineAgentRequestBase):
     """The agent roots and the roles the machine can start ("" root), or the plain folders beneath one."""
@@ -2587,56 +2699,11 @@ class AgentTailRequest(MachineAgentRequestBase):
     cursor: int | None = Field(default=None, ge=0)
 
 
-#: The images a run's step may name, one row per kind: suffixes, content type, the first bytes that
-#: prove it (WEBP: "RIFF" then "WEBP" at byte 8). Every image rule below is built from this table.
-IMAGE_TYPES: tuple[tuple[tuple[str, ...], str, tuple[bytes, ...]], ...] = (
-    ((".png",), "image/png", (b"\x89PNG\r\n\x1a\n",)),
-    ((".jpg", ".jpeg"), "image/jpeg", (b"\xff\xd8\xff",)),
-    ((".gif",), "image/gif", (b"GIF87a", b"GIF89a")),
-    ((".webp",), "image/webp", (b"RIFF",)),
-)
-ImageContentType = Literal["image/png", "image/jpeg", "image/gif", "image/webp"]
-_IMAGE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffixes, _, _ in IMAGE_TYPES for suffix in suffixes)
-#: An image path a step names, as its input wrote it: a whole quoted string, double or single (spaces
-#: allowed: JSON `"file_path": "…"`, the stream's own `file_path='…'`, a `file:` URL), or an unquoted
-#: absolute / `~/` path inside a command (no spaces; never the `//host/…` of a URL).
-MEDIA_PATH = re.compile(
-    rf'"(?:file:(?://)?)?(?P<double>(?:~/|/)(?!/)[^"\n]+?\.(?:{_IMAGE_SUFFIX}))"'
-    rf"|'(?:file:(?://)?)?(?P<single>(?:~/|/)(?!/)[^'\n]+?\.(?:{_IMAGE_SUFFIX}))'"
-    rf"|(?:(?<=file:)|(?<=file://)|(?<![\w/:.~'\"-]))(?P<bare>(?:~/|/)(?!/)[^\s\"'<>`|;&()]+?\.(?:{_IMAGE_SUFFIX}))(?![\w.])", re.I)
-#: A run's image as the web names it: `media_key` of the path its step wrote.
-MEDIA_KEY = rf"^[0-9a-f]{{20}}\.(?:{_IMAGE_SUFFIX})$"
-#: Largest image one AgentMediaRequest carries back (raw bytes, before base64).
-MACHINE_AGENT_MEDIA = 6 * 1024 * 1024
-
-
-def image_type(data: bytes) -> ImageContentType | None:
-    """The content type `data`'s first bytes prove (`IMAGE_TYPES`), or None: never the file's name."""
-    for _, kind, signatures in IMAGE_TYPES:
-        if any(data.startswith(signature) for signature in signatures) and (kind != "image/webp" or data[8:12] == b"WEBP"):
-            return kind  # type: ignore[return-value]
-    return None
-
-
-def media_key(path: str) -> str:
-    """The name an image path keeps on the web: sha256 of the path EXACTLY as the step wrote it
-    (never resolved: the server and the PC derive it from the same stream line), plus its suffix.
-    The path itself never travels in a request."""
-    suffix = PurePosixPath(path).suffix.lower()
-    if not re.fullmatch(rf"\.(?:{_IMAGE_SUFFIX})", suffix):
-        raise ValueError("not an image path")
-    return hashlib.sha256(path.encode()).hexdigest()[:20] + suffix
-
-
-def media_paths(text: str) -> tuple[str, ...]:
-    """The image paths one step's input names, in order, each once."""
-    return tuple(dict.fromkeys(match["double"] or match["single"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
-
-
 class AgentMediaRequest(MachineAgentRequestBase):
-    """One image a run's step names (`media_key` of its path). The machine serves it only when a
-    tool step of THAT run (one it started for the web, or launched by one) names a path with this
-    key, and only a plain image file no larger than MACHINE_AGENT_MEDIA."""
+    """One image of a run: one a step names (`media_key` of its path), or one the owner showed it (`AgentMedia.name`).
+    The machine serves it only when a tool step of THAT run (one it started for the web, or launched by one) names a
+    path with this key, or it keeps an image of that name in the run's own folder, and only a plain image file no larger
+    than MACHINE_AGENT_MEDIA."""
 
     op: Literal["media"] = "media"
     run_id: UUID
@@ -2644,26 +2711,6 @@ class AgentMediaRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "agent_media"
 
 
-class AgentMedia(WireModel):
-    """An image's bytes (base64) and the content type its first bytes prove: an answer whose bytes are
-    not base64, or not the image it claims, never validates."""
-
-    content_type: ImageContentType
-    data: str = Field(max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
-
-    @model_validator(mode="after")
-    def proven(self) -> Self:
-        try:
-            content = base64.b64decode(self.data, validate=True)
-        except ValueError:
-            raise ValueError("image bytes are not base64") from None
-        if image_type(content) != self.content_type:
-            raise ValueError(f"these bytes are not {self.content_type}")
-        return self
-
-    @property
-    def content(self) -> bytes:
-        return base64.b64decode(self.data)
 
 
 #: A project secret's name: an environment variable's, never one that steers the PC's own tools or
@@ -3866,6 +3913,9 @@ class MachineAgentRun(WireModel, ContextGauge):
     root: str = Field(max_length=240)
     path: str = Field(default="", max_length=1024)
     task: str = Field(default="", max_length=8000)
+    #: The images its brief showed (`AgentStartSpec.images`), by their name in its folder (served by `AgentMediaRequest`);
+    #: left out when none, so a server released before the field still reads the list.
+    media: tuple[Annotated[str, Field(pattern=MEDIA_KEY)], ...] = Field(default=(), max_length=AGENT_IMAGES_MAX, exclude_if=lambda value: not value)
     last: str = Field(default="", max_length=400)
     started_at: float = Field(ge=0)
     finished_at: float | None = Field(default=None, ge=0)
