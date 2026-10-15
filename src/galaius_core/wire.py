@@ -177,9 +177,22 @@ class ContractView(BaseModel):
 
 
 #: Marks of text a program wrote for a program: a `pydantic` validation dump (its header, its
-#: `[type=...]` tail), a traceback, an object's repr. Such text names fields, classes and files
-#: whoever reads the screen never wrote, and a bound it states is this contract's, not theirs.
-_INTERNALS = re.compile(r"validation error|\[type=[a-z_]+|Traceback \(most recent call last\)|<[\w.]+ object at 0x", re.IGNORECASE)
+#: `[type=...]` tail), a traceback, an object's repr, an exception class by its name (`KeyError:
+#: 'token'` — that name, capitalised, is written as code spells it, never as a sentence spells
+#: « error »). Such text names fields, classes and files whoever reads the screen never wrote, and
+#: a bound it states is this contract's, not theirs.
+_INTERNALS = re.compile(r"(?:\d+ )?validation errors? for|\[type=[a-z_]+|Traceback \(most recent call last\)|<[\w.]+ object at 0x"
+                        r"|(?-i:\b[A-Z][A-Za-z]*(?:Error|Exception)\b)", re.IGNORECASE)
+
+
+def internals_from(text: str) -> int | None:
+    """Where `text` turns into text written for a program, `None` when it never does.
+
+    What stands before that mark is often a person's own sentence — the line a log opens with, what
+    a program was doing — so a reader is told that much and the rest is replaced, never the whole.
+    """
+    match = _INTERNALS.search(text)
+    return None if match is None else match.start()
 
 
 def internals(text: str) -> bool:
@@ -189,7 +202,20 @@ def internals(text: str) -> bool:
     it happened and plain words are sent instead — and checks the words it receives before showing
     them, because the peer that sent them may be a release older than this rule.
     """
-    return bool(_INTERNALS.search(text))
+    return internals_from(text) is not None
+
+
+def readable(text: str) -> str:
+    """`text` as a screen may show it: what stands before it turns into text written for a program,
+    empty when it was all program text (« KeyError: 'token' », a validation dump, a traceback).
+
+    A fault's own words are kept whole where they happened — the PC's log, the server's — and a page
+    shows what a person wrote plus the plain sentence its own code holds for that state, never this
+    text alone. Both sides apply it: the one producing the words, and the one reading a release older
+    than this rule.
+    """
+    mark = internals_from(text)
+    return text if mark is None else text[:mark].strip().rstrip(":;,-\u2014").strip()
 
 
 def fitted(model: type[BaseModel], field: str, text: str) -> str:

@@ -15,7 +15,7 @@ from typing import get_args
 from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
-from galaius_core.wire import fitted, internals
+from galaius_core.wire import fitted, internals, internals_from, readable
 from galaius_core import MachineFence
 from cryptography.exceptions import InvalidTag
 
@@ -583,3 +583,23 @@ def test_text_written_for_code_is_recognised_so_no_screen_shows_it() -> None:
     assert internals("<galaius_core.workflows.MachineFence object at 0x7f3a>")
     assert not internals("bubblewrap cannot build its sandbox here: once, as root, run sudo apparmor_parser -r …")
     assert not internals("the agent fence needs Linux (bubblewrap and Landlock)")
+    # An exception class by its name is written as code spells it, never as a sentence spells it.
+    # 2026-10-15: a PC's own words on the web read « KeyError: 'token' ».
+    assert internals("KeyError: 'token'")
+    assert internals("sign-in failed: KeyError: 'token'")
+    assert internals("RuntimeError")
+    assert not internals("error: this computer refused the run")
+    assert not internals("Erreur de connexion : ce PC ne répond pas")
+
+
+def test_a_line_that_turns_into_program_text_keeps_the_words_a_person_wrote_first() -> None:
+    """A journal line opens with what was being done and ends in a dump: the reader is told the
+    first part and never the rest, so the cut is a place in the text, not a yes or no."""
+    line = "agent places refused: 1 validation error for MachineFence\nreason\n  String should have…"
+    assert internals_from(line) == line.index("1 validation error")
+    assert line[: internals_from(line)].strip() == "agent places refused:"
+    assert internals_from("the run is over") is None
+    # What a page may show of such a line: the words a person wrote, nothing of the rest.
+    assert readable(line) == "agent places refused"
+    assert readable("KeyError: 'token'") == ""
+    assert readable("no route to the server") == "no route to the server"
