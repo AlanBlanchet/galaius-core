@@ -15,6 +15,8 @@ from typing import get_args
 from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
+from galaius_core.wire import fitted, internals
+from galaius_core import MachineFence
 from cryptography.exceptions import InvalidTag
 
 from galaius_core import (
@@ -555,3 +557,29 @@ def test_a_compaction_request_is_its_own_op_asked_only_of_a_runner_that_supports
     assert ContextGauge.reported({"context_tokens": 0, "context_window": 258_400, "other": 1}) == {"context_tokens": 0, "context_window": 258_400}
     with pytest.raises(ValidationError):
         ContextGauge(context_window=0)
+
+
+def test_a_machine_text_field_cuts_what_it_cannot_carry_keeping_what_was_written_first() -> None:
+    """What a PC writes about itself (a refusal, a fault, why its fence is off) is bounded by the
+    contract, never by a number copied beside the words: `fitted` reads the bound from the field.
+    2026-10-15: a 464-character fence reason raised instead, and the web showed the dump."""
+    room = MachineFence.model_fields["reason"].metadata[0].max_length
+    long = "the fix first. " + "then what the program said. " * 40
+    cut = fitted(MachineFence, "reason", long)
+    assert len(cut) <= room and cut.startswith("the fix first.") and cut.endswith("…")
+    assert MachineFence(platform="linux", available=False, on=False, reason=cut).reason == cut
+    assert fitted(MachineFence, "reason", "short enough") == "short enough"
+    assert fitted(MachineFence, "platform", "linux") == "linux"  # a field with its own, smaller room
+
+
+def test_text_written_for_code_is_recognised_so_no_screen_shows_it() -> None:
+    """Either side may hold a fault of its own making; neither relays nor renders its text."""
+    try:
+        MachineFence(platform="linux", available=False, on=False, reason="x" * 401)
+    except ValidationError as error:
+        dump = str(error)
+    assert internals(dump) and "MachineFence" in dump
+    assert internals("Traceback (most recent call last):\n  File \"/srv/app.py\", line 2")
+    assert internals("<galaius_core.workflows.MachineFence object at 0x7f3a>")
+    assert not internals("bubblewrap cannot build its sandbox here: once, as root, run sudo apparmor_parser -r …")
+    assert not internals("the agent fence needs Linux (bubblewrap and Landlock)")

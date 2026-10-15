@@ -12,6 +12,7 @@ A server that still answers clients released before this rule applies the older 
 stores such a client's write through `ContractView.carry`.
 """
 
+import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -173,6 +174,36 @@ class ContractView(BaseModel):
         if isinstance(value, dict) and isinstance(data, dict) and len(value) == len(data):
             return {key: self._project_value(item, dumped) for item, (key, dumped) in zip(value.values(), data.items())}
         return data
+
+
+#: Marks of text a program wrote for a program: a `pydantic` validation dump (its header, its
+#: `[type=...]` tail), a traceback, an object's repr. Such text names fields, classes and files
+#: whoever reads the screen never wrote, and a bound it states is this contract's, not theirs.
+_INTERNALS = re.compile(r"validation error|\[type=[a-z_]+|Traceback \(most recent call last\)|<[\w.]+ object at 0x", re.IGNORECASE)
+
+
+def internals(text: str) -> bool:
+    """Whether `text` reads as written for code rather than for a person: never shown on a screen.
+
+    Each side checks its own words before sending them — a fault of its own making is logged where
+    it happened and plain words are sent instead — and checks the words it receives before showing
+    them, because the peer that sent them may be a release older than this rule.
+    """
+    return bool(_INTERNALS.search(text))
+
+
+def fitted(model: type[BaseModel], field: str, text: str) -> str:
+    """`text` cut to the room `model`'s `field` takes on the wire: the contract is the only place
+    that length is written, so neither side copies the number beside its own words.
+
+    The room is a bound, not a promise. Text that may grow — a refusal quoting a program, a fault's
+    own sentence — is therefore written with what matters FIRST (the one-time fix before the line
+    that provoked it), since what does not fit is dropped and the cut ends with an ellipsis. A
+    field the contract leaves unbounded takes the text whole.
+    """
+    bounds = [length for rule in model.model_fields[field].metadata if (length := getattr(rule, "max_length", None)) is not None]
+    room = min(bounds, default=len(text))
+    return text if len(text) <= room else text[: max(room - 1, 0)].rstrip() + "…"
 
 
 def _written_out(value: Any) -> Any:
