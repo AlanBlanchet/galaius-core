@@ -171,6 +171,12 @@ def test_machine_wire_contract_binds_commands_and_results() -> None:
     )
     assert machine.runtimes[0].provider == "codex"
     assert machine.accelerators == ()
+    # Connected says nothing about being able to run anything: a PC list reads `runs_nothing`, and a
+    # server that does not say (an older one, a payload written before the field) leaves it False
+    # rather than « connected, runs nothing » (visual-critic 2026-10-15).
+    assert machine.runs_nothing is False
+    assert MachineSummary.model_validate(machine.model_dump(mode="json", exclude={"runs_nothing"})).runs_nothing is False
+    assert machine.model_copy(update={"runs_nothing": True}).runs_nothing is True
     gpu_machine = machine.model_copy(update={"accelerators": (MachineAccelerator(kind="cuda", name="RTX 2070", memory_mb=8192),)})
     assert gpu_machine.accelerators[0].kind == "cuda"
     assert gpu_machine.accelerators[0].memory_mb == 8192

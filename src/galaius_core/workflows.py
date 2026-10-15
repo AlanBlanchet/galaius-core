@@ -346,6 +346,11 @@ class MachineSummary(WireModel):
     last_seen_at: datetime | None = None
     #: Why it is not connected, as it last said (`MachineProblem`); None once its channel opened.
     problem: MachineProblem | None = None
+    #: Connected, and it can run no agent at all: the last thing it was asked to run or list came back
+    #: refused because its sandbox is not available on that system. A list of PCs says that instead of
+    #: « connected » (its own page says the cause and the one-time fix); False while nothing says so,
+    #: an older server included.
+    runs_nothing: bool = False
 
     @field_validator("file_roots")
     @classmethod
