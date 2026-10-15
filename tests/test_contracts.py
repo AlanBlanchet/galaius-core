@@ -384,6 +384,18 @@ def test_a_run_image_is_asked_by_its_key_never_by_a_path(name: str, valid: bool)
             MACHINE_AGENT_REQUESTS.validate_python(fields)
 
 
+@pytest.mark.parametrize(("op", "extra", "feature"), [("send", {"run_id": str(uuid4()), "text": "and the footer"}, "agent_send_once"),
+                                                     ("start", {"root": "projects", "role": "main", "text": "and the footer"}, "agent_start_once")])
+def test_an_action_asked_again_is_signed_as_the_first(op, extra, feature) -> None:
+    """A send or a start asked again under its id is signed as the first one: its idempotence is the runner's
+    (`idempotent_feature`), never a field on the wire."""
+    fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": op, **extra}
+    request = MACHINE_AGENT_REQUESTS.validate_python(fields)
+    assert (request.idempotent_feature, request.idempotent_seconds) == (feature, 3600) and set(fields) <= set(request.model_dump(mode="json"))
+    assert not {"idempotent_feature", "idempotent_seconds"} & set(request.model_dump(mode="json"))
+
+
 @pytest.mark.parametrize("reads_at", [None, "now", "next_step", "turn_end"])
 def test_a_send_is_signed_as_before_and_its_answer_says_when_it_is_read(reads_at) -> None:
     """A send asked again is signed as the first one (its idempotence is the runner's, never a field);
@@ -391,7 +403,7 @@ def test_a_send_is_signed_as_before_and_its_answer_says_when_it_is_read(reads_at
     fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
               "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "send", "run_id": str(uuid4()), "text": "and the footer"}
     send = MACHINE_AGENT_REQUESTS.validate_python(fields)
-    assert (send.idempotent_feature, send.idempotent_seconds) == ("agent_send_once", 3600) and set(send.model_dump(mode="json")) == {*fields, "type"}
+    assert set(send.model_dump(mode="json")) == {*fields, "type"}
     answer = MachineAgentAnswer(request_id=send.id, reads_at=reads_at, read_messages=(send.id,) if reads_at else ())
     dumped = answer.model_dump(mode="json")
     assert ("reads_at" in dumped) == (reads_at is not None) and MachineAgentAnswer.model_validate({**dumped, "later": 1}).reads_at == reads_at

@@ -2810,8 +2810,12 @@ class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionCho
     secrets: SealedSecrets | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
     #: The machine gives its launcher 120 s; the server waits longer, so it never gives up on a
-    #: start that then happens anyway (a retry would start a second agent).
+    #: start that then happens anyway.
     seconds: ClassVar[float] = 135
+    #: A start asked again under its id (its answer lost with the line, or never in time) answers the run that id
+    #: started, or joins its launch still under way (`under_way` while it is): never a second agent.
+    idempotent_feature: ClassVar[str | None] = "agent_start_once"
+    idempotent_seconds: ClassVar[float] = 3600.0
 
 
 #: When the agent reads a message sent to its run (`MachineAgentAnswer.reads_at`): `now` it was between
@@ -3957,8 +3961,9 @@ class WebLoad(WireModel):
 
 
 #: Why a PC refused an agent request, typed for the server to word (`MachineAgentAnswer.code`): a project folder's failure,
-#: or `web_full` its conversations started from the web work at their most (`WebLimited`; `MachineAgentAnswer.web` says them).
-AgentRefusalCode = WorkspaceFailureCode | Literal["web_full"]
+#: `web_full` its conversations started from the web work at their most (`WebLimited`; `MachineAgentAnswer.web` says them),
+#: or `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that one).
+AgentRefusalCode = WorkspaceFailureCode | Literal["web_full", "under_way"]
 
 
 class MachineAgentAnswer(WireModel):
