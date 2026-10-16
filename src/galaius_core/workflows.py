@@ -3903,6 +3903,8 @@ class MachineAgentSession(WireModel):
 
 #: The longest model id a machine reports for a run (its launcher clips to it).
 MODEL_ID_MAX = 120
+#: How many runs a run says it works for (`MachineAgentRun.asked_by`): its first askers.
+ASKED_BY_MAX = 32
 
 
 class PassedOverCandidate(WireModel):
@@ -3970,6 +3972,9 @@ class MachineAgentRun(WireModel, ContextGauge):
     #: Ended before its first turn and another run took its task (`RunReplacement`); left out when none, so a server
     #: released before the field still reads the list.
     replaced_by: RunReplacement | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: The other runs it works for, first asker first: the runs that sent it work and the runs it said it works for
+    #: (never itself nor its `parent_run_id`); left out when none, so a server released before the field still reads it.
+    asked_by: tuple[UUID, ...] = Field(default=(), max_length=ASKED_BY_MAX, exclude_if=lambda value: not value)
 
 
 class WebLoad(WireModel):

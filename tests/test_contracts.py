@@ -16,7 +16,7 @@ from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, Ag
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
-from galaius_core import MachineFence
+from galaius_core import ASKED_BY_MAX, MachineAgentRun, MachineFence
 from cryptography.exceptions import InvalidTag
 
 from galaius_core import (
@@ -578,6 +578,17 @@ def test_a_compaction_request_is_its_own_op_asked_only_of_a_runner_that_supports
     # Thinking counts travel when reported, and an event line that reports none carries no key for them.
     assert ContextGauge.reported({"thinking_tokens": 604, "thinking_live": -1}) == {"thinking_tokens": 604}
     assert "thinking_tokens" not in ContextGauge().model_dump_json() and ContextGauge(thinking_live=550).model_dump()["thinking_live"] == 550
+
+
+def test_a_run_names_the_runs_it_works_for_and_a_dump_without_any_reads_as_before() -> None:
+    """`asked_by` lists the runs that sent a run work, first asker first; an older server reads a run without it."""
+    base = {"run_id": str(uuid4()), "name": "deployer", "provider": "claude", "status": "running", "root": "/w", "started_at": 1.0}
+    asker = uuid4()
+    run = MachineAgentRun.model_validate({**base, "asked_by": [str(asker)]})
+    assert run.asked_by == (asker,) and MachineAgentRun.model_validate_json(run.model_dump_json()).asked_by == (asker,)
+    assert "asked_by" not in MachineAgentRun.model_validate(base).model_dump_json()
+    with pytest.raises(ValidationError):
+        MachineAgentRun.model_validate({**base, "asked_by": [str(uuid4()) for _ in range(ASKED_BY_MAX + 1)]})
 
 
 def test_a_machine_text_field_cuts_what_it_cannot_carry_keeping_what_was_written_first() -> None:
