@@ -575,6 +575,9 @@ def test_a_compaction_request_is_its_own_op_asked_only_of_a_runner_that_supports
     assert ContextGauge.reported({"context_tokens": 0, "context_window": 258_400, "other": 1}) == {"context_tokens": 0, "context_window": 258_400}
     with pytest.raises(ValidationError):
         ContextGauge(context_window=0)
+    # Thinking counts travel when reported, and an event line that reports none carries no key for them.
+    assert ContextGauge.reported({"thinking_tokens": 604, "thinking_live": -1}) == {"thinking_tokens": 604}
+    assert "thinking_tokens" not in ContextGauge().model_dump_json() and ContextGauge(thinking_live=550).model_dump()["thinking_live"] == 550
 
 
 def test_a_machine_text_field_cuts_what_it_cannot_carry_keeping_what_was_written_first() -> None:

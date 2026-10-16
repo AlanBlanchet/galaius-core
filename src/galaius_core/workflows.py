@@ -2868,9 +2868,9 @@ CompactionTrigger = Literal["auto", "manual"]
 
 
 class ContextGauge(BaseModel):
-    """How full one agent conversation is, as its CLI reported it, never guessed (None: not reported):
-    a run's gauge, and what one of its events reports of it (a snapshot of size and window, newest
-    wins; compactions counted). Mixed into each model carrying it, its fields at the top level."""
+    """How full one agent conversation is and how much it has thought, as its CLI reported it, never guessed
+    (None: not reported): a run's gauge, and what one of its events reports of it (a snapshot of size and window,
+    newest wins; compactions and thinking counted). Mixed into each model carrying it, its fields at the top level."""
 
     #: Tokens the conversation holds now: its newest main-thread model call, or the size a compaction left.
     context_tokens: int | None = Field(default=None, ge=0)
@@ -2878,6 +2878,13 @@ class ContextGauge(BaseModel):
     context_window: int | None = Field(default=None, gt=0)
     #: Times its conversation was compacted (by its CLI as it filled, or on request); an event: those it reports.
     compactions: int = Field(default=0, ge=0)
+    #: Thinking tokens its turns settled (each turn's own count, as its CLI reported it at the turn's end, summed);
+    #: an event: those of the turn it ends. Left out of a dump when not reported: one per event line otherwise.
+    thinking_tokens: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
+    #: Thinking tokens of its turn in progress, its CLI's live estimate (Claude's `thinking_tokens` lines) as it
+    #: thinks: what `thinking_tokens` will gain once the turn settles. None: no turn thinking now, or not reported.
+    #: Written by the process mirroring its stream as it grows, never by an event.
+    thinking_live: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
 
     @staticmethod
     def reported(values: Mapping[str, object]) -> dict[str, int]:
