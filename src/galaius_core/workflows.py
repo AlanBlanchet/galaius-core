@@ -3894,6 +3894,10 @@ class MachineAgentSession(WireModel):
     live: bool = False
 
 
+#: The longest model id a machine reports for a run (its launcher clips to it).
+MODEL_ID_MAX = 120
+
+
 class PassedOverCandidate(WireModel):
     """A (CLI, model) the machine's launcher ranked ABOVE the one a run started on, and why it did
     not start there: `reason` is the launcher's stable code (`quota_exceeded`, `cli_missing`,
@@ -3902,9 +3906,19 @@ class PassedOverCandidate(WireModel):
     avec Codex » instead of showing a Codex run as if Codex had been the choice."""
 
     provider: str = Field(max_length=40)
-    model: str = Field(max_length=120)
+    model: str = Field(max_length=MODEL_ID_MAX)
     reason: str = Field(max_length=40)
     until: float | None = Field(default=None, ge=0)
+
+
+class RunReplacement(WireModel):
+    """The run that took over a launch its vendor refused before its first turn: a later run of the same role under the
+    same launcher (same parent run, else same conversation). The refused run is no stop to continue, only a launch that
+    moved on (« refusé par codex, relancé sur claude »)."""
+
+    run_id: str = Field(max_length=80)
+    provider: str = Field(max_length=40)
+    model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
 
 
 class MachineAgentRun(WireModel, ContextGauge):
@@ -3914,7 +3928,7 @@ class MachineAgentRun(WireModel, ContextGauge):
     name: str = Field(max_length=120)
     role: str | None = Field(default=None, max_length=80)
     provider: str = Field(max_length=40)
-    model: str | None = Field(default=None, max_length=120)
+    model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
     #: The reasoning effort its PC launched it at, as its record holds it (None: not recorded, e.g. a client older than
     #: this field, an open conversation whose program does not say).
     reasoning: RecordedReasoning = None
@@ -3946,6 +3960,9 @@ class MachineAgentRun(WireModel, ContextGauge):
     subscription: RunSubscription | None = Field(default=None, exclude_if=lambda value: value is None)
     #: Who stopped it, for a run stopped (`status` « stopped »); None otherwise, or not recorded (a run older than this).
     stopped_by: StopActor | None = None
+    #: Ended before its first turn and another run took its task (`RunReplacement`); left out when none, so a server
+    #: released before the field still reads the list.
+    replaced_by: RunReplacement | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class WebLoad(WireModel):
