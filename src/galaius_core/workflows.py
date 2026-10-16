@@ -3428,6 +3428,9 @@ class TranscriptItem(WireModel):
     text: str
     tool: str | None = None
     input: str = ""
+    #: `sent`: the run it was sent for, "" when none: a person passing on that run's ask (galaius `agents spawn --for`,
+    #: the deploy queue waking its owner for the maker that enqueued a slice).
+    for_run: str = ""
     media: tuple[TranscriptMedia, ...] = ()
     #: `compacted`: who started it, and the context's size before and after (None: the provider did not say).
     compaction: CompactionTrigger | None = Field(default=None, exclude_if=lambda value: value is None)
