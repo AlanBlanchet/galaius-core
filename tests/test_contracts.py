@@ -635,3 +635,15 @@ def test_a_line_that_turns_into_program_text_keeps_the_words_a_person_wrote_firs
     assert readable(line) == "agent places refused"
     assert readable("KeyError: 'token'") == ""
     assert readable("no route to the server") == "no route to the server"
+
+
+@pytest.mark.parametrize("tools, dumped", [(None, None), ((), []), (("Read", "Grep"), ["Read", "Grep"])])
+def test_an_agent_with_no_tool_list_has_every_tool_and_an_empty_list_has_none(tools, dumped) -> None:
+    """`harness_tools` None (every tool) is left out of a dump, so a reader released before None existed reads its
+    `()`, which meant every tool there; `()` (no tool at all) and a list are written and read back as they are."""
+    content = "Answer only."
+    reference = PromptExecutionRef(key=PromptKey(namespace="paradigms", slug="answer"), revision=uuid4(), digest=hashlib.sha256(content.encode()).hexdigest(), channel="draft")
+    agent = AgentRevision(id=uuid4(), revision=uuid4(), name="Blob", role_key="blob", prompt=reference, resources=(), harness_tools=tools, created_at=datetime.now(UTC))
+    wire = agent.model_dump(mode="json")
+    assert wire.get("harness_tools", None) == dumped and ("harness_tools" in wire) == (tools is not None)
+    assert AgentRevision.model_validate_json(agent.model_dump_json()).harness_tools == tools

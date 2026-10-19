@@ -1454,7 +1454,10 @@ class AgentRevision(WireModel):
     department: str | None = Field(default=None, min_length=1, max_length=120)
     reports_to: UUID | None = None
     reasoning: ReasoningLevel = "high"
-    harness_tools: tuple[str, ...] = Field(default=(), max_length=256)
+    #: The tools its harness gives it, by name: None (left out of a dump) every tool its harness has, () none at all (an
+    #: agent that only answers), else these. A reader released before None existed reads a left-out list as `()`, which
+    #: meant every tool there.
+    harness_tools: Annotated[tuple[str, ...], Field(max_length=256)] | None = Field(default=None, exclude_if=lambda value: value is None)
     prompt: PromptExecutionRef
     paradigms: tuple[PromptExecutionRef, ...] = Field(default=(), max_length=16)
     skill_paradigms: tuple[PromptExecutionRef, ...] = Field(default=(), max_length=64)
@@ -1486,7 +1489,8 @@ class AgentRevision(WireModel):
             raise ValueError("an agent cannot report to itself")
         if len({binding.server_id for binding in self.mcp}) != len(self.mcp):
             raise ValueError("an agent binds each MCP server once")
-        if len(set(self.harness_tools)) != len(self.harness_tools) or any(not tool or len(tool) > 200 or any(char in tool for char in "\n\r\x00") for tool in self.harness_tools):
+        tools = self.harness_tools or ()
+        if len(set(tools)) != len(tools) or any(not tool or len(tool) > 200 or any(char in tool for char in "\n\r\x00") for tool in tools):
             raise ValueError("harness tool names must be unique nonempty single-line names")
         references = (self.prompt, *self.paradigms, *self.skill_paradigms)
         if len(set(references)) != len(references):
