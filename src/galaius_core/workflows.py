@@ -171,6 +171,9 @@ class MachineModelSpec(WireModel):
 MACHINE_MODELS: dict[str, MachineModelSpec] = {spec.id: spec for spec in (
     MachineModelSpec(id="facebook/detr-resnet-50", task="object-detection", license="Apache-2.0"),
     MachineModelSpec(id="facebook/detr-resnet-50-panoptic", task="image-segmentation", license="Apache-2.0"),
+    # Whisper large-v3-turbo in CTranslate2 form (faster-whisper's "large-v3-turbo"; model card: MIT): free
+    # speech to text on his own GPU, French and English told apart before transcribing.
+    MachineModelSpec(id="mobiuslabsgmbh/faster-whisper-large-v3-turbo", task="automatic-speech-recognition", license="MIT"),
 )}
 #: The same registry read as model -> task.
 VISION_MODEL_TASKS: dict[str, ModelTask] = {model: spec.task for model, spec in MACHINE_MODELS.items()}

@@ -192,6 +192,16 @@ def test_a_machine_command_carries_the_node_impl_config_and_inputs() -> None:
         MachineCommand.model_validate(command(NODES["connector"][0]))  # a connector never runs on a machine
 
 
+def test_his_pc_transcribes_speech_with_the_registered_whisper() -> None:
+    # The blob's free voice: the recording crosses to his machine as a file (`ArtifactRef`), the
+    # runner answers its text. The registry entry is what the server's catalog and the runner read.
+    spec = MACHINE_MODELS["mobiuslabsgmbh/faster-whisper-large-v3-turbo"]
+    assert (spec.task, spec.license) == ("automatic-speech-recognition", "MIT")
+    audio = {"connection": str(uuid4()), "path": "models/inputs/a.webm", "digest": "b" * 64, "media_type": "audio/webm", "size": 24_000}
+    speech = MachineCommand.model_validate(command({"kind": "model", "provider": "huggingface", "model": spec.id, "task": spec.task}, inputs={"audio": audio}))
+    assert speech.impl.task == "automatic-speech-recognition" and speech.inputs["audio"]["media_type"] == "audio/webm"
+
+
 def test_a_machine_function_declares_typed_ports_and_one_output() -> None:
     summary = MachineFunctionSummary(name="double", description="Doubles a number.", version="a" * 64, permission="read_only", ports=NODES["function"][1])
     assert summary.ports[1].direction == "output"
