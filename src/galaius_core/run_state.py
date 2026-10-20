@@ -5,7 +5,7 @@ someone's stop (`stopped`), or with its process gone and no word of its own (`lo
 every agent it launched, at any depth) is one state too, by one rule (`tally`)."""
 
 from collections.abc import Iterable, Mapping
-from typing import Literal, NamedTuple, get_args
+from typing import Literal, get_args
 
 from pydantic import BaseModel
 
@@ -14,15 +14,19 @@ RUN_STATES: tuple[RunState, ...] = get_args(RunState)
 #: The states a run never leaves by itself.
 ENDED: frozenset[RunState] = frozenset({"done", "failed", "stopped", "lost"})
 #: A PC's own word for its run (`MachineAgentRun.status`, its launcher's record) as every reader says it.
-STATE_OF_STATUS: dict[str, RunState] = {"running": "working", "starting": "working", "waiting": "waiting", "done": "done", "failed": "failed",
-                                        "cancelled": "stopped", "stopped": "stopped", "interrupted": "lost", "crashed": "lost"}
+_STATE_OF_STATUS: dict[str, RunState] = {"running": "working", "starting": "working", "waiting": "waiting", "done": "done", "failed": "failed",
+                                         "cancelled": "stopped", "stopped": "stopped", "interrupted": "lost", "crashed": "lost"}
 
 
 def state_of(word: str) -> RunState:
     """A PC's word for its run (`MachineAgentRun.status`, its record's `status`) as every reader says it. A word this reader
     does not know (a newer PC's) reads `working`: a run is never shown ended on a guess, and the host's process check
     ends it once its process is gone."""
-    return STATE_OF_STATUS.get(word, "working")
+    return _STATE_OF_STATUS.get(word, "working")
+
+
+#: Every word a PC says of its run (`state_of` reads them): a line that is only one of them says nothing of its own.
+PC_WORDS: frozenset[str] = frozenset(_STATE_OF_STATUS)
 #: How several runs read as one, strongest first: any at work, else any waiting for its person, else the worst ending.
 _RANK: tuple[RunState, ...] = ("working", "waiting", "lost", "failed", "stopped", "done")
 
@@ -32,13 +36,6 @@ def tally(states: Iterable[RunState]) -> RunState:
     `done` for none."""
     held = set(states)
     return next((state for state in _RANK if state in held), "done")
-
-
-class Tree(NamedTuple):
-    """Where one run sits (`forest`): the run at the top of its tree and the state of the tree below it."""
-
-    root: str
-    state: RunState
 
 
 class RunTree(BaseModel):
@@ -64,16 +61,21 @@ class RunTree(BaseModel):
         return {"launcher_run_id": launcher_run_id, "root_run_id": run_id, "tree_state": state, "tree_project": project}
 
 
-def forest(launchers: Mapping[str, str | None], states: Mapping[str, RunState]) -> dict[str, Tree]:
-    """Every run's tree, one walk for all: `launchers` maps each run to the run that launched it (None for a top run),
-    `states` its own state. A launcher outside the runs given leaves its run the top of its own tree; a launch loop is
-    cut where it closes. A tree's state is `tally` of the run and every run below it, any depth."""
-    up = {run: launcher for run, launcher in launchers.items() if launcher in states and launcher != run}
+def forest(rows: Mapping[str, tuple[str | None, RunState]], held: Mapping[str, RunTree] | None = None) -> dict[str, RunTree]:
+    """Every row's tree, one walk for all: `rows` maps each run to the run that launched it (None for a top run) and its
+    own state. A run in `held` keeps the tree already placed for it (a reader's own forest, e.g. a server's mirror); the
+    rest are placed over themselves, and a top one whose launcher is held joins that launcher's tree (its top and
+    project). A launcher outside both leaves its run the top of its own tree; a launch loop is cut where it closes. A
+    tree's state is `tally` of the run and every run below it, any depth. `tree_project` is the held tree's, else "":
+    the caller, who knows each top run's project, names it."""
+    held = held or {}
+    loose = {run: row for run, row in rows.items() if run not in held}
+    up = {run: launcher for run, (launcher, _state) in loose.items() if launcher in loose and launcher != run}
     below: dict[str, list[str]] = {}
     for run, launcher in up.items():
         below.setdefault(launcher, []).append(run)
     roots: dict[str, str] = {}
-    for run in states:
+    for run in loose:
         path, current = [], run
         while current not in roots and current in up and current not in path:
             path.append(current)
@@ -81,7 +83,7 @@ def forest(launchers: Mapping[str, str | None], states: Mapping[str, RunState]) 
         top = roots.get(current, current)
         roots.update({step: top for step in (*path, current)})
     rolled: dict[str, RunState] = {}
-    for run in states:  # below before above, without recursion: a tree is as deep as its agents went
+    for run in loose:  # below before above, without recursion: a tree is as deep as its agents went
         stack, pushed = [run], {run}
         while stack:
             current = stack[-1]
@@ -92,8 +94,13 @@ def forest(launchers: Mapping[str, str | None], states: Mapping[str, RunState]) 
                 continue
             stack.pop()
             if current not in rolled:
-                rolled[current] = tally((states[current], *(rolled[child] for child in below.get(current, ()) if child in rolled)))
-    return {run: Tree(roots[run], rolled[run]) for run in states}
+                rolled[current] = tally((loose[current][1], *(rolled[child] for child in below.get(current, ()) if child in rolled)))
+    placed = {run: RunTree(**held[run].tree_fields()) for run in rows if run in held}
+    for run, (launcher, _state) in loose.items():
+        joined = held.get(loose[roots[run]][0] or "")
+        placed[run] = RunTree(launcher_run_id=launcher, root_run_id=roots[run] if joined is None else joined.root_run_id, tree_state=rolled[run],
+                              tree_project="" if joined is None else joined.tree_project)
+    return placed
 
 
-__all__ = ["ENDED", "RUN_STATES", "STATE_OF_STATUS", "RunState", "RunTree", "Tree", "forest", "state_of", "tally"]
+__all__ = ["ENDED", "PC_WORDS", "RUN_STATES", "RunState", "RunTree", "forest", "state_of", "tally"]

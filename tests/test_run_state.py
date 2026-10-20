@@ -15,15 +15,19 @@ def test_a_tree_reads_as_its_strongest_run(states: tuple[RunState, ...], tree: R
 
 
 def test_a_forest_names_each_runs_top_and_its_trees_state_without_walking_twice() -> None:
-    """A loop of launches (a record naming its own descendant) and a launcher no longer held are cut, never walked forever."""
-    from galaius_core import Tree, forest
-    launchers = {"main": None, "lead": "main", "maker": "lead", "critic": "lead", "orphan": "pruned", "a": "b", "b": "a"}
-    states: dict[str, RunState] = {"main": "done", "lead": "done", "maker": "working", "critic": "failed", "orphan": "done", "a": "done", "b": "waiting"}
-    trees = forest(launchers, states)
-    assert {run: trees[run] for run in ("main", "lead", "maker", "critic", "orphan")} == {
-        "main": Tree("main", "working"), "lead": Tree("main", "working"), "maker": Tree("main", "working"), "critic": Tree("main", "failed"),
-        "orphan": Tree("orphan", "done")}
-    assert {trees["a"].state, trees["b"].state} == {"waiting"}
+    """A loop of launches (a record naming its own descendant) and a launcher no longer held are cut, never walked forever;
+    a run whose tree was already placed keeps it, and a top run it launched joins that tree."""
+    from galaius_core import RunTree, forest
+    rows: dict[str, tuple[str | None, RunState]] = {
+        "main": (None, "done"), "lead": ("main", "done"), "maker": ("lead", "working"), "critic": ("lead", "failed"), "orphan": ("pruned", "done"),
+        "a": ("b", "done"), "b": ("a", "waiting"), "placed": ("coordinator", "done"), "joined": ("placed", "waiting")}
+    held = {"placed": RunTree(launcher_run_id="coordinator", root_run_id="coordinator", tree_state="working", tree_project="galaius")}
+    trees = {run: (tree.launcher_run_id, tree.root_run_id, tree.tree_state, tree.tree_project) for run, tree in forest(rows, held).items()}
+    assert {run: trees[run] for run in ("main", "lead", "maker", "critic", "orphan", "placed", "joined")} == {
+        "main": (None, "main", "working", ""), "lead": ("main", "main", "working", ""), "maker": ("lead", "main", "working", ""),
+        "critic": ("lead", "main", "failed", ""), "orphan": ("pruned", "orphan", "done", ""),
+        "placed": ("coordinator", "coordinator", "working", "galaius"), "joined": ("placed", "coordinator", "waiting", "galaius")}
+    assert {trees["a"][2], trees["b"][2]} == {"waiting"}
 
 
 @pytest.mark.parametrize("word, state", [("running", "working"), ("cancelled", "stopped"), ("crashed", "lost"), ("paused-by-a-newer-pc", "working")])
