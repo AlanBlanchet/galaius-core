@@ -5,7 +5,7 @@ someone's stop (`stopped`), or with its process gone and no word of its own (`lo
 every agent it launched, at any depth) is one state too, by one rule (`tally`)."""
 
 from collections.abc import Iterable, Mapping
-from typing import Literal, get_args
+from typing import Literal, NamedTuple, get_args
 
 from pydantic import BaseModel
 
@@ -61,16 +61,32 @@ class RunTree(BaseModel):
         return {"launcher_run_id": launcher_run_id, "root_run_id": run_id, "tree_state": state, "tree_project": project}
 
 
-def forest(rows: Mapping[str, tuple[str | None, RunState]], held: Mapping[str, RunTree] | None = None) -> dict[str, RunTree]:
-    """Every row's tree, one walk for all: `rows` maps each run to the run that launched it (None for a top run) and its
-    own state. A run in `held` keeps the tree already placed for it (a reader's own forest, e.g. a server's mirror); the
+class RunRow(NamedTuple):
+    """One run as `forest` places it: the run that launched it (None for a top run), its own state, and the runs it
+    works for beside its launcher (`asked_by`: the runs that sent it work)."""
+
+    launcher: str | None
+    state: RunState
+    asked_by: tuple[str, ...]
+
+
+def forest(rows: Mapping[str, RunRow], held: Mapping[str, RunTree] | None = None) -> dict[str, RunTree]:
+    """Every row's tree, one walk for all. A run in `held` keeps the tree already placed for it (a reader's own forest, e.g. a server's mirror); the
     rest are placed over themselves, and a top one whose launcher is held joins that launcher's tree (its top and
     project). A launcher outside both leaves its run the top of its own tree; a launch loop is cut where it closes. A
-    tree's state is `tally` of the run and every run below it, any depth. `tree_project` is the held tree's, else "":
+    tree's state is `tally` of the run, every run below it (any depth) and every run one of them asked (`asked_by`, its own
+    state alone: a deployer working makes its asker's conversation work; the asked run stays in its own tree, whatever
+    asked it). `tree_project` is the held tree's, else "":
     the caller, who knows each top run's project, names it."""
     held = held or {}
     loose = {run: row for run, row in rows.items() if run not in held}
-    up = {run: launcher for run, (launcher, _state) in loose.items() if launcher in loose and launcher != run}
+    up = {run: row.launcher for run, row in loose.items() if row.launcher in loose and row.launcher != run}
+    # The asked runs' own states, by the run that asked them (any row's: a held run's state counts in a loose asker's tree).
+    asked: dict[str, list[RunState]] = {}
+    for run, row in rows.items():
+        for asker in row.asked_by:
+            if asker in loose and asker not in (run, row.launcher):
+                asked.setdefault(asker, []).append(row.state)
     below: dict[str, list[str]] = {}
     for run, launcher in up.items():
         below.setdefault(launcher, []).append(run)
@@ -94,13 +110,13 @@ def forest(rows: Mapping[str, tuple[str | None, RunState]], held: Mapping[str, R
                 continue
             stack.pop()
             if current not in rolled:
-                rolled[current] = tally((loose[current][1], *(rolled[child] for child in below.get(current, ()) if child in rolled)))
+                rolled[current] = tally((loose[current].state, *asked.get(current, ()), *(rolled[child] for child in below.get(current, ()) if child in rolled)))
     placed = {run: RunTree(**held[run].tree_fields()) for run in rows if run in held}
-    for run, (launcher, _state) in loose.items():
-        joined = held.get(loose[roots[run]][0] or "")
-        placed[run] = RunTree(launcher_run_id=launcher, root_run_id=roots[run] if joined is None else joined.root_run_id, tree_state=rolled[run],
+    for run, row in loose.items():
+        joined = held.get(loose[roots[run]].launcher or "")
+        placed[run] = RunTree(launcher_run_id=row.launcher, root_run_id=roots[run] if joined is None else joined.root_run_id, tree_state=rolled[run],
                               tree_project="" if joined is None else joined.tree_project)
     return placed
 
 
-__all__ = ["ENDED", "PC_WORDS", "RUN_STATES", "RunState", "RunTree", "forest", "state_of", "tally"]
+__all__ = ["ENDED", "PC_WORDS", "RUN_STATES", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally"]
