@@ -18,6 +18,7 @@ from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_cr
 from .prompts import PromptExecutionRef, PromptRevision
 from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
+from .run_state import RunState, state_of
 from .wire import WireModel, WireRequest
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio", "any"]
@@ -3982,6 +3983,16 @@ class MachineAgentRun(WireModel, ContextGauge):
     #: The other runs it works for, first asker first: the runs that sent it work and the runs it said it works for
     #: (never itself nor its `parent_run_id`); left out when none, so a server released before the field still reads it.
     asked_by: tuple[UUID, ...] = Field(default=(), max_length=ASKED_BY_MAX, exclude_if=lambda value: not value)
+
+    @property
+    def state(self) -> RunState:
+        """Its `status` as every reader says it (`state_of`)."""
+        return state_of(self.status)
+
+    @property
+    def launcher_run_id(self) -> str | None:
+        """The run that launched it (`RunTree.launcher_run_id`): its PC names it by `parent_run_id` alone."""
+        return None if self.parent_run_id is None else str(self.parent_run_id)
 
 
 class WebLoad(WireModel):

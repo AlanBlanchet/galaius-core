@@ -16,6 +16,13 @@ ENDED: frozenset[RunState] = frozenset({"done", "failed", "stopped", "lost"})
 #: A PC's own word for its run (`MachineAgentRun.status`, its launcher's record) as every reader says it.
 STATE_OF_STATUS: dict[str, RunState] = {"running": "working", "starting": "working", "waiting": "waiting", "done": "done", "failed": "failed",
                                         "cancelled": "stopped", "stopped": "stopped", "interrupted": "lost", "crashed": "lost"}
+
+
+def state_of(word: str) -> RunState:
+    """A PC's word for its run (`MachineAgentRun.status`, its record's `status`) as every reader says it. A word this reader
+    does not know (a newer PC's) reads `working`: a run is never shown ended on a guess, and the host's process check
+    ends it once its process is gone."""
+    return STATE_OF_STATUS.get(word, "working")
 #: How several runs read as one, strongest first: any at work, else any waiting for its person, else the worst ending.
 _RANK: tuple[RunState, ...] = ("working", "waiting", "lost", "failed", "stopped", "done")
 
@@ -35,14 +42,26 @@ class Tree(NamedTuple):
 
 
 class RunTree(BaseModel):
-    """Where a run sits, decided by the server for every row it serves (`forest`), never walked by a reader: the run at
-    the top of its tree (its own id for a top run), the state of the tree below it (`tally` of it and every run it
-    launched, any depth), and the project of its conversation — its top run's, whatever folder it works in ("" when not
-    known). Mixed into each row model carrying it, its fields at the top level."""
+    """Where a run sits, decided by the server for every row it serves (`forest`), never walked by a reader: the run that
+    launched it (`parent_run_id`, else the run whose session launched it; None for a top run), the run at the top of its
+    tree (its own id for a top run), the state of the tree below it (`tally` of it and every run it launched, any depth),
+    and the project of its conversation — its top run's, whatever folder it works in ("" when not known). Mixed into each
+    row model carrying it, its fields at the top level, none defaulted: a row built without its tree fails, never reads
+    « done »."""
 
-    root_run_id: str = ""
-    tree_state: RunState = "done"
-    tree_project: str = ""
+    launcher_run_id: str | None
+    root_run_id: str
+    tree_state: RunState
+    tree_project: str
+
+    def tree_fields(self) -> dict[str, object]:
+        """These fields alone, to build or update another row that carries them."""
+        return {name: getattr(self, name) for name in RunTree.model_fields}
+
+    @staticmethod
+    def alone(run_id: str, state: RunState, launcher_run_id: str | None = None, project: str = "") -> dict[str, object]:
+        """The fields of a run heading its own tree: before `forest` placed it, or with no launcher known."""
+        return {"launcher_run_id": launcher_run_id, "root_run_id": run_id, "tree_state": state, "tree_project": project}
 
 
 def forest(launchers: Mapping[str, str | None], states: Mapping[str, RunState]) -> dict[str, Tree]:
@@ -77,4 +96,4 @@ def forest(launchers: Mapping[str, str | None], states: Mapping[str, RunState]) 
     return {run: Tree(roots[run], rolled[run]) for run in states}
 
 
-__all__ = ["ENDED", "RUN_STATES", "STATE_OF_STATUS", "RunState", "RunTree", "Tree", "forest", "tally"]
+__all__ = ["ENDED", "RUN_STATES", "STATE_OF_STATUS", "RunState", "RunTree", "Tree", "forest", "state_of", "tally"]
