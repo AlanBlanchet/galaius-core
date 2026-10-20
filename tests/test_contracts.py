@@ -647,3 +647,15 @@ def test_an_agent_with_no_tool_list_has_every_tool_and_an_empty_list_has_none(to
     wire = agent.model_dump(mode="json")
     assert wire.get("harness_tools", None) == dumped and ("harness_tools" in wire) == (tools is not None)
     assert AgentRevision.model_validate_json(agent.model_dump_json()).harness_tools == tools
+
+
+def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_bytes() -> None:
+    """Threat-modeler W2 r1: a key derived from a step's INPUT made even a refused `create_file(path=".env")` name his
+    real `.env`. The answer names the file kept, by the hash of its bytes; a step's input names none."""
+    from galaius_core import FILE_KEY, created_files, file_key, file_token
+    key = file_key(b"PK\x03\x04", ".docx")
+    answer = "Wrote /w/out/summary.docx (docx, 4 bytes). " + file_token(key, "summary]\n.docx")
+    assert created_files(answer) == ((key, "summary  .docx"),) and re.fullmatch(FILE_KEY, key)
+    assert created_files(json.dumps({"path": ".env"})) == () and created_files("[galaius-file 0123 x.exe]") == ()
+    with pytest.raises(ValueError):
+        file_key(b"MZ", ".exe")

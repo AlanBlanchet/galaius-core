@@ -2528,20 +2528,80 @@ def media_paths(text: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(match["double"] or match["single"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
 
 
-class AgentMedia(WireModel):
-    """An image's bytes (base64) and the content type its first bytes prove: an answer whose bytes are
-    not base64, or not the image it claims, never validates."""
+#: The files an agent writes with `create_file`, one row per format: its suffix and the content type it is served
+#: with. Every file rule below is built from this table.
+FILE_TYPES: tuple[tuple[str, str], ...] = (
+    (".txt", "text/plain"), (".md", "text/markdown"), (".csv", "text/csv"), (".json", "application/json"),
+    (".eml", "message/rfc822"), (".pdf", "application/pdf"),
+    (".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    (".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    (".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+)
+FILE_CONTENT_TYPES: dict[str, str] = dict(FILE_TYPES)
+_FILE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffix, _ in FILE_TYPES)
+#: A run's created file as the web names it: `file_key` of its bytes, kept by create_file for that run.
+FILE_KEY = rf"^[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})$"
+#: Any name a run's media goes by on the web: an image's (`MEDIA_KEY`) or a created file's (`FILE_KEY`).
+MEDIA_NAME = f"{MEDIA_KEY}|{FILE_KEY}"
+
+
+def media_kind(name: str) -> Literal["image", "file"] | None:
+    """What a run's media `name` names (`MEDIA_NAME`): an image, a created file; None for no name of either."""
+    return "image" if re.fullmatch(MEDIA_KEY, name) else "file" if re.fullmatch(FILE_KEY, name) else None
+
+
+#: How a created file reaches the web: create_file's own answer names it (`file_token`), never a step's input, so a
+#: refused call names nothing; the PC serves only the copy create_file kept under that key.
+FILE_TOKEN = re.compile(rf"\[galaius-file (?P<key>[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})) (?P<name>[^\]\n\r]{{1,200}})\]")
+
+
+def file_key(content: bytes, suffix: str) -> str:
+    """The name a created file keeps on the web: sha256 of its bytes, plus its format's suffix."""
+    if suffix not in FILE_CONTENT_TYPES:
+        raise ValueError("not a file create_file writes")
+    return hashlib.sha256(content).hexdigest()[:20] + suffix
+
+
+def file_token(key: str, name: str) -> str:
+    """The words create_file's answer carries for the file kept under `key` and shown as `name`."""
+    shown = re.sub(r"[\]\n\r]", " ", name)[:200]
+    return f"[galaius-file {key} {shown}]"
+
+
+def created_files(text: str) -> tuple[tuple[str, str], ...]:
+    """The (key, name) of each file a create_file answer names (`file_token`), in order, each once."""
+    return tuple(dict.fromkeys((match["key"], match["name"]) for match in FILE_TOKEN.finditer(text)))
+
+
+class MediaBytes(WireModel):
+    """Bytes a PC answers for one of its runs (an image, a created file): base64 of at most `MACHINE_AGENT_MEDIA` raw
+    bytes; an answer whose data is not base64 never validates."""
+
+    data: str = Field(max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
+
+    @field_validator("data")
+    @classmethod
+    def base64_data(cls, data: str) -> str:
+        try:
+            base64.b64decode(data, validate=True)
+        except ValueError:
+            raise ValueError("these bytes are not base64") from None
+        return data
+
+    @property
+    def content(self) -> bytes:
+        return base64.b64decode(self.data)
+
+
+class AgentMedia(MediaBytes):
+    """An image's bytes and the content type its first bytes prove: an answer whose bytes are not the image it claims
+    never validates."""
 
     content_type: ImageContentType
-    data: str = Field(max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
 
     @model_validator(mode="after")
     def proven(self) -> Self:
-        try:
-            content = base64.b64decode(self.data, validate=True)
-        except ValueError:
-            raise ValueError("image bytes are not base64") from None
-        if image_type(content) != self.content_type:
+        if image_type(self.content) != self.content_type:
             raise ValueError(f"these bytes are not {self.content_type}")
         return self
 
@@ -2554,14 +2614,21 @@ class AgentMedia(WireModel):
         return cls(content_type=content_type, data=base64.b64encode(content).decode("ascii"))
 
     @property
-    def content(self) -> bytes:
-        return base64.b64decode(self.data)
-
-    @property
     def name(self) -> str:
         """Its name where a PC keeps it (`MEDIA_KEY`): the hash of its bytes, and the suffix its type takes."""
         suffix = next(suffixes[0] for suffixes, kind, _ in IMAGE_TYPES if kind == self.content_type)
         return hashlib.sha256(self.content).hexdigest()[:20] + suffix
+
+
+class AgentFile(MediaBytes):
+    """A file create_file kept for a run: its bytes and the content type its format is served with (`FILE_TYPES`)."""
+
+    content_type: Literal[tuple(FILE_CONTENT_TYPES.values())]  # type: ignore[valid-type]
+
+    @classmethod
+    def of(cls, content: bytes, key: str) -> Self:
+        """`content` kept under `key` (`FILE_KEY`), served as its key's format."""
+        return cls(content_type=FILE_CONTENT_TYPES[PurePosixPath(key).suffix], data=base64.b64encode(content).decode("ascii"))
 
 
 #: Images one message to an agent may show, each at most `AGENT_IMAGE_BYTES` (raw), `AGENT_IMAGE_DATA` once base64.
@@ -2574,6 +2641,9 @@ AGENT_IMAGES_WIRE = AGENT_IMAGES_MAX * AGENT_IMAGE_DATA + 1024 * 1024
 #: A runner saying it takes messages showing images (`AgentMessageSpec.images`): it keeps each in the run's own folder
 #: and hands it to the agent.
 AGENT_IMAGES_FEATURE = "agent_images"
+#: A runner saying it serves the files create_file kept for its runs (`AgentMediaRequest` with a `FILE_KEY`): only then
+#: does a transcript show their cards.
+AGENT_FILES_FEATURE = "agent_files"
 
 
 class AgentMessageSpec(WireRequest):
@@ -2710,14 +2780,15 @@ class AgentTailRequest(MachineAgentRequestBase):
 
 
 class AgentMediaRequest(MachineAgentRequestBase):
-    """One image of a run: one a step names (`media_key` of its path), or one the owner showed it (`AgentMedia.name`).
+    """One image of a run: one a step names (`media_key` of its path), or one the owner showed it (`AgentMedia.name`);
+    or one file create_file kept for that run (`file_key`, its own copy: never a path), answered as `AgentFile`.
     The machine serves it only when a tool step of THAT run (one it started for the web, or launched by one) names a
     path with this key, or it keeps an image of that name in the run's own folder, and only a plain image file no larger
     than MACHINE_AGENT_MEDIA."""
 
     op: Literal["media"] = "media"
     run_id: UUID
-    name: str = Field(pattern=MEDIA_KEY)
+    name: str = Field(pattern=MEDIA_NAME)
     feature: ClassVar[str] = "agent_media"
 
 
@@ -3414,13 +3485,18 @@ class MachineAgentSettingsState(WireModel):
 
 
 class TranscriptMedia(WireModel):
-    """An image a run's step points at, where the reader can fetch it (`src`: the app path that
-    serves it; "" for the server's own mirror of the run)."""
+    """An image a run's step points at, or a file its create_file call wrote (`kind`, `created_files`), where the
+    reader can fetch it (`src`: the app path that serves it; "" for the server's own mirror of the run)."""
 
     name: str
     label: str
-    kind: Literal["image"] = "image"
+    kind: Literal["image", "file"] = "image"
     src: str = ""
+
+    @classmethod
+    def file(cls, key: str, name: str, base: str) -> Self:
+        """The file create_file kept under `key`, shown as `name`, fetched at `base` + its key."""
+        return cls(name=key, label=name, kind="file", src=base + key)
 
 
 class TranscriptItem(WireModel):
@@ -4082,6 +4158,8 @@ class MachineAgentAnswer(WireModel):
     digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     #: `media`: the image asked for.
     media: AgentMedia | None = None
+    #: `media`: the created file asked for (a `FILE_KEY` name).
+    file: AgentFile | None = None
 
 
 def _port_slug(label: str) -> str:
