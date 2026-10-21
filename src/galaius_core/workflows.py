@@ -2581,9 +2581,20 @@ def created_files(text: str) -> tuple[tuple[str, str], ...]:
 FILE_REFUSED = "No file written: "
 
 
+def tool_answer(text: str) -> str:
+    """A tool result's words as its stream records them: an MCP structured result (`{"result": "…"}`) unwrapped."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return text
+    return value["result"] if isinstance(value, dict) and isinstance(value.get("result"), str) else text
+
+
 def refused_file(text: str) -> str | None:
-    """Why a create_file answer wrote nothing (the words after `FILE_REFUSED`), None for an answer that wrote a file."""
-    return text[len(FILE_REFUSED):].strip()[:400] if text.startswith(FILE_REFUSED) else None
+    """Why a create_file answer wrote nothing (the words after `FILE_REFUSED`, its structured wrapping undone), None for
+    an answer that wrote a file."""
+    answer = tool_answer(text)
+    return answer[len(FILE_REFUSED):].strip()[:400] if answer.startswith(FILE_REFUSED) else None
 
 
 class MediaBytes(WireModel):

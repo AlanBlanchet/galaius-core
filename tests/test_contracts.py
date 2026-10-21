@@ -658,6 +658,10 @@ def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_b
     assert created_files(answer) == ((key, "summary  .docx"),) and re.fullmatch(FILE_KEY, key)
     assert created_files(json.dumps({"path": ".env"})) == () and created_files("[galaius-file 0123 x.exe]") == ()
     from galaius_core import FILE_REFUSED, refused_file
-    assert (refused_file(FILE_REFUSED + "'.env': a path inside your working folder"), refused_file(answer)) == ("'.env': a path inside your working folder", None)
+    refusal = FILE_REFUSED + "'.env': a path inside your working folder"
+    # As a stream records it: plain, or an MCP structured result (live run 2b600385: every answer came wrapped).
+    for recorded in (refusal, json.dumps({"result": refusal})):
+        assert refused_file(recorded) == "'.env': a path inside your working folder"
+    assert (refused_file(answer), refused_file(json.dumps({"result": answer})), created_files(json.dumps({"result": answer}))) == (None, None, ((key, "summary  .docx"),))
     with pytest.raises(ValueError):
         file_key(b"MZ", ".exe")
