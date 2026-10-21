@@ -2576,6 +2576,16 @@ def created_files(text: str) -> tuple[tuple[str, str], ...]:
     return tuple(dict.fromkeys((match["key"], match["name"]) for match in FILE_TOKEN.finditer(text)))
 
 
+#: How a create_file answer that wrote nothing opens, its reason after it: the chat words that call as refused, never
+#: as a file it made.
+FILE_REFUSED = "No file written: "
+
+
+def refused_file(text: str) -> str | None:
+    """Why a create_file answer wrote nothing (the words after `FILE_REFUSED`), None for an answer that wrote a file."""
+    return text[len(FILE_REFUSED):].strip()[:400] if text.startswith(FILE_REFUSED) else None
+
+
 class MediaBytes(WireModel):
     """Bytes a PC answers for one of its runs (an image, a created file): base64 of at most `MACHINE_AGENT_MEDIA` raw
     bytes; an answer whose data is not base64 never validates."""

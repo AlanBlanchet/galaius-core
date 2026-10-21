@@ -657,5 +657,7 @@ def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_b
     answer = "Wrote /w/out/summary.docx (docx, 4 bytes). " + file_token(key, "summary]\n.docx")
     assert created_files(answer) == ((key, "summary  .docx"),) and re.fullmatch(FILE_KEY, key)
     assert created_files(json.dumps({"path": ".env"})) == () and created_files("[galaius-file 0123 x.exe]") == ()
+    from galaius_core import FILE_REFUSED, refused_file
+    assert (refused_file(FILE_REFUSED + "'.env': a path inside your working folder"), refused_file(answer)) == ("'.env': a path inside your working folder", None)
     with pytest.raises(ValueError):
         file_key(b"MZ", ".exe")
