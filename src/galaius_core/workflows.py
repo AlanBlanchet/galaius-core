@@ -3592,6 +3592,10 @@ class TranscriptItem(WireModel):
     #: `sent`: the run it was sent for, "" when none: a person passing on that run's ask (galaius `agents spawn --for`,
     #: the deploy queue waking its owner for the maker that enqueued a slice).
     for_run: str = ""
+    #: `sent`: the message's one id, end to end — the one its sender gave it (the web's outbox row, a PC request) and its
+    #: run's stream recorded (`event_id`): a reader pairs a message it holds with this row by it, never by its words or
+    #: clock. "" for a message recorded with none.
+    message_id: str = ""
     media: tuple[TranscriptMedia, ...] = ()
     #: `compacted`: who started it, and the context's size before and after (None: the provider did not say).
     compaction: CompactionTrigger | None = Field(default=None, exclude_if=lambda value: value is None)
