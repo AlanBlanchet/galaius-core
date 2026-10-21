@@ -183,7 +183,7 @@ from .machine_tools import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName
 from .user_models import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
 from .images import IMAGES_PER_REQUEST, GeneratedImage, ImageAnswer, ImageBackground, ImageQuality, ImageRequest, ImageSize
 from .file_tools import FileTool
-from .media import MEDIA_INPUT_BYTES, MEDIA_TOOLS, TRANSLATION_CHARS, MediaAnswer, MediaFile, MediaImage, MediaKind, MediaQuote, MediaRequest, MediaSpec, Model3DSpec, MusicSpec, SoundSpec, SpeechSpec, TranslationSpec
+from .media import MEDIA_INPUT_BYTES, MEDIA_TOOLS, MediaAnswer, MediaFile, MediaImage, MediaKind, MediaQuote, MediaRequest, MediaSpec, Model3DSpec, MusicSpec, SoundSpec, SpeechSpec, TranslationSpec
 from .paid_use import (
     CHARGE_WORDS,
     DEFAULT_MONTHLY_CAP_USD,
@@ -258,7 +258,7 @@ __all__ = [
     "MACHINE_TOOLS", "MACHINE_TOOLS_FEATURE", "MachineToolName", "MachineToolPhase", "MachineToolSpec", "MachineToolState",
     "ENDED", "PC_WORDS", "RUN_STATES", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally",
     "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
-    "MEDIA_INPUT_BYTES", "MEDIA_TOOLS", "TRANSLATION_CHARS", "MediaAnswer", "MediaFile", "MediaImage", "MediaKind", "MediaQuote", "MediaRequest", "MediaSpec", "Model3DSpec", "MusicSpec", "SoundSpec", "SpeechSpec", "TranslationSpec",
+    "MEDIA_INPUT_BYTES", "MEDIA_TOOLS", "MediaAnswer", "MediaFile", "MediaImage", "MediaKind", "MediaQuote", "MediaRequest", "MediaSpec", "Model3DSpec", "MusicSpec", "SoundSpec", "SpeechSpec", "TranslationSpec",
     "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",

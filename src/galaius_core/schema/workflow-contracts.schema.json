@@ -293,18 +293,24 @@
         },
         "description": {
           "default": "",
-          "maxLength": 8192,
           "title": "Description",
           "type": "string"
         },
         "harness_tools": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 256,
-          "title": "Harness Tools",
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 256,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Harness Tools"
         },
         "id": {
           "format": "uuid",
@@ -733,7 +739,6 @@
         },
         "text": {
           "default": "",
-          "maxLength": 10000,
           "title": "Text",
           "type": "string"
         },
@@ -1094,7 +1099,6 @@
           "type": "string"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -1742,7 +1746,6 @@
           "$ref": "#/$defs/AgentRevisionRef"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -1819,7 +1822,6 @@
           "type": "string"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -1867,7 +1869,6 @@
       "additionalProperties": true,
       "properties": {
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -1914,7 +1915,6 @@
           "$ref": "#/$defs/ConnectionResourceRef"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -1989,7 +1989,6 @@
           "$ref": "#/$defs/ConnectionResourceRef"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -3053,6 +3052,19 @@
           "default": null,
           "title": "Calls"
         },
+        "characters": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Characters"
+        },
         "cpu_seconds": {
           "anyOf": [
             {
@@ -3175,7 +3187,6 @@
           "$ref": "#/$defs/ConnectionResourceRef"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -4044,7 +4055,6 @@
           "default": null
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -4124,7 +4134,6 @@
           "$ref": "#/$defs/ConnectionResourceRef"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -4269,7 +4278,6 @@
         "description": {
           "anyOf": [
             {
-              "maxLength": 240,
               "minLength": 1,
               "type": "string"
             },
@@ -4975,7 +4983,6 @@
           "$ref": "#/$defs/ConnectionResourceRef"
         },
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -5588,7 +5595,6 @@
       "description": "A 'function' as a tool: a block already in the graph, reused. Not bespoke code \u2014 a pinned,\nALREADY-SAVED workflow (deterministic transform nodes only, enforced at save time) exposed as\na callable with named inputs and one scalar result. Opens no code-execution boundary.",
       "properties": {
         "description": {
-          "maxLength": 240,
           "minLength": 1,
           "title": "Description",
           "type": "string"
@@ -5714,7 +5720,6 @@
         },
         "description": {
           "default": "",
-          "maxLength": 1000,
           "title": "Description",
           "type": "string"
         },

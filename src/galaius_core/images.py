@@ -26,7 +26,7 @@ IMAGES_PER_REQUEST = 4
 
 
 class ImageRequest(WireRequest):
-    prompt: str = Field(min_length=1, max_length=32_000)
+    prompt: str = Field(min_length=1)
     provider: str = Field(default="openai", min_length=1, max_length=64)
     model: str = Field(default="gpt-image-2", min_length=1, max_length=120)
     size: ImageSize = "1024x1024"

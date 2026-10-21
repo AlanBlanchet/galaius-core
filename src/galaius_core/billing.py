@@ -351,12 +351,12 @@ class OperatorGrant(WireModel):
 
     workspace_id: UUID
     granted_by_account_id: UUID
-    note: str = Field(min_length=1, max_length=400)
+    note: str = Field(min_length=1)
     granted_at: datetime
 
 
 class OperatorGrantRequest(WireRequest):
-    note: str = Field(min_length=1, max_length=400)
+    note: str = Field(min_length=1)
 
 
 class InsufficientCredits(WireModel):

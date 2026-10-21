@@ -36,8 +36,6 @@ MEDIA_TOOLS: dict[MediaKind, FileTool] = {
 MediaImageType = Literal["image/png", "image/jpeg", "image/webp"]
 #: The largest input file a job takes, raw bytes (a 3D model's source image).
 MEDIA_INPUT_BYTES = 20 * 1024 * 1024
-#: The longest text one translation takes, in characters.
-TRANSLATION_CHARS = 50_000
 
 
 class MediaImage(WireModel):
@@ -52,12 +50,12 @@ class TranslationSpec(WireModel):
     """A text translated into `target_language` (a BCP 47 tag: `fr`, `en-GB`), its layout kept as written."""
 
     kind: Literal["translation"] = "translation"
-    text: str = Field(min_length=1, max_length=TRANSLATION_CHARS)
+    text: str = Field(min_length=1)
     target_language: str = Field(pattern=r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
     #: The text's language when known; None: the model reads it from the text.
     source_language: str | None = Field(default=None, pattern=r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
     #: What the text is and for whom (« a reply to a client », « app labels »): the register to keep.
-    context: str = Field(default="", max_length=2000)
+    context: str = Field(default="")
 
 
 class Model3DSpec(WireModel):
@@ -73,7 +71,7 @@ class SpeechSpec(WireModel):
     """`text` said aloud, as an audio file."""
 
     kind: Literal["speech"] = "speech"
-    text: str = Field(min_length=1, max_length=TRANSLATION_CHARS)
+    text: str = Field(min_length=1)
     #: The model's voice (a Gemini voice name, an ElevenLabs voice id); "" its default.
     voice: str = Field(default="", max_length=64)
     #: How to say it (« calm and warm »), for a model that takes it; "" neutral.
@@ -84,14 +82,14 @@ class MusicSpec(WireModel):
     """Music made from `prompt`: genre, mood, instruments, structure, lyrics, length."""
 
     kind: Literal["music"] = "music"
-    prompt: str = Field(min_length=1, max_length=32_000)
+    prompt: str = Field(min_length=1)
 
 
 class SoundSpec(WireModel):
     """A sound effect made from `prompt` (« rain on a tin roof »), never words to say."""
 
     kind: Literal["sound"] = "sound"
-    prompt: str = Field(min_length=1, max_length=32_000)
+    prompt: str = Field(min_length=1)
     #: Its length, 0.5 to 30 s; None: the model picks it from the description.
     seconds: float | None = Field(default=None, ge=0.5, le=30)
     #: Made to loop seamlessly.

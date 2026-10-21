@@ -802,7 +802,7 @@ class MachineEvent(WireModel):
 
 class ToolInputProperty(WireModel):
     type: Literal["string", "number", "integer", "boolean"]
-    description: str | None = Field(default=None, min_length=1, max_length=240)
+    description: str | None = Field(default=None, min_length=1)
 
 
 class ToolInputSchema(WireModel):
@@ -1111,7 +1111,7 @@ class ConnectorBrowse(WireModel):
 class HttpAgentTool(WireModel):
     kind: Literal["http"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     connection: ConnectionResourceRef
     method: Literal["GET", "POST"]
     path: str = Field(min_length=1, max_length=512)
@@ -1133,7 +1133,7 @@ class HttpAgentTool(WireModel):
 class DelegatedAgentTool(WireModel):
     kind: Literal["delegate"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     agent: AgentRevisionRef
     input_schema: ToolInputSchema
 
@@ -1145,7 +1145,7 @@ class WorkflowFunctionTool(WireModel):
 
     kind: Literal["function"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     workflow: WorkflowRevisionRef
     input_schema: ToolInputSchema
 
@@ -1153,7 +1153,7 @@ class WorkflowFunctionTool(WireModel):
 class GmailAgentTool(WireModel):
     kind: Literal["gmail"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     operation: Literal["search_metadata", "read_message", "send_message"]
     input_schema: ToolInputSchema
 
@@ -1161,7 +1161,7 @@ class GmailAgentTool(WireModel):
 class ConnectorAgentTool(WireModel):
     kind: Literal["connector"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     connector: ConnectorKind
     action: ConnectorBrowseActionName
     connection: ConnectionResourceRef | None = None
@@ -1182,7 +1182,7 @@ class SshAgentTool(WireModel):
 
     kind: Literal["ssh"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     connection: ConnectionResourceRef
     operation: SshOperationName
     input_schema: ToolInputSchema
@@ -1201,7 +1201,7 @@ class ObjectStorageAgentTool(WireModel):
 
     kind: Literal["object_storage"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     connection: ConnectionResourceRef
     operation: ObjectStorageOperationName
     bucket: str = Field(min_length=1, max_length=255)
@@ -1226,7 +1226,7 @@ class GitAgentTool(WireModel):
 
     kind: Literal["git"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     connector: GitConnector
     operation: GitOperationName
     connection: ConnectionResourceRef
@@ -1242,7 +1242,7 @@ class MailAgentTool(WireModel):
 
     kind: Literal["mail_server"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     operation: MailOperationName
     connection: ConnectionResourceRef
     input_schema: ToolInputSchema
@@ -1256,7 +1256,7 @@ class WebhookAgentTool(WireModel):
 
     kind: Literal["webhook"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     connection: ConnectionResourceRef
     input_schema: ToolInputSchema
 
@@ -1332,7 +1332,7 @@ class SendMessageTool(WireModel):
 
     kind: Literal["send_message"]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
-    description: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1)
     provider: MessageProvider
     connection: ConnectionResourceRef | None = None
     account: str | None = Field(default=None, min_length=1, max_length=320)
@@ -1392,7 +1392,7 @@ class MessageAccount(WireModel):
     can_send: bool
     can_read: bool
     #: Why it cannot do one of them, in the owner's words (a missing grant, a missing credential).
-    note: str | None = Field(default=None, max_length=240)
+    note: str | None = Field(default=None)
 
 
 class MessageProviderChoice(WireModel):
@@ -1408,7 +1408,7 @@ class HarnessToolDescriptor(WireModel):
 
     name: str = Field(min_length=1, max_length=160)
     category: str = Field(min_length=1, max_length=40)
-    description: str = Field(default="", max_length=600)
+    description: str = Field(default="")
 
 
 AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool | ConnectorAgentTool | SshAgentTool | ObjectStorageAgentTool | GitAgentTool | MailAgentTool | WebhookAgentTool | SendMessageTool | WorkflowFunctionTool, Field(discriminator="kind")]
@@ -1461,7 +1461,7 @@ class AgentRevision(WireModel):
     name: str = Field(min_length=1, max_length=120)
     name_fr: str = Field(default="", max_length=120, pattern=r"^[^\r\n]*$")
     role_key: str | None = Field(default=None, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
-    description: str = Field(default="", max_length=8192)
+    description: str = Field(default="")
     summary: str = Field(default="", max_length=120, pattern=r"^[^\r\n]*$")
     summary_fr: str = Field(default="", max_length=120, pattern=r"^[^\r\n]*$")
     scope: str = Field(default="core", pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=120)
@@ -2218,7 +2218,7 @@ class WorkflowNode(WireModel):
     config: dict[str, WorkflowValue] = Field(default_factory=dict, max_length=32)
     placement: Placement = Field(default_factory=Placement)
     policy: NodePolicy = Field(default_factory=NodePolicy)
-    description: str = Field(default="", max_length=1000)
+    description: str = Field(default="")
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
@@ -2705,7 +2705,7 @@ class AgentMessageSpec(WireRequest):
     `images` is left out of the message when empty, so a runner released before it still verifies an image-less request;
     one carrying images is asked only of a runner saying `AGENT_IMAGES_FEATURE` (`MachineAgentRequestBase.needs`)."""
 
-    text: str = Field(default="", max_length=8000)
+    text: str = Field(default="")
     images: tuple[AgentMedia, ...] = Field(default=(), max_length=AGENT_IMAGES_MAX, exclude_if=lambda value: not value)
 
     @model_validator(mode="after")
@@ -4509,7 +4509,7 @@ class CanvasNote(CanvasPoint):
     """A note written on the board; it never runs."""
 
     id: str = Field(min_length=1, max_length=120)
-    text: str = Field(default="", max_length=10_000)
+    text: str = Field(default="")
 
 
 class WorkflowCanvas(WireModel):

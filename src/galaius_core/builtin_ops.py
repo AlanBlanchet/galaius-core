@@ -237,7 +237,7 @@ class WaitOp(BuiltinOpSpec):
 
 
 class ApprovalSettings(_Settings):
-    message: str = Field(default="Approve {{value}}?", min_length=1, max_length=2000, title="Question", description="What the approver reads; {{field}} inserts part of the value.")
+    message: str = Field(default="Approve {{value}}?", min_length=1, title="Question", description="What the approver reads; {{field}} inserts part of the value.")
     timeout_minutes: int = Field(default=60, ge=1, le=1440, title="Wait at most (minutes)", description="No answer by then: the value goes down 'rejected'.")
 
 
@@ -255,7 +255,7 @@ class ApprovalOp(BuiltinOpSpec):
 
 
 class FailSettings(_Settings):
-    message: str = Field(default="Stopped: {{value}}", min_length=1, max_length=400, title="Message", description="{{field}} inserts part of the value.")
+    message: str = Field(default="Stopped: {{value}}", min_length=1, title="Message", description="{{field}} inserts part of the value.")
 
 
 class FailOp(BuiltinOpSpec):
@@ -400,7 +400,7 @@ class TransformOp(BuiltinOpSpec):
 
 
 class SqlSettings(_Settings):
-    query: str = Field(default="SELECT * FROM input", min_length=1, max_length=8000, title="SQL")
+    query: str = Field(default="SELECT * FROM input", min_length=1, title="SQL")
 
 
 class SqlOp(BuiltinOpSpec):
