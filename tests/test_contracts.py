@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY
+from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
@@ -674,7 +674,7 @@ def test_every_media_job_is_one_request_shape_and_its_tool_keeps_files_its_chat_
 
     from galaius_core import FILE_KEY, FILE_TOOLS, MEDIA_TOOLS, CREATE_FILE_TYPES, MediaRequest, file_key
 
-    assert {tool.tool for tool in MEDIA_TOOLS.values()} | {"create_file"} == FILE_TOOLS
+    assert {tool.tool for tool in MEDIA_TOOLS.values()} | {"create_file"} <= FILE_TOOLS
     assert ".glb" not in dict(CREATE_FILE_TYPES) and re.fullmatch(FILE_KEY, file_key(b"glTF", ".glb"))
     quote = MediaRequest.model_validate({"spec": {"kind": "translation", "text": "Bonjour", "target_language": "en-GB"}})
     assert (quote.spec.kind, quote.max_cost_usd) == ("translation", None)
@@ -691,3 +691,43 @@ def test_music_and_sounds_are_audio_from_words_and_their_files_show_in_chat(task
     assert file_key(b"ID3", ".mp3").endswith(".mp3") and FILE_CONTENT_TYPES[".wav"] == "audio/wav"
     with pytest.raises(ValidationError):
         MediaRequest.model_validate({"spec": {"kind": "sound", "prompt": "rain", "seconds": 31}})
+
+
+@pytest.mark.parametrize("size, offset, part, ok", [
+    (10, 0, 10, True),                                            # a small file comes whole
+    (MACHINE_AGENT_MEDIA + 5, 0, MACHINE_AGENT_MEDIA, True),      # a large one in full parts…
+    (MACHINE_AGENT_MEDIA + 5, MACHINE_AGENT_MEDIA, 5, True),      # …and its shorter last
+    (MACHINE_AGENT_MEDIA + 5, 0, 5, False),                       # a short part before the end
+    (10, 4, 10, False),                                           # past the file's end
+    (10, 10, 0, False),                                           # nothing left to send
+    (KEPT_FILE_MAX + 1, 0, MACHINE_AGENT_MEDIA, False),           # larger than any kept file
+])
+def test_a_kept_file_travels_in_full_parts_each_naming_its_place_in_the_whole(size, offset, part, ok) -> None:
+    """A video an agent cut is larger than one answer carries: its PC answers it part by part, each full but the last,
+    so a reader joining them by `end` rebuilds the file and never mistakes a short read for its end."""
+    from galaius_core import AgentFile
+    key = "0" * 20 + ".mp4"
+    if ok:
+        answer = AgentFile.of(b"\0" * part, key, offset, size)
+        assert (answer.content_type, answer.end) == ("video/mp4", offset + part)
+    else:
+        with pytest.raises(ValidationError):
+            AgentFile.of(b"\0" * part, key, offset, size)
+
+
+def test_a_capabilitys_tools_keep_files_of_their_own_formats_and_only_files_come_in_parts() -> None:
+    """edit_video is a file tool like create_file (its answer's token makes the card); the formats it writes are kept
+    files without being create_file formats; an image is never asked in parts; a file's key hashes its parts as one."""
+    from galaius_core import CREATE_FILE_TYPES, FILE_KEY, FILE_TOOLS, MACHINE_TOOLS, AgentMediaRequest, MachineToolState, file_key
+    assert {"create_file", "edit_video"} <= FILE_TOOLS and ".mp4" not in dict(CREATE_FILE_TYPES)
+    assert re.fullmatch(FILE_KEY, file_key((b"ab", b"c"), ".mp4")) and file_key((b"ab", b"c"), ".mp4") == file_key(b"abc", ".mp4")
+    signed = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "run_id": str(uuid4())}
+    assert AgentMediaRequest.model_validate({**signed, "name": "1" * 20 + ".webm", "offset": 7}).offset == 7
+    assert "offset" not in AgentMediaRequest.model_validate({**signed, "name": "1" * 20 + ".webm"}).model_dump()
+    with pytest.raises(ValidationError):
+        AgentMediaRequest.model_validate({**signed, "name": "1" * 20 + ".png", "offset": 7})
+    pinned = MACHINE_TOOLS["video_editing"].version
+    assert MachineToolState(name="video_editing", phase="ready", version=pinned).ready
+    assert not MachineToolState(name="video_editing", phase="ready", version=pinned, missing=("ffmpeg",)).ready
+    assert not MachineToolState(name="video_editing", phase="ready", version="0.1").ready

@@ -22,9 +22,11 @@ from .run_state import RunRow, RunState, state_of
 from .wire import WireModel, WireRequest
 from .file_tools import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from .media import MEDIA_TOOLS
+from .machine_tools import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolState
 
-#: Every agent tool that keeps files for its run, in one list: `create_file`, then each media job's (`MEDIA_TOOLS`).
-FILE_TOOL_REGISTRY: tuple[FileTool, ...] = (CREATE_FILE, *MEDIA_TOOLS.values())
+#: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
+#: PC capability's (`MACHINE_TOOLS`).
+FILE_TOOL_REGISTRY: tuple[FileTool, ...] = (CREATE_FILE, *MEDIA_TOOLS.values(), *(tool for spec in MACHINE_TOOLS.values() for tool in spec.tools))
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio", "any"]
 WorkflowValue = str | int | float | bool | dict[str, object] | list[object]
@@ -2512,8 +2514,10 @@ MEDIA_PATH = re.compile(
     rf"|(?:(?<=file:)|(?<=file://)|(?<![\w/:.~'\"-]))(?P<bare>(?:~/|/)(?!/)[^\s\"'<>`|;&()]+?\.(?:{_IMAGE_SUFFIX}))(?![\w.])", re.I)
 #: A run's image as the web names it: `media_key` of the path its step wrote.
 MEDIA_KEY = rf"^[0-9a-f]{{20}}\.(?:{_IMAGE_SUFFIX})$"
-#: Largest image one AgentMediaRequest carries back (raw bytes, before base64).
+#: Largest image, or part of a kept file, one AgentMediaRequest carries back (raw bytes, before base64).
 MACHINE_AGENT_MEDIA = 6 * 1024 * 1024
+#: Largest file kept for a run (`AgentFile.size`): a PC refuses to keep a larger one, with one line.
+KEPT_FILE_MAX = 2 * 1024 * 1024 * 1024
 
 
 def image_type(data: bytes) -> ImageContentType | None:
@@ -2546,7 +2550,7 @@ FILE_CONTENT_TYPES: dict[str, str] = dict(FILE_TYPES)
 #: The agent tools whose answer names the files they kept (`file_token`): every one of `FILE_TOOL_REGISTRY`.
 FILE_TOOLS: frozenset[str] = frozenset(tool.tool for tool in FILE_TOOL_REGISTRY)
 _FILE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffix, _ in FILE_TYPES)
-#: A run's created file as the web names it: `file_key` of its bytes, kept by create_file for that run.
+#: A run's kept file as the web names it: `file_key` of its bytes, kept by a file tool (`FILE_TOOLS`) for that run.
 FILE_KEY = rf"^[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})$"
 #: Any name a run's media goes by on the web: an image's (`MEDIA_KEY`) or a created file's (`FILE_KEY`).
 MEDIA_NAME = f"{MEDIA_KEY}|{FILE_KEY}"
@@ -2557,20 +2561,24 @@ def media_kind(name: str) -> Literal["image", "file"] | None:
     return "image" if re.fullmatch(MEDIA_KEY, name) else "file" if re.fullmatch(FILE_KEY, name) else None
 
 
-#: How a created file reaches the web: create_file's own answer names it (`file_token`), never a step's input, so a
-#: refused call names nothing; the PC serves only the copy create_file kept under that key.
+#: How a kept file reaches the web: its file tool's own answer names it (`file_token`), never a step's input, so a
+#: refused call names nothing; the PC serves only the copy that tool kept under that key.
 FILE_TOKEN = re.compile(rf"\[galaius-file (?P<key>[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})) (?P<name>[^\]\n\r]{{1,200}})\]")
 
 
-def file_key(content: bytes, suffix: str) -> str:
-    """The name a kept file goes by on the web: sha256 of its bytes, plus its format's suffix."""
+def file_key(content: bytes | Iterable[bytes], suffix: str) -> str:
+    """The name a kept file goes by on the web: sha256 of its bytes (given whole, or as its parts in order), plus its
+    format's suffix."""
     if suffix not in FILE_CONTENT_TYPES:
         raise ValueError("not a file kept for a run")
-    return hashlib.sha256(content).hexdigest()[:20] + suffix
+    digest = hashlib.sha256()
+    for part in (content,) if isinstance(content, bytes) else content:
+        digest.update(part)
+    return digest.hexdigest()[:20] + suffix
 
 
 def file_token(key: str, name: str) -> str:
-    """The words a file tool's answer carries (`FILE_TOOLS`) for the file kept under `key` and shown as `name`."""
+    """The words a file tool's answer (`FILE_TOOLS`) carries for the file kept under `key` and shown as `name`."""
     shown = re.sub(r"[\]\n\r]", " ", name)[:200]
     return f"[galaius-file {key} {shown}]"
 
@@ -2649,14 +2657,32 @@ class AgentMedia(MediaBytes):
 
 
 class AgentFile(MediaBytes):
-    """A file create_file kept for a run: its bytes and the content type its format is served with (`FILE_TYPES`)."""
+    """One part of a file a file tool kept for a run (`FILE_TOOLS`): the content type its format is served with
+    (`FILE_TYPES`), the whole file's `size`, and its bytes from `offset`: `MACHINE_AGENT_MEDIA` of them, fewer only
+    for its last part. A file of at most `MACHINE_AGENT_MEDIA` bytes comes whole in one part."""
 
-    content_type: Literal[tuple(FILE_CONTENT_TYPES.values())]  # type: ignore[valid-type]
+    content_type: Literal[tuple(dict.fromkeys(FILE_CONTENT_TYPES.values()))]  # type: ignore[valid-type]
+    offset: int = Field(default=0, ge=0)
+    size: int = Field(ge=0, le=KEPT_FILE_MAX)
+
+    @model_validator(mode="after")
+    def one_part(self) -> Self:
+        end = self.offset + len(self.content)
+        if end > self.size or (end < self.size and len(self.content) != MACHINE_AGENT_MEDIA) or (self.offset >= self.size > 0):
+            raise ValueError("these bytes are not one part of that file")
+        return self
 
     @classmethod
-    def of(cls, content: bytes, key: str) -> Self:
-        """`content` kept under `key` (`FILE_KEY`), served as its key's format."""
-        return cls(content_type=FILE_CONTENT_TYPES[PurePosixPath(key).suffix], data=base64.b64encode(content).decode("ascii"))
+    def of(cls, content: bytes, key: str, offset: int = 0, size: int | None = None) -> Self:
+        """The part `content` from `offset` of the file kept under `key` (`FILE_KEY`), `size` bytes whole (None: `content`
+        is the whole file), served as its key's format."""
+        return cls(content_type=FILE_CONTENT_TYPES[PurePosixPath(key).suffix], data=base64.b64encode(content).decode("ascii"), offset=offset,
+                   size=len(content) if size is None else size)
+
+    @property
+    def end(self) -> int:
+        """Where the next part starts: `size` once this is the last."""
+        return self.offset + len(self.content)
 
 
 #: Images one message to an agent may show, each at most `AGENT_IMAGE_BYTES` (raw), `AGENT_IMAGE_DATA` once base64.
@@ -2669,9 +2695,9 @@ AGENT_IMAGES_WIRE = AGENT_IMAGES_MAX * AGENT_IMAGE_DATA + 1024 * 1024
 #: A runner saying it takes messages showing images (`AgentMessageSpec.images`): it keeps each in the run's own folder
 #: and hands it to the agent.
 AGENT_IMAGES_FEATURE = "agent_images"
-#: A runner saying it serves the files create_file kept for its runs (`AgentMediaRequest` with a `FILE_KEY`): only then
-#: does a transcript show their cards.
-AGENT_FILES_FEATURE = "agent_files"
+#: A runner saying it serves the files its file tools kept for its runs (`AgentMediaRequest` with a `FILE_KEY`), in parts
+#: from any `offset` (`AgentFile`): only then does a transcript show their cards.
+AGENT_FILES_FEATURE = "agent_file_parts"
 
 
 class AgentMessageSpec(WireRequest):
@@ -2809,15 +2835,23 @@ class AgentTailRequest(MachineAgentRequestBase):
 
 class AgentMediaRequest(MachineAgentRequestBase):
     """One image of a run: one a step names (`media_key` of its path), or one the owner showed it (`AgentMedia.name`);
-    or one file create_file kept for that run (`file_key`, its own copy: never a path), answered as `AgentFile`.
-    The machine serves it only when a tool step of THAT run (one it started for the web, or launched by one) names a
-    path with this key, or it keeps an image of that name in the run's own folder, and only a plain image file no larger
-    than MACHINE_AGENT_MEDIA."""
+    or one file a file tool kept for that run (`file_key`, its own copy: never a path), answered as the `AgentFile` part
+    starting at `offset`. The machine serves an image only when a tool step of THAT run (one it started for the web, or
+    launched by one) names a path with this key, or it keeps an image of that name in the run's own folder, and only a
+    plain image file no larger than MACHINE_AGENT_MEDIA."""
 
     op: Literal["media"] = "media"
     run_id: UUID
     name: str = Field(pattern=MEDIA_NAME)
+    #: A kept file's part from this byte (0: its first); an image is always whole.
+    offset: int = Field(default=0, ge=0, lt=KEPT_FILE_MAX, exclude_if=lambda value: value == 0)
     feature: ClassVar[str] = "agent_media"
+
+    @model_validator(mode="after")
+    def parts_of_files(self) -> Self:
+        if self.offset and media_kind(self.name) != "file":
+            raise ValueError("an image comes whole")
+        return self
 
 
 
@@ -3103,6 +3137,24 @@ class AgentProgramInstallRequest(MachineAgentRequestBase):
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
     feature: ClassVar[str] = "agent_programs"
+
+
+class AgentToolsRequest(MachineAgentRequestBase):
+    """Each capability's state on this PC (`MACHINE_TOOLS`, answered in `tools`)."""
+
+    op: Literal["tools"] = "tools"
+    feature: ClassVar[str] = MACHINE_TOOLS_FEATURE
+
+
+class AgentToolInstallRequest(MachineAgentRequestBase):
+    """Install capability `tool` on this PC (its pinned package, into a folder the PC owns), answered at once with every
+    capability's state (`tools`). Asked again while under way or ready: the same state, nothing started twice; after
+    a failure: started again."""
+
+    op: Literal["tool_install"] = "tool_install"
+    tool: MachineToolName
+    action: ClassVar[bool] = True
+    feature: ClassVar[str] = MACHINE_TOOLS_FEATURE
 
 
 class AgentSignOutRequest(MachineAgentRequestBase):
@@ -3846,7 +3898,8 @@ MachineAgentRequest = Annotated[
     | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
-    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest,
+    | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
+    | AgentToolsRequest | AgentToolInstallRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -4186,8 +4239,10 @@ class MachineAgentAnswer(WireModel):
     digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     #: `media`: the image asked for.
     media: AgentMedia | None = None
-    #: `media`: the created file asked for (a `FILE_KEY` name).
+    #: `media`: the part asked for of a kept file (a `FILE_KEY` name).
     file: AgentFile | None = None
+    #: `tools` / `tool_install`: every capability's state on this PC (`MACHINE_TOOLS`).
+    tools: tuple[MachineToolState, ...] = Field(default=(), max_length=16)
 
 
 def _port_slug(label: str) -> str:
