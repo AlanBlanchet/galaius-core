@@ -731,3 +731,8 @@ def test_a_capabilitys_tools_keep_files_of_their_own_formats_and_only_files_come
     assert MachineToolState(name="video_editing", phase="ready", version=pinned).ready
     assert not MachineToolState(name="video_editing", phase="ready", version=pinned, missing=("ffmpeg",)).ready
     assert not MachineToolState(name="video_editing", phase="ready", version="0.1").ready
+
+
+def test_the_blob_is_a_tool_of_the_ui_not_a_member_of_his_team() -> None:
+    from galaius_core import BLOB_ROLE, listed_role
+    assert [listed_role(role) for role in (BLOB_ROLE, "main", None)] == [False, True, True]

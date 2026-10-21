@@ -4099,6 +4099,19 @@ class RunReplacement(WireModel):
     model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
 
 
+#: The role the web starts one run of per question asked of its floating blob (`frontend/src/blob/mind.ts`).
+BLOB_ROLE = "blob"
+#: The roles that are tools of the web's own UI, not members of his team: their runs are in no list of runs, trees,
+#: conversations or counts, and take none of his web conversations' places (owner 2026-10-21: « I just don't know why the
+#: blob is inside the agents »); each stays reachable by its own id.
+UI_ROLES: frozenset[str] = frozenset({BLOB_ROLE})
+
+
+def listed_role(role: str | None) -> bool:
+    """Whether a run of `role` is listed and counted with his team's runs (`UI_ROLES`)."""
+    return role not in UI_ROLES
+
+
 class MachineAgentRun(WireModel, ContextGauge):
     """One run the machine started for the web, as the machine's registry has it now."""
 
