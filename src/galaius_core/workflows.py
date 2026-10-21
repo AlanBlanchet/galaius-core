@@ -20,6 +20,11 @@ from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, R
 
 from .run_state import RunRow, RunState, state_of
 from .wire import WireModel, WireRequest
+from .file_tools import CREATE_FILE, CREATE_FILE_TYPES, FileTool
+from .media import MEDIA_TOOLS
+
+#: Every agent tool that keeps files for its run, in one list: `create_file`, then each media job's (`MEDIA_TOOLS`).
+FILE_TOOL_REGISTRY: tuple[FileTool, ...] = (CREATE_FILE, *MEDIA_TOOLS.values())
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio", "any"]
 WorkflowValue = str | int | float | bool | dict[str, object] | list[object]
@@ -155,7 +160,7 @@ class MachineRef(WireModel):
 ModelTask = Literal[
     "text-generation", "text-to-image", "text-to-video", "object-detection", "image-segmentation",
     "feature-extraction", "text-to-speech", "automatic-speech-recognition", "image-to-3d", "text-to-3d",
-    "depth-estimation", "keypoint-detection", "image-to-text",
+    "depth-estimation", "keypoint-detection", "image-to-text", "text-to-music", "text-to-sound",
 ]
 
 class MachineModelSpec(WireModel):
@@ -221,6 +226,9 @@ def model_task_ports(task: ModelTask, placement: Literal["server", "machine"] = 
         # provider can actually deliver, not a wished-for shape.
         "keypoint-detection": (image_in, _port("result", "output", "image")),
         "image-to-text": (image_in, _port("text", "output", "text")),
+        "text-to-music": (prompt, _port("audio", "output", "audio")),
+        # A sound effect described in words (« rain on a tin roof »), never speech: `text-to-speech` says words.
+        "text-to-sound": (prompt, _port("audio", "output", "audio")),
     }[task]
 
 
@@ -2531,16 +2539,12 @@ def media_paths(text: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(match["double"] or match["single"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
 
 
-#: The files an agent writes with `create_file`, one row per format: its suffix and the content type it is served
-#: with. Every file rule below is built from this table.
-FILE_TYPES: tuple[tuple[str, str], ...] = (
-    (".txt", "text/plain"), (".md", "text/markdown"), (".csv", "text/csv"), (".json", "application/json"),
-    (".eml", "message/rfc822"), (".pdf", "application/pdf"),
-    (".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-    (".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-    (".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
-)
+#: Every file kept for a run and shown in its person's chat: what each file tool writes (`FILE_TOOL_REGISTRY`). Every file
+#: rule below is built from this table.
+FILE_TYPES: tuple[tuple[str, str], ...] = tuple(dict.fromkeys(row for tool in FILE_TOOL_REGISTRY for row in tool.writes))
 FILE_CONTENT_TYPES: dict[str, str] = dict(FILE_TYPES)
+#: The agent tools whose answer names the files they kept (`file_token`): every one of `FILE_TOOL_REGISTRY`.
+FILE_TOOLS: frozenset[str] = frozenset(tool.tool for tool in FILE_TOOL_REGISTRY)
 _FILE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffix, _ in FILE_TYPES)
 #: A run's created file as the web names it: `file_key` of its bytes, kept by create_file for that run.
 FILE_KEY = rf"^[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})$"
@@ -2559,25 +2563,25 @@ FILE_TOKEN = re.compile(rf"\[galaius-file (?P<key>[0-9a-f]{{20}}\.(?:{_FILE_SUFF
 
 
 def file_key(content: bytes, suffix: str) -> str:
-    """The name a created file keeps on the web: sha256 of its bytes, plus its format's suffix."""
+    """The name a kept file goes by on the web: sha256 of its bytes, plus its format's suffix."""
     if suffix not in FILE_CONTENT_TYPES:
-        raise ValueError("not a file create_file writes")
+        raise ValueError("not a file kept for a run")
     return hashlib.sha256(content).hexdigest()[:20] + suffix
 
 
 def file_token(key: str, name: str) -> str:
-    """The words create_file's answer carries for the file kept under `key` and shown as `name`."""
+    """The words a file tool's answer carries (`FILE_TOOLS`) for the file kept under `key` and shown as `name`."""
     shown = re.sub(r"[\]\n\r]", " ", name)[:200]
     return f"[galaius-file {key} {shown}]"
 
 
 def created_files(text: str) -> tuple[tuple[str, str], ...]:
-    """The (key, name) of each file a create_file answer names (`file_token`), in order, each once."""
+    """The (key, name) of each file a file tool's answer names (`file_token`, `FILE_TOOLS`), in order, each once."""
     return tuple(dict.fromkeys((match["key"], match["name"]) for match in FILE_TOKEN.finditer(text)))
 
 
-#: How a create_file answer that wrote nothing opens, its reason after it: the chat words that call as refused, never
-#: as a file it made.
+#: How a file tool's answer that wrote nothing opens (`FILE_TOOLS`), its reason after it: the chat words that call as
+#: refused, never as a file it made.
 FILE_REFUSED = "No file written: "
 
 
@@ -2591,7 +2595,7 @@ def tool_answer(text: str) -> str:
 
 
 def refused_file(text: str) -> str | None:
-    """Why a create_file answer wrote nothing (the words after `FILE_REFUSED`, its structured wrapping undone), None for
+    """Why a file tool's answer wrote nothing (the words after `FILE_REFUSED`, its structured wrapping undone), None for
     an answer that wrote a file."""
     answer = tool_answer(text)
     return answer[len(FILE_REFUSED):].strip()[:400] if answer.startswith(FILE_REFUSED) else None

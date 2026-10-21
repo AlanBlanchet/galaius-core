@@ -20,6 +20,7 @@ from .wire import WireModel
 #: is expressed in these units; a price is quoted per unit, in USD.
 CostUnit = Literal[
     "token_in", "token_cache_read", "token_cache_write", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte",
+    "character",
 ]
 
 PriceSourceKind = Literal["model_registry", "research_table", "machine_rate", "builtin_free"]
@@ -75,8 +76,8 @@ class NodeCostModel(WireModel):
 #: unit is wired in exactly once. Built from two parallel tuples (never a `{"x": "x"}` dict
 #: literal): the unit and field names coincide for the token units, which otherwise reads as a
 #: secret-like `"token_in": "..."` assignment to anyone (or anything) scanning this file.
-_UNITS: tuple[CostUnit, ...] = ("token_in", "token_cache_read", "token_cache_write", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte")
-_FIELDS: tuple[str, ...] = ("token_in", "token_cache_read", "token_cache_write", "token_out", "images", "video_seconds", "audio_seconds", "calls", "gpu_seconds", "cpu_seconds", "bytes")
+_UNITS: tuple[CostUnit, ...] = ("token_in", "token_cache_read", "token_cache_write", "token_out", "image", "video_second", "audio_second", "call", "gpu_second", "cpu_second", "byte", "character")
+_FIELDS: tuple[str, ...] = ("token_in", "token_cache_read", "token_cache_write", "token_out", "images", "video_seconds", "audio_seconds", "calls", "gpu_seconds", "cpu_seconds", "bytes", "characters")
 USAGE_FIELD: dict[CostUnit, str] = dict(zip(_UNITS, _FIELDS, strict=True))
 
 
@@ -98,6 +99,8 @@ class NodeUsage(WireModel):
     gpu_seconds: float | None = Field(default=None, ge=0)
     cpu_seconds: float | None = Field(default=None, ge=0)
     bytes: int | None = Field(default=None, ge=0)
+    #: Characters of input a vendor bills by (speech synthesis priced per 1,000 characters said).
+    characters: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def at_least_one_figure(self) -> Self:

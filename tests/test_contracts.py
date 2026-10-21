@@ -665,3 +665,29 @@ def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_b
     assert (refused_file(answer), refused_file(json.dumps({"result": answer})), created_files(json.dumps({"result": answer}))) == (None, None, ((key, "summary  .docx"),))
     with pytest.raises(ValueError):
         file_key(b"MZ", ".exe")
+
+
+def test_every_media_job_is_one_request_shape_and_its_tool_keeps_files_its_chat_shows():
+    """One request for every capability, a typed spec per kind; each kind's tool is a file tool, and what a job makes that
+    create_file does not write (a .glb) is a kept file all the same."""
+    from pydantic import ValidationError
+
+    from galaius_core import FILE_KEY, FILE_TOOLS, MEDIA_TOOLS, CREATE_FILE_TYPES, MediaRequest, file_key
+
+    assert {tool.tool for tool in MEDIA_TOOLS.values()} | {"create_file"} == FILE_TOOLS
+    assert ".glb" not in dict(CREATE_FILE_TYPES) and re.fullmatch(FILE_KEY, file_key(b"glTF", ".glb"))
+    quote = MediaRequest.model_validate({"spec": {"kind": "translation", "text": "Bonjour", "target_language": "en-GB"}})
+    assert (quote.spec.kind, quote.max_cost_usd) == ("translation", None)
+    for refused in ({"kind": "lyrics", "text": "x"}, {"kind": "translation", "text": "x", "target_language": "french"}):
+        with pytest.raises(ValidationError):
+            MediaRequest.model_validate({"spec": refused})
+
+
+@pytest.mark.parametrize("task", ["text-to-music", "text-to-sound"])
+def test_music_and_sounds_are_audio_from_words_and_their_files_show_in_chat(task):
+    from galaius_core import FILE_CONTENT_TYPES, MediaRequest, file_key
+
+    assert [(port.name, port.direction, port.value_type) for port in model_task_ports(task, "server")] == [("prompt", "input", "text"), ("audio", "output", "audio")]
+    assert file_key(b"ID3", ".mp3").endswith(".mp3") and FILE_CONTENT_TYPES[".wav"] == "audio/wav"
+    with pytest.raises(ValidationError):
+        MediaRequest.model_validate({"spec": {"kind": "sound", "prompt": "rain", "seconds": 31}})

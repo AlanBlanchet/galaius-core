@@ -2202,7 +2202,9 @@
             "text-to-3d",
             "depth-estimation",
             "keypoint-detection",
-            "image-to-text"
+            "image-to-text",
+            "text-to-music",
+            "text-to-sound"
           ],
           "title": "Task",
           "type": "string"
@@ -2565,7 +2567,9 @@
             "text-to-3d",
             "depth-estimation",
             "keypoint-detection",
-            "image-to-text"
+            "image-to-text",
+            "text-to-music",
+            "text-to-sound"
           ],
           "title": "Task",
           "type": "string"
