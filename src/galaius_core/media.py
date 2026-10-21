@@ -25,11 +25,11 @@ MediaKind = Literal["translation", "model_3d", "speech", "music", "sound"]
 #: The agent tool that asks for each kind, and the files it keeps (`workflows.FILE_TOOL_REGISTRY`).
 _AUDIO = ((".mp3", "audio/mpeg"), (".wav", "audio/wav"), (".ogg", "audio/ogg"))
 MEDIA_TOOLS: dict[MediaKind, FileTool] = {
-    "translation": FileTool("translate", ((".txt", "text/plain"),)),
-    "model_3d": FileTool("generate_3d", ((".glb", "model/gltf-binary"),)),
-    "speech": FileTool("generate_speech", _AUDIO),
-    "music": FileTool("generate_music", _AUDIO),
-    "sound": FileTool("generate_sound", _AUDIO),
+    "translation": FileTool(tool="translate", writes=((".txt", "text/plain"),)),
+    "model_3d": FileTool(tool="generate_3d", writes=((".glb", "model/gltf-binary"),)),
+    "speech": FileTool(tool="generate_speech", writes=_AUDIO),
+    "music": FileTool(tool="generate_music", writes=_AUDIO),
+    "sound": FileTool(tool="generate_sound", writes=_AUDIO),
 }
 #: The image types a job reads (`image_type` proves them by their first bytes): `ImageContentType` but GIF, which no
 #: 3D model takes (an animation); restated here, since `workflows` imports this module.

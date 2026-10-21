@@ -2,10 +2,12 @@
 writes (suffix, the content type it is served with): `create_file` here, each media job's in `media.MEDIA_TOOLS`; together
 they make `workflows.FILE_TOOL_REGISTRY`, which the chat's file cards and every kept-file rule read."""
 
-from typing import NamedTuple
+from .wire import WireModel
 
 
-class FileTool(NamedTuple):
+class FileTool(WireModel):
+    """One file tool: its name, and each format it writes (suffix, the content type it is served with)."""
+
     tool: str
     writes: tuple[tuple[str, str], ...]
 
@@ -18,4 +20,4 @@ CREATE_FILE_TYPES: tuple[tuple[str, str], ...] = (
     (".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
     (".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
 )
-CREATE_FILE = FileTool("create_file", CREATE_FILE_TYPES)
+CREATE_FILE = FileTool(tool="create_file", writes=CREATE_FILE_TYPES)
