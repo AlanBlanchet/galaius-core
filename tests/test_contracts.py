@@ -4,7 +4,7 @@ import base64
 import hashlib
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from importlib.resources import files
 from typing import get_args
 from uuid import uuid4
@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
 from galaius_core import ASKED_BY_MAX, MachineAgentRun, MachineFence
+from galaius_core import SCREEN_QUALITIES, SCREEN_WIDTHS, ScreenAllowance, ScreenFrame, ScreenSpec
 from cryptography.exceptions import InvalidTag
 
 from galaius_core import (
@@ -736,3 +737,38 @@ def test_a_capabilitys_tools_keep_files_of_their_own_formats_and_only_files_come
 def test_the_blob_is_a_tool_of_the_ui_not_a_member_of_his_team() -> None:
     from galaius_core import BLOB_ROLE, listed_role
     assert [listed_role(role) for role in (BLOB_ROLE, "main", None)] == [False, True, True]
+
+
+def test_a_screen_frame_travels_as_base64_and_comes_back_the_same_bytes():
+    """Owner 2026-10-23 asked to watch one computer from another. A frame's JPEG is bytes, and the
+    default byte encoding (UTF-8) cannot carry them: `model_dump(mode="json")` raised
+    `UnicodeDecodeError` on the first frame. Base64 both ways, round trip identical."""
+    jpeg = bytes([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0xFF, 0xD9])
+    frame = ScreenFrame(sequence=7, at=datetime(2026, 10, 23, 12, 0, tzinfo=UTC), origin_x=-1920, origin_y=60,
+                        w=960, h=540, scale=0.5, quality=55, jpeg=jpeg)
+
+    body = json.dumps({"type": "screen_frame", "frame": frame.model_dump(mode="json")})
+    read = ScreenFrame.model_validate(json.loads(body)["frame"])
+
+    assert read.jpeg == jpeg and read.sequence == 7
+    # The point a viewer read off this frame, in the computer's own input units.
+    assert read.input_point(100, 50) == (-1720, 160)
+
+
+def test_a_screen_spec_walks_its_ladders_and_stops_at_both_ends():
+    """A link that worsens narrows the picture before it blurs it, and neither step runs off its end."""
+    asked = ScreenSpec()
+    assert (asked.width, asked.quality) == (1280, 55)
+    assert (asked.lighter().width, asked.lighter().quality) == (960, 45)
+    assert ScreenSpec(width=SCREEN_WIDTHS[0], quality=SCREEN_QUALITIES[0]).lighter().width == SCREEN_WIDTHS[0]
+    assert ScreenSpec(width=SCREEN_WIDTHS[-1], quality=SCREEN_QUALITIES[-1]).sharper().quality == SCREEN_QUALITIES[-1]
+    assert ScreenSpec(max_fps=10).frame_budget_ms == 100
+
+
+def test_an_allowance_runs_out_by_itself():
+    """A switch the owner forgot is not a standing invitation."""
+    assert not ScreenAllowance().live()
+    assert ScreenAllowance(allowed=True).live(), "no end means on while it is on"
+    now = datetime(2026, 10, 23, 12, 0, tzinfo=UTC)
+    assert ScreenAllowance(allowed=True, until=now + timedelta(minutes=1)).live(now)
+    assert not ScreenAllowance(allowed=True, until=now - timedelta(seconds=1)).live(now)
