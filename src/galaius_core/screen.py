@@ -9,11 +9,14 @@ scale — a viewer never multiplies, so a resized or re-scaled stream can never 
 somewhere else.
 """
 
+import base64
+import hashlib
 import statistics
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, ClassVar, Literal, Self, Union
+from uuid import UUID
 
-from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic import ConfigDict, Field, TypeAdapter, computed_field
 
 from .wire import WireModel, WireRequest
 
@@ -165,8 +168,11 @@ class ScreenStats(WireModel):
     bytes_sent: int = 0
     grab: Timing = Timing()
     encode: Timing = Timing()
-    #: Server-acknowledged time per frame: the only number that includes the link itself.
+    #: From a frame leaving the PC to the viewer's ack of it drawn: the link both ways plus the
+    #: viewer's decode and paint — the only number that includes the network.
     send: Timing = Timing()
+    #: The viewer's own decode-and-paint time per frame, as it reported it (`ScreenViewerMessage.drawn_ms`).
+    drawn: Timing = Timing()
     width: int = 0
     quality: int = 0
     #: How many times the link made the stream step down, and back up.
@@ -177,12 +183,14 @@ class ScreenStats(WireModel):
     def seconds(self) -> float:
         return (datetime.now(UTC) - self.started_at).total_seconds()
 
+    @computed_field
     @property
     def fps(self) -> float:
         """Frames a second over the session's whole life — 0 until there are two frames: one frame
         in a session a millisecond old is not a rate, and reporting one reads like a measurement."""
         return round((self.frames - 1) / self.seconds, 2) if self.frames > 1 and self.seconds > 0 else 0.0
 
+    @computed_field
     @property
     def kbps(self) -> float:
         return round(self.bytes_sent * 8 / 1000 / self.seconds, 1) if self.frames > 1 and self.seconds > 0 else 0.0
@@ -262,9 +270,185 @@ class ScreenAllowance(WireModel):
         return self.allowed and (self.until is None or self.until > (now or datetime.now(UTC)))
 
 
+# --- Who may watch: the viewer's passkey, checked by the computer itself --------------------------
+#
+# The server carries every byte of a session and decides none of it. The computer pins its owner's
+# passkey (`ScreenPasskey`; the first one while its own switch is on, any later one only when
+# `galaius screen trust` is run AT the computer) and opens a session only for an offer that passkey
+# signed (`ScreenOffer`, `ScreenAssertion`). The offer carries the viewer's ephemeral key, the
+# computer answers with its own (`ScreenOpened`), and both derive the session's keys (`ScreenKeys`):
+# every frame and every act is sealed end to end (`ScreenSealed`), so the server relays ciphertext
+# it can neither read nor forge, and a replayed act is refused by its sequence number.
+
+#: COSE algorithm numbers a pinned passkey may use (WebAuthn `getPublicKeyAlgorithm()`): ES256,
+#: EdDSA, RS256 — what every platform authenticator registers.
+SCREEN_PASSKEY_ALGORITHMS: tuple[int, ...] = (-7, -8, -257)
+#: The longest one signed offer lives: a phone left on the page is not a standing grant, and
+#: watching longer asks the passkey again.
+SCREEN_SESSION_MAX = timedelta(minutes=30)
+#: Clock difference between the viewer's device and the computer an offer may carry.
+SCREEN_CLOCK_SKEW = timedelta(minutes=2)
+#: Ceiling of the offer text the passkey signs (it is a few hundred bytes).
+SCREEN_OFFER_MAX = 4096
+#: Ceiling of one sealed viewer message (64 acts of 8000 characters of text, sealed).
+SCREEN_INPUT_MAX = 600 * 1024
+#: HKDF ``info`` per direction (HKDF-SHA256, salt = the offer's challenge, 32-byte AES-GCM keys).
+SCREEN_KEY_INFO: dict[str, bytes] = {"pc": b"galaius screen v1 pc", "viewer": b"galaius screen v1 viewer"}
+#: First byte of each sealed message's IV, per direction (`ScreenSealed.iv`).
+SCREEN_IV_DIRECTION: dict[str, int] = {"pc": 1, "viewer": 2}
+#: What the computer's identity key signs to prove an answer is its own (`ScreenOpened.proof`).
+SCREEN_PROOF_LABEL = b"galaius screen v1 opened"
+#: First byte of a plaintext the computer seals (`ScreenSealed`): a frame, or the stream's numbers.
+SCREEN_PLAIN_FRAME, SCREEN_PLAIN_STATS = 1, 2
+
+
+def b64url(raw: bytes) -> str:
+    """base64url without padding: WebAuthn's own spelling of bytes, and the browser's."""
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def unb64url(text: str) -> bytes:
+    """`b64url` read back (padding optional); raises ValueError on anything else."""
+    try:
+        return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    except (ValueError, TypeError) as error:
+        raise ValueError("not base64url") from error
+
+
+B64Url = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]*$", max_length=8192)]
+
+
+class ScreenPasskey(WireModel):
+    """One passkey of the owner as a computer pins it: `credential_id` (WebAuthn ``rawId``),
+    `public_key` (``getPublicKey()``: DER SubjectPublicKeyInfo), `algorithm` (COSE number). Sent
+    with an offer only when the browser just created it (`ScreenAssertion.passkey`); the computer
+    then trusts it on its own terms (`ScreenTrust`), never because the server relayed it."""
+
+    credential_id: B64Url
+    public_key: B64Url
+    algorithm: int
+    label: Annotated[str, Field(max_length=80)] = ""
+    #: The highest authenticator counter seen (0: the authenticator keeps none, as synced passkeys do).
+    counter: int = 0
+    added_at: datetime | None = None
+
+
+class ScreenTrust(WireModel):
+    """The passkeys a computer opens sessions for (`trusted`), and those offered since that wait
+    for its owner AT the computer (`pending`, `galaius screen trust`)."""
+
+    trusted: tuple[ScreenPasskey, ...] = ()
+    pending: tuple[ScreenPasskey, ...] = ()
+
+    #: Pending passkeys kept: the server could offer junk, never fill a disk with it.
+    PENDING_MAX: ClassVar[int] = 8
+
+
+class ScreenOffer(WireModel):
+    """What the viewer's passkey signs, as JSON TEXT: the browser sends the exact string it signed
+    and the computer parses that string, so no canonical form exists to disagree on.
+
+    `machine_id` binds it to one computer, `nonce` to one use, `expires_at` (at most
+    `SCREEN_SESSION_MAX` ahead) to one sitting, `mode` to what was asked (control is its own
+    offer, its own passkey press), `viewer_key` to the browser holding the matching private key,
+    `origin` to the page that asked (it must be the computer's own server address)."""
+
+    version: Literal[1] = 1
+    machine_id: UUID
+    nonce: Annotated[B64Url, Field(min_length=22, max_length=64)]
+    mode: Literal["view", "control"] = "view"
+    expires_at: datetime
+    #: The viewer's ephemeral ECDH P-256 public key, raw uncompressed (65 bytes), base64url.
+    viewer_key: Annotated[B64Url, Field(min_length=86, max_length=88)]
+    origin: Annotated[str, Field(max_length=200)]
+    spec: ScreenSpec = ScreenSpec()
+
+    @staticmethod
+    def challenge(text: str) -> bytes:
+        """The WebAuthn challenge for the offer `text`: SHA-256 of its UTF-8 bytes."""
+        return hashlib.sha256(text.encode("utf-8")).digest()
+
+
+class ScreenAssertion(WireModel):
+    """``navigator.credentials.get()``'s answer to the offer's challenge, every field base64url."""
+
+    credential_id: B64Url
+    authenticator_data: B64Url
+    client_data_json: B64Url
+    signature: B64Url
+    #: Only when this browser created the passkey just now: its public key, for the computer to pin
+    #: (first passkey while its switch is on) or hold for its owner (`ScreenTrust.pending`).
+    passkey: ScreenPasskey | None = None
+
+
+class ScreenOpenBody(WireRequest):
+    """What the browser posts to open a session: the offer text it signed and the assertion."""
+
+    offer: Annotated[str, Field(min_length=2, max_length=SCREEN_OFFER_MAX)]
+    assertion: ScreenAssertion
+
+
+class ScreenOpened(WireModel):
+    """The computer's answer to a verified offer: the session, its own ephemeral key (`pc_key`,
+    raw P-256, base64url), and `proof` — its identity key (`identity`, raw P-256) signing
+    ``SCREEN_PROOF_LABEL || challenge || pc_key || session.bytes`` (ECDSA P-256 SHA-256, r||s, as
+    WebCrypto verifies). A browser pins `identity` per computer the first time, so a server that
+    swaps `pc_key` is caught: it cannot sign for the computer."""
+
+    session: UUID
+    pc_key: B64Url
+    identity: B64Url
+    proof: B64Url
+    mode: Literal["view", "control"]
+    ends_at: datetime
+    monitors: tuple[ScreenMonitor, ...] = ()
+    #: True when this offer's passkey was pinned just now (the computer's first).
+    paired: bool = False
+
+
+class ScreenSealed(WireModel):
+    """One sealed message of a session, as the machine link carries it (`type` ``screen_frame``
+    PC → server, ``screen_input`` server → PC): AES-256-GCM under the direction's key, IV =
+    direction byte (`SCREEN_IV_DIRECTION`), 3 zero bytes, `seq` as 8 bytes big-endian; AAD = the
+    session id's 16 bytes. `seq` starts at 1 and only grows: a receiver drops anything not above
+    the last it opened, so a replay or a reordering by whoever relays is refused, never acted on.
+
+    The browser's own socket carries the same thing as one binary message: `seq` (8 bytes
+    big-endian) then `data`."""
+
+    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
+
+    session: UUID
+    seq: Annotated[int, Field(ge=1, lt=2**63)]
+    data: bytes
+
+    def iv(self, direction: Literal["pc", "viewer"]) -> bytes:
+        return bytes([SCREEN_IV_DIRECTION[direction], 0, 0, 0]) + self.seq.to_bytes(8, "big")
+
+    def binary(self) -> bytes:
+        """The browser socket's spelling."""
+        return self.seq.to_bytes(8, "big") + self.data
+
+    @classmethod
+    def from_binary(cls, session: UUID, raw: bytes) -> Self:
+        if len(raw) < 8 + 16:
+            raise ValueError("a sealed message is its sequence, then at least a GCM tag")
+        return cls(session=session, seq=int.from_bytes(raw[:8], "big"), data=raw[8:])
+
+
+class ScreenViewerMessage(WireRequest):
+    """What a viewer seals back (`ScreenSealed`, direction ``viewer``): the frame it drew (`ack`,
+    with `drawn_ms` its own decode-and-paint time) and / or acts to take (control sessions only)."""
+
+    ack: int | None = None
+    drawn_ms: Annotated[float, Field(ge=0, le=60_000)] | None = None
+    acts: Annotated[tuple[dict, ...], Field(max_length=SCREEN_ACTS_MAX)] = ()
+
+
 class ScreenReadiness(WireModel):
-    """What a computer says about being watched: whether it is allowed, what it can show, and
-    whether someone is watching right now."""
+    """What a computer says about being watched, before any passkey is asked: whether its owner
+    switched it on there (`allowance`), what it can show, who it would open for, and whether
+    someone is watching right now."""
 
     allowance: ScreenAllowance = ScreenAllowance()
     monitors: tuple[ScreenMonitor, ...] = ()
@@ -272,3 +456,12 @@ class ScreenReadiness(WireModel):
     #: Why it cannot be watched at all (no desktop, Wayland, a capture library missing); "" when it can.
     unsupported: str = ""
     stats: ScreenStats | None = None
+    #: The passkeys it opens sessions for (none yet: the first offer while its switch is on pairs).
+    passkeys: tuple[ScreenPasskey, ...] = ()
+    #: Passkeys offered that wait for `galaius screen trust` at the computer.
+    pending: int = 0
+    #: Its identity key (raw P-256, base64url) a browser pins and checks `ScreenOpened.proof` with.
+    identity: str = ""
+    #: The page origin its offers must come from, and the WebAuthn relying party it checks.
+    origin: str = ""
+    rp_id: str = ""

@@ -23,6 +23,7 @@ from .wire import WireModel, WireRequest
 from .file_tools import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from .media import MEDIA_TOOLS
 from .machine_tools import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolState
+from .screen import SCREEN_FEATURE, ScreenOpenBody, ScreenOpened, ScreenReadiness
 
 #: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
 #: PC capability's (`MACHINE_TOOLS`).
@@ -3897,13 +3898,33 @@ class WorkspacesRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "workspaces"
 
 
+class ScreenStatusRequest(MachineAgentRequestBase):
+    """Whether this PC may be watched and what it would show (`ScreenReadiness`) — no passkey."""
+
+    op: Literal["screen_status"] = "screen_status"
+    feature: ClassVar[str] = SCREEN_FEATURE
+
+
+class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
+    """Open a session of this PC's screen for an offer its owner's passkey signed. The machine's
+    signature on this request only says the server sent it; the PC opens nothing unless the
+    PASSKEY's signature over `offer` verifies against a key it pinned itself
+    (`galaius_core.screen`)."""
+
+    op: Literal["screen_open"] = "screen_open"
+    viewer: Annotated[str, Field(max_length=80)] = ""
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 20
+    feature: ClassVar[str] = SCREEN_FEATURE
+
+
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
-    | AgentToolsRequest | AgentToolInstallRequest,
+    | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -4260,6 +4281,10 @@ class MachineAgentAnswer(WireModel):
     file: AgentFile | None = None
     #: `tools` / `tool_install`: every capability's state on this PC (`MACHINE_TOOLS`).
     tools: tuple[MachineToolState, ...] = Field(default=(), max_length=16)
+    #: `screen_status` / `screen_open`: what the PC says about being watched.
+    screen: ScreenReadiness | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: `screen_open`: the session the PC opened for a passkey it verified itself.
+    screen_opened: ScreenOpened | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _port_slug(label: str) -> str:

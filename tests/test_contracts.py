@@ -755,6 +755,23 @@ def test_a_screen_frame_travels_as_base64_and_comes_back_the_same_bytes():
     assert read.input_point(100, 50) == (-1720, 160)
 
 
+def test_a_sealed_screen_message_is_the_same_bytes_on_the_machine_link_and_the_browser_socket():
+    """Threat review 2026-10-23: the server relays a session's frames and acts as ciphertext. The
+    machine link carries them as JSON (base64), the browser socket as binary (seq, then the sealed
+    bytes): both spellings hold the same bytes, and a message too short to be sealed is refused."""
+    from uuid import uuid4
+
+    from galaius_core import ScreenSealed
+
+    session, data = uuid4(), bytes(range(256)) * 3
+    sealed = ScreenSealed(session=session, seq=2**40 + 7, data=data)
+    over_link = ScreenSealed.model_validate(json.loads(json.dumps(sealed.model_dump(mode="json"))))
+    assert over_link == sealed == ScreenSealed.from_binary(session, sealed.binary())
+    assert sealed.iv("pc") != sealed.iv("viewer") and len(sealed.iv("pc")) == 12
+    with pytest.raises(ValueError):
+        ScreenSealed.from_binary(session, sealed.binary()[:20])
+
+
 def test_a_screen_spec_walks_its_ladders_and_stops_at_both_ends():
     """A link that worsens narrows the picture before it blurs it, and neither step runs off its end."""
     asked = ScreenSpec()
