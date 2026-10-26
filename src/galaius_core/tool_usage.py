@@ -29,32 +29,12 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from .tokens import TokenCounts
 from .wire import WireModel, WireRequest
 
 #: How the call reached the model — a saved provider API key, or the vendor CLI's own logged-in
 #: subscription session (Claude Code, Codex). Distinct billing meters, never merged.
 ToolUsageRoute = Literal["api_key", "cli_session"]
-
-_TOKEN_FIELDS = (
-    "input_tokens", "output_tokens", "cache_read_input_tokens",
-    "cache_creation_input_tokens", "reasoning_tokens", "total_tokens",
-)
-
-
-class ToolTokenUsage(WireModel):
-    input_tokens: int | None = Field(default=None, ge=0)
-    output_tokens: int | None = Field(default=None, ge=0)
-    cache_read_input_tokens: int | None = Field(default=None, ge=0)
-    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
-    reasoning_tokens: int | None = Field(default=None, ge=0)
-    total_tokens: int | None = Field(default=None, ge=0)
-
-    @model_validator(mode="after")
-    def at_least_one_figure(self) -> Self:
-        if all(getattr(self, field) is None for field in _TOKEN_FIELDS):
-            raise ValueError("token usage requires at least one reported figure")
-        return self
-
 
 class ToolUsageIngestRecord(WireRequest):
     """One call, as the local tool reports it. No account id: the authenticated session that
@@ -66,9 +46,15 @@ class ToolUsageIngestRecord(WireRequest):
     provider: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_-]*$")
     model_id: str = Field(min_length=1, max_length=160)
     route: ToolUsageRoute
-    usage: ToolTokenUsage
+    usage: TokenCounts
     cost_usd: float | None = Field(default=None, ge=0)
     recorded_at: datetime
+
+    @model_validator(mode="after")
+    def reports_a_figure(self) -> Self:
+        if not self.usage.reported:
+            raise ValueError("token usage requires at least one reported figure")
+        return self
 
 
 class ToolUsageIngestRequest(WireRequest):
@@ -89,7 +75,7 @@ class ToolUsageRecord(WireModel):
     provider: str = Field(min_length=1, max_length=80)
     model_id: str = Field(min_length=1, max_length=160)
     route: ToolUsageRoute
-    usage: ToolTokenUsage
+    usage: TokenCounts
     cost_usd: float | None = Field(default=None, ge=0)
     recorded_at: datetime
 
@@ -100,12 +86,7 @@ class ToolUsageTotals(WireModel):
     the ones that didn't."""
 
     calls: int = Field(ge=0)
-    input_tokens: int | None = Field(default=None, ge=0)
-    output_tokens: int | None = Field(default=None, ge=0)
-    cache_read_input_tokens: int | None = Field(default=None, ge=0)
-    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
-    reasoning_tokens: int | None = Field(default=None, ge=0)
-    total_tokens: int | None = Field(default=None, ge=0)
+    usage: TokenCounts = TokenCounts()
     cost_usd: float | None = Field(default=None, ge=0)
 
 

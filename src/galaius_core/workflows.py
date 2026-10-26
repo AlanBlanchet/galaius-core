@@ -7,13 +7,14 @@ import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
 from collections.abc import Iterable, Iterator, Mapping
-from typing import Annotated, Any, ClassVar, Literal, Self, get_args
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, get_args
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AfterValidator, BaseModel, BeforeValidator, PlainSerializer, ConfigDict, Field, FiniteFloat, TypeAdapter, HttpUrl, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, FiniteFloat, HttpUrl, PlainSerializer, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, TypeAdapter, ValidationError, field_validator, model_serializer, model_validator
 
-from .cost import NodeCostActual, NodeUsage, RunCostActual
+from .cost import NodeCostActual, RunCostActual
+from .tokens import TokenCounts
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
 from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
@@ -4231,6 +4232,54 @@ class ScreenRefusal(Kinded):
 MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal, Field(discriminator="kind")]
 
 
+#: What a party refuses, typed once (`Refused`): the reason, for its reader to word in its own language (the refusing party
+#: cannot know it), and its English sentence for the logs (`str(error)`). A PC's runtime raises it, the server raises and reads it.
+R = TypeVar("R")
+#: The kinds a machine answer carries (`MachineAgentAnswer.refusal`): an agent, a subscription or a screen refusal.
+ANSWERED: tuple[type[BaseModel], ...] = get_args(get_args(MachineRefusal)[0])
+
+
+def _restored(kind: type["Refused[Any]"], state: dict[str, Any], sentence: str) -> "Refused[Any]":
+    """A pickled or copied refusal, rebuilt without its kind's own constructor (`Refused.__reduce__`)."""
+    error = kind.__new__(kind)
+    PermissionError.__init__(error, sentence)
+    error.__dict__.update(state)
+    return error
+
+
+class Refused(PermissionError, Generic[R]):
+    """A refusal: `refusal` its reason, typed `R`. A kind declares its type parameter alone (`class AgentRefused(
+    Refused[AgentRefusal])`); a bare reason builds that kind's model, validated here (`AgentRefused("web_full", "4
+    conversations … stop one first")`) — every refusal model names its reason `reason`.
+
+    A `PermissionError` (an `OSError`): every path that answers a refusal already catches it; an `except OSError` around
+    a call that refuses catches it too."""
+
+    _reasons: ClassVar[TypeAdapter[Any]]
+    _model: ClassVar[bool]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        declared = next((get_args(base)[0] for base in cls.__dict__.get("__orig_bases__", ()) if getattr(base, "__origin__", None) is Refused), None)
+        if declared is not None:
+            cls._reasons = TypeAdapter(declared)
+            cls._model = isinstance(declared, type) and issubclass(declared, BaseModel)
+
+    def __init__(self, refusal: R | str | None, sentence: str) -> None:
+        super().__init__(sentence)
+        self.refusal: R = self._reasons.validate_python({"reason": refusal} if self._model and isinstance(refusal, str) else refusal)
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return _restored, (type(self), dict(self.__dict__), str(self))
+
+    @staticmethod
+    def refusal_of(error: BaseException) -> MachineRefusal | None:
+        """The refusal a machine answer carries for `error` (`MachineAgentAnswer.refusal`): its typed reason when it is a
+        `Refused` of one of the answer's kinds; None for any other error."""
+        refusal = error.refusal if isinstance(error, Refused) else None
+        return refusal if isinstance(refusal, ANSWERED) else None
+
+
 class MachineAgentAnswer(WireModel):
     """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` and the
     startable `roles` when no root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
@@ -4827,57 +4876,6 @@ class StepEvent(WireModel):
     model: dict[str, object] | None = None
 
 
-class ProviderUsage(WireModel):
-    """One provider response's tokens in ONE additive shape, whatever the vendor — normalized at
-    the edge that parses the response: `input_tokens` = prompt tokens neither read from nor
-    written to a cache, the two cache fields = the cached rest of the prompt, `output_tokens`
-    includes reasoning. Anthropic reports this shape natively; OpenAI and Gemini count cached
-    tokens INSIDE their prompt figure, so they are carved out on the way in, never counted twice."""
-
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
-    total_tokens: int | None = Field(default=None, ge=0)
-    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
-    cache_read_input_tokens: int | None = Field(default=None, ge=0)
-
-    @property
-    def prompt_tokens(self) -> int:
-        """The whole prompt the model saw: uncached + cache reads + cache writes."""
-        return self.input_tokens + (self.cache_read_input_tokens or 0) + (self.cache_creation_input_tokens or 0)
-
-    @property
-    def counted_tokens(self) -> int:
-        """Prompt + output from the normalized fields — what every total sums. The vendor's own
-        `total_tokens` is kept verbatim but never summed: OpenAI's includes cached tokens, Gemini's
-        includes thinking, Anthropic sends none."""
-        return self.prompt_tokens + self.output_tokens
-
-    def metered(self) -> NodeUsage:
-        """The billable units, each cache kind at its own rate."""
-        return NodeUsage(token_in=self.input_tokens, token_cache_read=self.cache_read_input_tokens, token_cache_write=self.cache_creation_input_tokens, token_out=self.output_tokens)
-
-    @classmethod
-    def from_metered(cls, usage: NodeUsage) -> Self | None:
-        """The token half of a node's metered usage; None for a node not priced per token."""
-        if usage.token_in is None and usage.token_out is None:
-            return None
-        return cls(input_tokens=usage.token_in or 0, output_tokens=usage.token_out or 0, cache_read_input_tokens=usage.token_cache_read, cache_creation_input_tokens=usage.token_cache_write)
-
-    @classmethod
-    def combined(cls, usages: Iterable[Self]) -> Self:
-        """Several responses (an agent's turns) as one; a cache field stays None when no response
-        reported it, never a synthetic zero."""
-        usages = tuple(usages)
-
-        def total(field: str) -> int | None:
-            reported = [value for usage in usages if (value := getattr(usage, field)) is not None]
-            return sum(reported) if reported else None
-
-        return cls(input_tokens=sum(usage.input_tokens for usage in usages), output_tokens=sum(usage.output_tokens for usage in usages),
-                   total_tokens=sum(usage.counted_tokens for usage in usages),
-                   cache_creation_input_tokens=total("cache_creation_input_tokens"), cache_read_input_tokens=total("cache_read_input_tokens"))
-
-
 class WorkflowAgentActivity(WireModel):
     id: UUID
     parent_activity_id: UUID | None = None
@@ -4886,7 +4884,7 @@ class WorkflowAgentActivity(WireModel):
     agent: AgentRevisionRef
     status: Literal["succeeded"]
     provider_response_id: str = Field(min_length=1, max_length=256)
-    usage: ProviderUsage
+    usage: TokenCounts
 
 
 class WorkflowValueSummary(WireModel):
@@ -4928,7 +4926,7 @@ class ConversationMessage(WireModel):
     content: str = Field(min_length=1, max_length=1 << 20)
     created_at: datetime
     provider_response_id: str | None = Field(default=None, max_length=256)
-    usage: ProviderUsage | None = None
+    usage: TokenCounts | None = None
 
 
 class ConversationCreateRequest(WireRequest):
@@ -5015,8 +5013,6 @@ class BudgetPolicy(WireModel):
 
 
 class UsageSummary(WireModel):
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
-    total_tokens: int = Field(ge=0)
+    usage: TokenCounts
     provider_calls: int = Field(ge=0)
     period_start: datetime

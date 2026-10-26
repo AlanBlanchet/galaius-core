@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .wire import WireModel, WireRequest
-from .workflows import ProviderUsage
+from .tokens import TokenCounts
 from .permissions import Permission
 
 
@@ -81,45 +81,33 @@ class UsageRecord(WireModel):
     workspace_id: UUID
     source: UsageSourceRef
     provenance: Literal["measured", "estimated", "unknown"]
-    #: The whole prompt, cache reads and writes included; the two cache fields are the parts of it
-    #: read from / written to the provider's cache (None when the provider reported no cache).
-    input_tokens: int | None = Field(default=None, ge=0)
-    output_tokens: int | None = Field(default=None, ge=0)
-    total_tokens: int | None = Field(default=None, ge=0)
-    cache_read_input_tokens: int | None = Field(default=None, ge=0)
-    cache_creation_input_tokens: int | None = Field(default=None, ge=0)
+    #: What the call used (None: unknown); its total is `usage.counted`.
+    usage: TokenCounts | None = None
     recorded_at: datetime
 
     @classmethod
-    def measured(cls, usage: ProviderUsage, **identity) -> Self:
-        """A provider-reported usage as a measured record: the whole prompt as input (cache reads
-        and writes included, and named apart), so `total = input + output` holds for every vendor."""
-        return cls(provenance="measured", input_tokens=usage.prompt_tokens, output_tokens=usage.output_tokens, total_tokens=usage.counted_tokens,
-                   cache_read_input_tokens=usage.cache_read_input_tokens, cache_creation_input_tokens=usage.cache_creation_input_tokens, **identity)
+    def measured(cls, usage: TokenCounts, **identity) -> Self:
+        """A provider-reported usage as a measured record."""
+        return cls(provenance="measured", usage=usage, **identity)
 
     @model_validator(mode="after")
     def coherent_usage(self) -> Self:
         if self.provenance == "unknown":
-            if self.input_tokens is not None or self.output_tokens is not None or self.total_tokens is not None:
+            if self.usage is not None:
                 raise ValueError("unknown usage cannot carry synthetic zeroes or estimates")
             return self
-        if self.input_tokens is None or self.output_tokens is None or self.total_tokens is None:
+        if self.usage is None or self.usage.input is None or self.usage.output is None:
             raise ValueError("measured and estimated usage require complete token quantities")
-        if self.total_tokens != self.input_tokens + self.output_tokens:
-            raise ValueError("usage total must equal input plus output tokens")
         if self.provenance == "measured" and self.source.provider_response_id is None:
             raise ValueError("provider-reported usage requires a provider response id")
         return self
 
 
 class UsageTotals(WireModel):
-    input_tokens: int = Field(ge=0)
-    output_tokens: int = Field(ge=0)
-    total_tokens: int = Field(ge=0)
+    """What a period's calls of one provenance used, summed (`TokenCounts.sum`)."""
+
+    usage: TokenCounts
     calls: int = Field(ge=0)
-    #: Parts of `input_tokens` read from / written to the provider's cache.
-    cache_read_input_tokens: int = Field(default=0, ge=0)
-    cache_creation_input_tokens: int = Field(default=0, ge=0)
 
 
 class UsageProvenanceSummary(WireModel):
