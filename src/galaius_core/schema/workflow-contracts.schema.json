@@ -4213,7 +4213,7 @@
     },
     "TokenCounts": {
       "additionalProperties": true,
-      "description": "Tokens one model call used, or a sum of calls: `input` the prompt tokens neither read from nor written to a cache\n(the full input rate), `cache_read` / `cache_write` the cached rest of the prompt (each at its own rate), `output`\nthe reply, reasoning included (`reasoning` the part of it a vendor names apart). Anthropic reports this shape\nnatively; OpenAI and Gemini count cached tokens inside their prompt figure and a PC's run record counts the whole\nprompt in its input: each is carved out at its own edge, never counted twice. A figure nothing reported is None,\nnever a synthetic zero.",
+      "description": "Tokens one model call used, or a sum of calls: `input` the prompt tokens neither read from nor written to a cache\n(the full input rate), `cache_read` / `cache_write` the cached rest of the prompt (each at its own rate), `output`\nthe reply, reasoning included (`reasoning` the part of it a vendor names apart). Anthropic reports this shape\nnatively; OpenAI and Gemini count cached tokens inside their prompt figure: carved out at the edge reading their\nresponse, never counted twice. A figure nothing reported is None, never a synthetic zero.",
       "properties": {
         "cache_read": {
           "anyOf": [

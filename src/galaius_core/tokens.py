@@ -17,9 +17,8 @@ class TokenCounts(WireModel):
     """Tokens one model call used, or a sum of calls: `input` the prompt tokens neither read from nor written to a cache
     (the full input rate), `cache_read` / `cache_write` the cached rest of the prompt (each at its own rate), `output`
     the reply, reasoning included (`reasoning` the part of it a vendor names apart). Anthropic reports this shape
-    natively; OpenAI and Gemini count cached tokens inside their prompt figure and a PC's run record counts the whole
-    prompt in its input: each is carved out at its own edge, never counted twice. A figure nothing reported is None,
-    never a synthetic zero."""
+    natively; OpenAI and Gemini count cached tokens inside their prompt figure: carved out at the edge reading their
+    response, never counted twice. A figure nothing reported is None, never a synthetic zero."""
 
     input: int | None = Field(default=None, ge=0)
     output: int | None = Field(default=None, ge=0)
@@ -61,8 +60,8 @@ class TokenCounts(WireModel):
 
     @classmethod
     def of_prompt(cls, prompt: int | None, output: int | None, cache_read: int | None = None, cache_write: int | None = None) -> Self:
-        """A count whose source reports the WHOLE prompt (cache reads and writes inside it: a PC's run record, OpenAI's
-        `prompt_tokens`): its uncached part carved out, never counted twice."""
+        """A count whose source reports the WHOLE prompt (cache reads and writes inside it: OpenAI's `prompt_tokens`):
+        its uncached part carved out, never counted twice."""
         return cls(input=None if prompt is None else max(prompt - (cache_read or 0) - (cache_write or 0), 0), output=output, cache_read=cache_read, cache_write=cache_write)
 
     @property
