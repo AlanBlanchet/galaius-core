@@ -191,6 +191,7 @@ from .screen import (
     ScreenOpenBody, ScreenOpened, ScreenPasskey, ScreenPoint, ScreenReadiness, ScreenRect, ScreenScroll, ScreenSealed,
     ScreenSpec, ScreenStats, ScreenText, ScreenTrust, ScreenViewerMessage, Timing, b64url, unb64url,
 )
+from .community import CommunityAuthor, CommunityKind, CommunityLicenceClass, CommunityPage, CommunityPrompt, CommunityQuery, CommunitySort, CommunitySource, CommunitySources
 from .media import MEDIA_INPUT_BYTES, MEDIA_TOOLS, MediaAnswer, MediaFile, MediaImage, MediaKind, MediaQuote, MediaRequest, MediaSpec, Model3DSpec, MusicSpec, SoundSpec, SpeechSpec, TranslationSpec
 from .paid_use import (
     CHARGE_WORDS,
@@ -266,6 +267,7 @@ __all__ = [
     "MACHINE_TOOLS", "MACHINE_TOOLS_FEATURE", "MachineToolName", "MachineToolPhase", "MachineToolSpec", "MachineToolState",
     "ENDED", "PC_WORDS", "RUN_STATES", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally",
     "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
+    "CommunityAuthor", "CommunityKind", "CommunityLicenceClass", "CommunityPage", "CommunityPrompt", "CommunityQuery", "CommunitySort", "CommunitySource", "CommunitySources",
     "MEDIA_INPUT_BYTES", "MEDIA_TOOLS", "MediaAnswer", "MediaFile", "MediaImage", "MediaKind", "MediaQuote", "MediaRequest", "MediaSpec", "Model3DSpec", "MusicSpec", "SoundSpec", "SpeechSpec", "TranslationSpec",
     "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
