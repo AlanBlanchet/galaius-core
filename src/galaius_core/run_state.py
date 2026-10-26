@@ -22,14 +22,14 @@ STATE_OF_STATUS: dict[str, RunState] = {"queued": "working", "starting": "workin
 
 
 def state_of(word: str) -> RunState:
-    """A PC's word for its run (`MachineAgentRun.status`, its record's `status`) as every reader says it. A word this reader
-    does not know (a newer PC's) reads `working`: a run is never shown ended on a guess, and the host's process check
+    """A run's own word (a PC's agent run, a workflow or chat run: `STATE_OF_STATUS`) as every reader says it. A word this
+    reader does not know (a newer PC's or server's) reads `working`: a run is never shown ended on a guess, and the host's process check
     ends it once its process is gone."""
     return STATE_OF_STATUS.get(word, "working")
 
 
-#: Every word a PC says of its run (`state_of` reads them): a line that is only one of them says nothing of its own.
-PC_WORDS: frozenset[str] = frozenset(STATE_OF_STATUS)
+#: Every word a run's own record says of it (`state_of` reads them): a line that is only one of them says nothing of its own.
+RUN_WORDS: frozenset[str] = frozenset(STATE_OF_STATUS)
 #: How several runs read as one, strongest first: any at work, else any waiting for its person, else the worst ending.
 _RANK: tuple[RunState, ...] = ("working", "waiting", "lost", "failed", "stopped", "done")
 
@@ -122,4 +122,4 @@ def forest(rows: Mapping[str, RunRow], held: Mapping[str, RunTree] | None = None
     return placed
 
 
-__all__ = ["ENDED", "PC_WORDS", "RUN_STATES", "STATE_OF_STATUS", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally"]
+__all__ = ["ENDED", "RUN_STATES", "RUN_WORDS", "STATE_OF_STATUS", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally"]
