@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .wire import WireModel, WireRequest
+from .status_words import StatusWord
 from .workflows import GitUrl
 
 #: What a person (or agent) may do with a resource. Each verb implies every verb before it.
@@ -29,16 +30,6 @@ GranteeKind = Literal["account", "group", "agent"]
 #: everyone in the company.
 Audience = Literal["private", "shared", "company"]
 PlaceKind = Literal["account", "computer", "server", "company_drive"]
-#: Every status word a client shows, the ONE key set: a client's word table is keyed by exactly these (generated from
-#: here), so a word shown and a word sent are spelled once. Each word has one label per language, kept by the client.
-StatusWord = Literal["working", "at-work", "working-again", "pc-away", "silent", "resuming", "sign-in", "limit-paused",
-                     "limit-held", "limit-over", "cap-held", "cap-cut", "on-agents", "waiting", "awaiting", "needs-you",
-                     "done", "failed", "stopped", "lost", "relaunched", "retrying", "skipped", "not-run", "pinned", "idle",
-                     "to-launch", "never-run", "ready", "low", "nothing-owed", "cap-reached", "empty", "paused", "checking",
-                     "online", "runs-nothing", "not-answering", "offline", "connecting", "not-connected-yet", "not-connecting",
-                     "not-connected", "connected", "reconnect", "error", "not-tested", "needs-access", "active", "trial",
-                     "payment-due", "held", "cancelled", "suspended", "not-subscribed", "verified", "not-verified", "saved",
-                     "revoked", "linked", "on", "off", "to-install", "on-pc", "cannot", "installed", "unknown"]
 
 
 class PersonRef(WireModel):

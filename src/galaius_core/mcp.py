@@ -22,6 +22,7 @@ from uuid import UUID
 from pydantic import Field, SecretStr, field_validator, model_validator
 
 from .resources import Audience, PersonRef, Verb
+from .status_words import StatusWord
 from .wire import WireModel, WireRequest
 from .workflows import MCP_SERVER_ID, McpToolName
 
@@ -29,6 +30,9 @@ McpTransport = Literal["remote", "pc"]
 #: ready: its approved tools serve; needs_approval: never approved; changed: its list moved since
 #: the approval (it serves nothing until approved again); unreachable: the last read of its list failed.
 McpServerStatus = Literal["ready", "needs_approval", "changed", "unreachable"]
+#: Its state as a word of the one status table (`STATUS_TEXT`): what the server's lists and every screen say of it — waiting
+#: on an approval (first, or again once its list changed) is waiting on its manager.
+MCP_STATUS_WORD: dict[McpServerStatus, StatusWord] = {"ready": "connected", "needs_approval": "needs-you", "changed": "needs-you", "unreachable": "error"}
 #: How a remote server is signed in to: nothing, a bearer token (an API key or an access token the
 #: vendor issued) in `Authorization`, or a key in a header the vendor names.
 McpAuthKind = Literal["none", "bearer", "header"]

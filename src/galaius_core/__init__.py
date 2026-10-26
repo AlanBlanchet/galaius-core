@@ -1,6 +1,7 @@
 """Provider-independent prompt distribution contracts."""
 
 from .run_state import ENDED, PC_WORDS, RUN_STATES, RunRow, RunState, RunTree, forest, state_of, tally
+from .status_words import STATUS_TEXT, StatusPlural, StatusText, StatusWord
 from .tool_settings import PortableToolSettings, PortableToolSettingsUpdate, PortableToolSettingsValues
 from .tool_usage import (
     ToolTokenUsage,
@@ -265,6 +266,7 @@ from .pool import (
 
 __all__ = [
     "MACHINE_TOOLS", "MACHINE_TOOLS_FEATURE", "MachineToolName", "MachineToolPhase", "MachineToolSpec", "MachineToolState",
+    "STATUS_TEXT", "StatusPlural", "StatusText", "StatusWord",
     "ENDED", "PC_WORDS", "RUN_STATES", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally",
     "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
     "CommunityAuthor", "CommunityKind", "CommunityLicenceClass", "CommunityPage", "CommunityPrompt", "CommunityQuery", "CommunitySort", "CommunitySource", "CommunitySources",
