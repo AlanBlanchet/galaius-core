@@ -94,14 +94,18 @@ class ScreenSpec(WireRequest):
         """Fewer bytes per frame: the link could not carry the last one in its frame budget."""
         return self._stepped(-1)
 
-    def sharper(self) -> Self:
-        """More bytes per frame: the link carried the last one well inside its frame budget."""
-        return self._stepped(+1)
+    def sharper(self, cap: "ScreenSpec | None" = None) -> Self:
+        """More bytes per frame: the link carried the last ones well inside its budget — never past
+        `cap` on either ladder (what the viewer asked for)."""
+        richer = self._stepped(+1)
+        if cap is None:
+            return richer
+        return richer.model_copy(update={"width": min(richer.width, cap.width), "quality": min(richer.quality, cap.quality)})
 
     @property
-    def frame_budget_ms(self) -> float:
-        """How long one frame may take end to end at `max_fps` — the number the adaptation reads."""
-        return 1000.0 / self.max_fps
+    def level(self) -> tuple[int, int]:
+        """Where this spec stands on the two ladders: what tells one step from another."""
+        return (self.width, self.quality)
 
 
 class ScreenFrame(WireModel):
@@ -249,6 +253,39 @@ SCREEN_ACTS: TypeAdapter[ScreenAct] = TypeAdapter(Annotated[ScreenAct, Field(dis
 SCREEN_ACTS_MAX = 64
 
 
+#: Why a computer refused or ended a view, typed: the page words it in its reader's language, which
+#: the computer cannot know (its own locale is not the page's), and the computer's English sentence
+#: stays beside it for the logs (`MachineAgentAnswer.error`, `ScreenAllowance.why`, `ScreenEnded.why`).
+#: Three situations, three types: a switch that is off, an offer refused, a view that ended.
+ScreenOffReason = Literal[
+    "sharing_off",      # its switch is off: never on, `galaius screen off`, or its hours ran out
+    "stopped_here",     # Stop on its badge, or Ctrl+Alt+Shift+S
+]
+ScreenOpenRefusal = Literal[
+    "sharing_off",      # its switch is off
+    "passkey_new",      # a passkey it has not pinned: `galaius screen trust <id>` typed there lets it watch
+    "passkey_unknown",  # a passkey it does not trust (forgotten there, or another browser's)
+    "offer_expired",    # the offer ran out, or asked for more than `SCREEN_SESSION_MAX`
+    "offer_used",       # this offer already opened a view: a replay
+    "wrong_site",       # the offer or the passkey came from another address than the one it serves
+    "not_verified",     # the passkey was used without its owner verified on the device
+    "refused",          # malformed, forged, or for another computer
+]
+ScreenEndReason = Literal[
+    ScreenOffReason,    # its switch went off during the view, or Stop on its badge
+    "minutes_over",     # the minutes its offer named are over
+    "no_badge",         # it could not show that it is being watched, so it is not
+    "message_lost",     # a viewer message was lost on the way: the view ended rather than act out of order
+    "viewer_gone",      # no frame taken for a while: a phone locked, a tab closed
+    "link_lost",        # its link to the server stopped carrying frames
+    "failed",           # something on it failed under the view (its display, its capture)
+    "newer_view",       # a newer view of this computer was opened
+    "ended",            # the viewer ended it (or the server, on the viewer's behalf)
+]
+#: Every word a page has to say about it, for one table of wordings.
+ScreenRefusalReason = ScreenOffReason | ScreenOpenRefusal | ScreenEndReason
+
+
 class ScreenAllowance(WireModel):
     """Whether this computer lets its owner watch it, as the computer itself decides.
 
@@ -258,7 +295,9 @@ class ScreenAllowance(WireModel):
     allowed: bool = False
     #: When the allowance runs out (None: no limit while it is on).
     until: datetime | None = None
-    #: Why it is off, in the owner's own words, when it is.
+    #: Why it is off, when it is: typed for the page to word (`ScreenOffReason`), and the
+    #: computer's own sentence.
+    reason: ScreenOffReason | None = None
     why: str = ""
 
     #: The default life of an allowance the owner switches on: long enough for an evening's work,
@@ -434,6 +473,16 @@ class ScreenSealed(WireModel):
         if len(raw) < 8 + 16:
             raise ValueError("a sealed message is its sequence, then at least a GCM tag")
         return cls(session=session, seq=int.from_bytes(raw[:8], "big"), data=raw[8:])
+
+
+class ScreenEnded(WireModel):
+    """The computer ended a view (`type` ``screen_ended`` on its machine link): which, and why — typed
+    for the page to word (`reason`), with its own English sentence for the logs (`why`)."""
+
+    type: Literal["screen_ended"] = "screen_ended"
+    session: UUID
+    reason: ScreenEndReason
+    why: str = Field(default="", max_length=400)
 
 
 class ScreenViewerMessage(WireRequest):

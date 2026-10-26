@@ -779,7 +779,8 @@ def test_a_screen_spec_walks_its_ladders_and_stops_at_both_ends():
     assert (asked.lighter().width, asked.lighter().quality) == (960, 45)
     assert ScreenSpec(width=SCREEN_WIDTHS[0], quality=SCREEN_QUALITIES[0]).lighter().width == SCREEN_WIDTHS[0]
     assert ScreenSpec(width=SCREEN_WIDTHS[-1], quality=SCREEN_QUALITIES[-1]).sharper().quality == SCREEN_QUALITIES[-1]
-    assert ScreenSpec(max_fps=10).frame_budget_ms == 100
+    assert ScreenSpec(width=960, quality=45).sharper(cap=asked).level == asked.level, "up to what the viewer asked"
+    assert asked.sharper(cap=asked).level == asked.level, "and never past it"
 
 
 def test_an_allowance_runs_out_by_itself():

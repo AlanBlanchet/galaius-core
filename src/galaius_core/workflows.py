@@ -23,7 +23,7 @@ from .wire import WireModel, WireRequest
 from .file_tools import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from .media import MEDIA_TOOLS
 from .machine_tools import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolState
-from .screen import SCREEN_FEATURE, ScreenOpenBody, ScreenOpened, ScreenReadiness
+from .screen import SCREEN_FEATURE, ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
 
 #: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
 #: PC capability's (`MACHINE_TOOLS`).
@@ -4285,6 +4285,8 @@ class MachineAgentAnswer(WireModel):
     screen: ScreenReadiness | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `screen_open`: the session the PC opened for a passkey it verified itself.
     screen_opened: ScreenOpened | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: `screen_open` refused: why, typed, for the page to word (`error` keeps the PC's English sentence).
+    screen_refusal: ScreenOpenRefusal | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _port_slug(label: str) -> str:
