@@ -264,6 +264,17 @@ class WireModel(BaseModel):
         return data
 
 
+def _kind_required(schema: dict[str, Any]) -> None:
+    schema["required"] = sorted({*schema.get("required", ()), "kind"})
+
+
+class Kinded(WireModel):
+    """One member of a union discriminated on `kind`, whose `kind` defaults to its own: read without it from a sender
+    older than the union, always written with it, and required in its schema (a page narrows the union on it)."""
+
+    model_config = ConfigDict(json_schema_extra=_kind_required)
+
+
 class WireRequest(WireModel):
     """A contract only a client authors and sends: an unknown field is refused."""
 

@@ -19,7 +19,7 @@ from .prompts import PromptExecutionRef, PromptRevision
 from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from .run_state import RunRow, RunState, state_of
-from .wire import WireModel, WireRequest
+from .wire import Kinded, WireModel, WireRequest
 from .file_tools import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from .media import MEDIA_TOOLS
 from .machine_tools import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolState
@@ -4212,6 +4212,25 @@ class WebLoad(WireModel):
 AgentRefusalCode = WorkspaceFailureCode | Literal["web_full", "under_way"]
 
 
+class AgentRefusal(Kinded):
+    """A PC's refusal of an agent request, typed (`AgentRefusalCode`): one kind of `MachineRefusal`."""
+
+    kind: Literal["agent"] = "agent"
+    reason: AgentRefusalCode
+
+
+class ScreenRefusal(Kinded):
+    """A PC's refusal to open a view of its screen, typed (`ScreenOpenRefusal`): one kind of `MachineRefusal`."""
+
+    kind: Literal["screen"] = "screen"
+    reason: ScreenOpenRefusal
+
+
+#: Why a PC refused a request, typed for the page to word from one `(kind, reason)` table in its reader's language (the PC
+#: cannot know it); `MachineAgentAnswer.error` keeps the PC's English sentence for the logs.
+MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal, Field(discriminator="kind")]
+
+
 class MachineAgentAnswer(WireModel):
     """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` and the
     startable `roles` when no root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
@@ -4219,8 +4238,8 @@ class MachineAgentAnswer(WireModel):
 
     request_id: UUID
     error: str | None = Field(default=None, max_length=400)
-    #: Why, typed, when the refusal is about a subscription (`SubscriptionRefusal`): the server words it.
-    subscription_refusal: SubscriptionRefusal | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: Why it refused, typed (`MachineRefusal`): `error` is the PC's English sentence for the logs.
+    refusal: MachineRefusal | None = Field(default=None, exclude_if=lambda value: value is None)
     #: A started run's subscription, the one its launch walk pinned it to (None: the PC's own login, or lent).
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     roots: tuple[str, ...] = Field(default=(), max_length=32)
@@ -4265,8 +4284,6 @@ class MachineAgentAnswer(WireModel):
     origin: GitRemote | None = None
     #: `workspace_pack`: what copying the folder sends.
     pack: WorkspacePack | None = None
-    #: A refusal the server words for the owner (with `error`, the PC's English for the log).
-    code: AgentRefusalCode | None = None
     #: `start` in a project folder the PC cloned from the web: whether it was fast-forwarded to its
     #: remote first (`WorkspaceRefresh`; None: not such a folder).
     refresh: WorkspaceRefresh | None = None
@@ -4285,8 +4302,6 @@ class MachineAgentAnswer(WireModel):
     screen: ScreenReadiness | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `screen_open`: the session the PC opened for a passkey it verified itself.
     screen_opened: ScreenOpened | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: `screen_open` refused: why, typed, for the page to word (`error` keeps the PC's English sentence).
-    screen_refusal: ScreenOpenRefusal | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _port_slug(label: str) -> str:

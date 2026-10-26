@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel, WireRequest
+from .wire import Kinded, WireModel, WireRequest
 
 #: The coding-agent CLIs a PC runs agents through, each a vendor whose login a subscription is.
 AgentProvider = Literal["claude", "codex"]
@@ -156,10 +156,11 @@ class SubscriptionChoices(Lent):
 SubscriptionRefusalReason = Literal["capped", "lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed", "usage_limit", "session_missing"]
 
 
-class SubscriptionRefusal(WireModel):
+class SubscriptionRefusal(Kinded):
     """A PC's refusal about a subscription, typed: the server words it (`reason`, `cap` when `capped`, `resets_at` when
-    the vendor's `usage_limit` window reopens)."""
+    the vendor's `usage_limit` window reopens). One kind of `MachineRefusal`."""
 
+    kind: Literal["subscription"] = "subscription"
     reason: SubscriptionRefusalReason
     cap: SubscriptionCap | None = None
     resets_at: datetime | None = Field(default=None, exclude_if=lambda value: value is None)

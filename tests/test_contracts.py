@@ -790,3 +790,16 @@ def test_an_allowance_runs_out_by_itself():
     now = datetime(2026, 10, 23, 12, 0, tzinfo=UTC)
     assert ScreenAllowance(allowed=True, until=now + timedelta(minutes=1)).live(now)
     assert not ScreenAllowance(allowed=True, until=now - timedelta(seconds=1)).live(now)
+
+
+@pytest.mark.parametrize("refusal", [{"kind": "agent", "reason": "web_full"}, {"kind": "subscription", "reason": "usage_limit", "resets_at": "2026-10-26T12:00:00Z"},
+                                     {"kind": "screen", "reason": "passkey_new"}])
+def test_a_machine_answer_carries_one_typed_refusal_of_any_kind(refusal):
+    """One `refusal` field, a union on `kind` (code / subscription_refusal / screen_refusal were three for one idea); an
+    older PC's own fields are kept as extras on the answer for the server to map at its edge."""
+    answer = MachineAgentAnswer.model_validate({"request_id": str(uuid4()), "error": "refused here", "refusal": refusal})
+    dumped = answer.model_dump(mode="json")
+    assert dumped["refusal"]["kind"] == refusal["kind"] and MachineAgentAnswer.model_validate(dumped) == answer
+    assert "refusal" not in MachineAgentAnswer(request_id=answer.request_id).model_dump(mode="json")
+    older = MachineAgentAnswer.model_validate({"request_id": str(uuid4()), "error": "full", "code": "web_full", "subscription_refusal": {"reason": "lent"}})
+    assert older.refusal is None and older.model_extra == {"code": "web_full", "subscription_refusal": {"reason": "lent"}}
