@@ -86,7 +86,7 @@ class ToolUsageTotals(WireModel):
     the ones that didn't."""
 
     calls: int = Field(ge=0)
-    usage: TokenCounts = TokenCounts()
+    usage: TokenCounts = Field(default_factory=TokenCounts)
     cost_usd: float | None = Field(default=None, ge=0)
 
 
