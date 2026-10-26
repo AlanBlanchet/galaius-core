@@ -18,9 +18,9 @@ Field-to-provider mapping, verified against each vendor's own docs
   ``cachedContentTokenCount`` is a subset of the prompt count, ``thoughtsTokenCount`` is additive
   (folded into ``totalTokenCount`` alongside prompt and candidate counts).
 
-Because the accounting relationship differs per provider, this module names the FIELDS without
-asserting one cross-provider arithmetic invariant on them — a reader interprets
-``cache_read_input_tokens``/``reasoning_tokens`` against the provider named on the same record.
+Whatever the provider, a record's ``usage`` is one ``TokenCounts`` (additive: ``input`` excludes both cache
+figures, ``output`` includes reasoning): the tool carves each vendor's figures into it as ``TokenCounts`` says,
+so every record and total adds up the same way.
 """
 
 from datetime import datetime
