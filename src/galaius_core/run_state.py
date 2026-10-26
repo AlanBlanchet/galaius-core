@@ -13,20 +13,23 @@ RunState = Literal["working", "waiting", "done", "failed", "stopped", "lost"]
 RUN_STATES: tuple[RunState, ...] = get_args(RunState)
 #: The states a run never leaves by itself.
 ENDED: frozenset[RunState] = frozenset({"done", "failed", "stopped", "lost"})
-#: A PC's own word for its run (`MachineAgentRun.status`, its launcher's record) as every reader says it.
-_STATE_OF_STATUS: dict[str, RunState] = {"running": "working", "starting": "working", "waiting": "waiting", "done": "done", "failed": "failed",
-                                         "cancelled": "stopped", "stopped": "stopped", "interrupted": "lost", "crashed": "lost"}
+#: Every word a run's own record says of it as every reader says it, ONE table: a PC's agent run (`MachineAgentRun.status`, its
+#: launcher's record) and a workflow or chat run (`WorkflowRun.status`, `ChatRun.status`). Queued or being cancelled, it still
+#: goes; a cancel is a stop; an outcome never known is lost.
+STATE_OF_STATUS: dict[str, RunState] = {"queued": "working", "starting": "working", "running": "working", "cancelling": "working", "waiting": "waiting",
+                                        "done": "done", "succeeded": "done", "failed": "failed", "cancelled": "stopped", "stopped": "stopped",
+                                        "interrupted": "lost", "crashed": "lost", "unknown_outcome": "lost"}
 
 
 def state_of(word: str) -> RunState:
     """A PC's word for its run (`MachineAgentRun.status`, its record's `status`) as every reader says it. A word this reader
     does not know (a newer PC's) reads `working`: a run is never shown ended on a guess, and the host's process check
     ends it once its process is gone."""
-    return _STATE_OF_STATUS.get(word, "working")
+    return STATE_OF_STATUS.get(word, "working")
 
 
 #: Every word a PC says of its run (`state_of` reads them): a line that is only one of them says nothing of its own.
-PC_WORDS: frozenset[str] = frozenset(_STATE_OF_STATUS)
+PC_WORDS: frozenset[str] = frozenset(STATE_OF_STATUS)
 #: How several runs read as one, strongest first: any at work, else any waiting for its person, else the worst ending.
 _RANK: tuple[RunState, ...] = ("working", "waiting", "lost", "failed", "stopped", "done")
 
@@ -119,4 +122,4 @@ def forest(rows: Mapping[str, RunRow], held: Mapping[str, RunTree] | None = None
     return placed
 
 
-__all__ = ["ENDED", "PC_WORDS", "RUN_STATES", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally"]
+__all__ = ["ENDED", "PC_WORDS", "RUN_STATES", "STATE_OF_STATUS", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally"]

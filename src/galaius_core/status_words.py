@@ -12,10 +12,10 @@ StatusWord = Literal["working", "at-work", "working-again", "pc-away", "silent",
                      "done", "failed", "stopped", "lost", "relaunched", "retrying", "skipped", "not-run", "pinned", "idle",
                      "to-launch", "never-run", "ready", "low", "nothing-owed", "cap-reached", "empty", "paused", "checking",
                      "online", "runs-nothing", "not-answering", "offline", "connecting", "not-connected-yet", "not-connecting",
-                     "not-connected", "signed-out", "agents-off", "no-programs", "outdated", "connected", "reconnect", "error",
-                     "not-tested", "needs-access", "active", "trial", "payment-due", "held", "cancelled", "suspended",
-                     "not-subscribed", "verified", "not-verified", "saved", "revoked", "linked", "on", "off", "to-install",
-                     "on-pc", "cannot", "installed", "unknown"]
+                     "not-connected", "signed-out", "agents-off", "no-programs", "outdated", "no-folder", "connected",
+                     "reconnect", "error", "not-tested", "needs-access", "active", "trial", "payment-due", "held", "cancelled",
+                     "suspended", "not-subscribed", "verified", "not-verified", "saved", "revoked", "linked", "on", "off",
+                     "to-install", "on-pc", "cannot", "installed", "unknown"]
 
 #: English, then French.
 Said = tuple[str, str]
@@ -93,6 +93,7 @@ STATUS_TEXT: dict[StatusWord, StatusText] = {
     "agents-off": StatusText(label=("Agents off", "Agents arrêtés"), meaning=("Agents are switched off on this PC.", "Les agents sont désactivés sur ce PC."), next=("Turn them on from its page.", "Activez-les depuis sa page.")),
     "no-programs": StatusText(label=("No agent program", "Aucun programme"), meaning=("No agent program is installed on this PC.", "Aucun programme d’agent n’est installé sur ce PC."), next=("Install one from its page.", "Installez-en un depuis sa page.")),
     "outdated": StatusText(label=("To update", "À mettre à jour"), meaning=("Galaius on this PC is too old for this.", "Galaius est trop ancien sur ce PC pour ceci."), next=("Update it from its page.", "Mettez-le à jour depuis sa page.")),
+    "no-folder": StatusText(label=("No folder", "Pas de dossier"), meaning=("The project has no folder on this PC.", "Le projet n’a pas de dossier sur ce PC."), next=("Choose its folder there.", "Choisissez son dossier sur ce PC.")),
     "connected": StatusText(label=("Connected", "Connecté"), meaning=("Agents you allow read it, live, where it lives.", "Les agents que vous autorisez le lisent en direct, là où c’est rangé."), next=None),
     "reconnect": StatusText(label=("Reconnect", "À reconnecter"), meaning=("The provider no longer accepts the access you gave: nothing is read until you reconnect.", "Le fournisseur n’accepte plus l’accès donné : rien n’est lu tant que vous ne reconnectez pas."), next=("Press Reconnect.", "Appuyez sur Reconnecter.")),
     "error": StatusText(label=("Error", "Erreur"), meaning=("The last read failed.", "La dernière lecture a échoué."), next=("Read the reason, then try again.", "Lisez la raison, puis réessayez.")),
@@ -121,4 +122,11 @@ STATUS_TEXT: dict[StatusWord, StatusText] = {
 if tuple(STATUS_TEXT) != get_args(StatusWord):
     raise RuntimeError("STATUS_TEXT must hold every StatusWord, in its order, and no other word")
 
-__all__ = ["STATUS_TEXT", "Said", "StatusPlural", "StatusText", "StatusWord"]
+#: A notification's status (the bell's row, a push): how its run ended — or `waiting` on HIM, or `working` once more after it
+#: had ended.
+NotificationStatus = Literal["done", "failed", "stopped", "waiting", "working"]
+#: Each as a word of the table: what the bell, a toast and a push all say of it.
+NOTIFICATION_STATUS_WORD: dict[NotificationStatus, StatusWord] = {"done": "done", "failed": "failed", "stopped": "stopped", "waiting": "needs-you",
+                                                                  "working": "working-again"}
+
+__all__ = ["NOTIFICATION_STATUS_WORD", "STATUS_TEXT", "NotificationStatus", "Said", "StatusPlural", "StatusText", "StatusWord"]

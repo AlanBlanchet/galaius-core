@@ -1,6 +1,6 @@
 import pytest
 
-from galaius_core import RunState, tally
+from galaius_core import RunState, state_of, tally
 
 
 @pytest.mark.parametrize("states, tree", [
@@ -51,3 +51,11 @@ def test_a_row_built_without_its_tree_fails() -> None:
     from galaius_core import RunTree
     with pytest.raises(ValidationError):
         RunTree(root_run_id="main", tree_state="working", tree_project="galaius")  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize(("word", "state"), [("queued", "working"), ("cancelling", "working"), ("succeeded", "done"), ("cancelled", "stopped"),
+                                             ("interrupted", "lost"), ("unknown_outcome", "lost")])
+def test_a_workflow_or_chat_run_status_reads_as_one_run_state(word: str, state: str) -> None:
+    """One table for every run's own word (a PC's agent run, a workflow run, a chat run): a cancelled run is stopped on
+    every screen, never « Annulé » in one list and « Arrêtée » in another."""
+    assert state_of(word) == state
