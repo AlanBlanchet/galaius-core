@@ -1,6 +1,7 @@
 """The status words a client shows, ONE table: every word's key (`StatusWord`) and its words in each language — its label,
 what it means, what to do next, and, for a word said about a number of things, its singular and plural (« 1 connecté »,
-« 3 connectés »). A server writing a status in a message (a push notification) and a client drawing it read the same words;
+« 3 connectés »). A run's words agree with « une exécution » (« Terminée », « Arrêtée », « Interrompue »); a person (an agent)
+has its own (« Travaille », « Attend », « Terminé »). A server writing a status in a message (a push notification) and a client drawing it read the same words;
 a client generates its own table from this one."""
 
 from typing import Literal, get_args
@@ -9,13 +10,13 @@ from pydantic import BaseModel, ConfigDict
 
 StatusWord = Literal["working", "at-work", "working-again", "pc-away", "silent", "resuming", "sign-in", "limit-paused",
                      "limit-held", "limit-over", "cap-held", "cap-cut", "on-agents", "waiting", "awaiting", "needs-you",
-                     "done", "failed", "stopped", "lost", "relaunched", "retrying", "skipped", "not-run", "pinned", "idle",
-                     "to-launch", "never-run", "ready", "low", "nothing-owed", "cap-reached", "empty", "paused", "checking",
-                     "online", "runs-nothing", "not-answering", "offline", "connecting", "not-connected-yet", "not-connecting",
-                     "not-connected", "signed-out", "agents-off", "no-programs", "outdated", "no-folder", "connected",
-                     "reconnect", "error", "not-tested", "needs-access", "active", "trial", "payment-due", "held", "cancelled",
-                     "suspended", "not-subscribed", "verified", "not-verified", "saved", "revoked", "linked", "on", "off",
-                     "to-install", "on-pc", "cannot", "installed", "unknown"]
+                     "done", "finished", "failed", "stopped", "lost", "relaunched", "retrying", "skipped", "not-run", "pinned",
+                     "idle", "to-launch", "never-run", "ready", "low", "nothing-owed", "cap-reached", "empty", "paused",
+                     "checking", "online", "runs-nothing", "not-answering", "offline", "connecting", "not-connected-yet",
+                     "not-connecting", "not-connected", "signed-out", "agents-off", "no-programs", "outdated", "no-folder",
+                     "connected", "reconnect", "error", "not-tested", "needs-access", "active", "trial", "payment-due", "held",
+                     "cancelled", "suspended", "not-subscribed", "verified", "not-verified", "saved", "revoked", "linked",
+                     "on", "off", "to-install", "on-pc", "cannot", "installed", "unknown"]
 
 #: English, then French.
 Said = tuple[str, str]
@@ -62,7 +63,8 @@ STATUS_TEXT: dict[StatusWord, StatusText] = {
     "waiting": StatusText(label=("Waiting", "En attente"), meaning=("Paused until it gets what it needs to go on.", "En pause jusqu’à ce qu’elle obtienne ce qu’il lui faut pour continuer."), next=("Open it to see what it waits for.", "Ouvrez-le pour voir ce qu’il attend.")),
     "awaiting": StatusText(label=("Waiting", "Attend"), meaning=("This agent waits for what it needs to go on.", "Cet agent attend ce qu’il lui faut pour continuer."), next=("Open it to see what it waits for.", "Ouvrez-le pour voir ce qu’il attend.")),
     "needs-you": StatusText(label=("Waiting for you", "Vous attend"), meaning=("It needs your answer: a question or an approval.", "Il lui faut votre réponse : une question ou une validation."), next=("Open it to answer.", "Ouvrez-le pour répondre.")),
-    "done": StatusText(label=("Done", "Terminé"), meaning=("Finished without error.", "Terminé sans erreur."), next=("Open it to read the result.", "Ouvrez-le pour lire le résultat.")),
+    "done": StatusText(label=("Done", "Terminée"), meaning=("Finished without error.", "Terminée sans erreur."), next=("Open it to read the result.", "Ouvrez-le pour lire le résultat.")),
+    "finished": StatusText(label=("Done", "Terminé"), meaning=("This agent's work is done.", "Le travail de cet agent est terminé."), next=("Open it to read the result.", "Ouvrez-le pour lire le résultat.")),
     "failed": StatusText(label=("Failed", "Échec"), meaning=("Did not work. Nothing else was affected.", "N’a pas fonctionné. Rien d’autre n’est touché."), next=("Open it to see why.", "Ouvrez-le pour voir pourquoi.")),
     "stopped": StatusText(label=("Stopped", "Arrêtée"), meaning=("It was stopped before the end.", "Elle a été arrêtée avant la fin."), next=("Write to it to pick it up where it stopped.", "Écrivez-lui pour la reprendre où elle s’est arrêtée.")),
     "lost": StatusText(label=("Interrupted", "Interrompue"), meaning=("It was cut off before it finished.", "Elle a été interrompue avant la fin."), next=("Write to it to pick it up where it stopped.", "Écrivez-lui pour la reprendre où elle s’est arrêtée.")),
