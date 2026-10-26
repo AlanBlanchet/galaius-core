@@ -1,16 +1,16 @@
 """Token counts in ONE type (`TokenCounts`): one additive shape and one spelling whatever the vendor, its raw names mapped
 once at the edge that reads its response."""
 
-from collections.abc import Iterable
 from typing import Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .cost import NodeUsage, UnitPrice, priced_cost
 from .wire import WireModel
 
-#: The figures of a token count, in its one spelling.
-FIGURES = ("input", "output", "cache_read", "cache_write", "reasoning")
+#: Vendor and older galaius spellings of a count's figures: read at the edge that receives them, never here.
+OLDER_NAMES = frozenset({"input_tokens", "output_tokens", "total_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "reasoning_tokens",
+                         "cached_input_tokens", "cache_write_input_tokens"})
 
 
 class TokenCounts(WireModel):
@@ -25,6 +25,15 @@ class TokenCounts(WireModel):
     cache_read: int | None = Field(default=None, ge=0)
     cache_write: int | None = Field(default=None, ge=0)
     reasoning: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def one_spelling(cls, data: object) -> object:
+        """A figure under another spelling is refused, never kept as an unknown field: read as « not reported », it would
+        undercount without a word."""
+        if isinstance(data, dict) and (older := sorted(data.keys() & OLDER_NAMES)):
+            raise ValueError(f"token figures in an older spelling ({', '.join(older)}): read them at the edge that received them")
+        return data
 
     def __add__(self, other: Self) -> Self:
         """Figure by figure: None only when neither reported it."""
@@ -51,14 +60,6 @@ class TokenCounts(WireModel):
         return self - previous if self.covers(previous) else self
 
     @classmethod
-    def sum(cls, counts: Iterable[Self]) -> Self:
-        """Several calls (an agent's turns, a period's runs) as one; none: an empty count."""
-        total = cls()
-        for count in counts:
-            total = total + count
-        return total
-
-    @classmethod
     def of_prompt(cls, prompt: int | None, output: int | None, cache_read: int | None = None, cache_write: int | None = None) -> Self:
         """A count whose source reports the WHOLE prompt (cache reads and writes inside it: OpenAI's `prompt_tokens`):
         its uncached part carved out, never counted twice."""
@@ -80,8 +81,9 @@ class TokenCounts(WireModel):
         return any(getattr(self, figure) is not None for figure in FIGURES)
 
     def metered(self) -> NodeUsage | None:
-        """The billable units, each cache kind at its own rate; None when it reports no input or output."""
-        if self.input is None and self.output is None:
+        """The billable units, each cache kind at its own rate; None when it reports none (a call read wholly from the
+        cache is billed)."""
+        if self.input is None and self.output is None and self.cache_read is None and self.cache_write is None:
             return None
         return NodeUsage(token_in=self.input, token_cache_read=self.cache_read, token_cache_write=self.cache_write, token_out=self.output)
 
@@ -95,3 +97,7 @@ class TokenCounts(WireModel):
         if usage.token_in is None and usage.token_out is None:
             return None
         return cls(input=usage.token_in, output=usage.token_out, cache_read=usage.token_cache_read, cache_write=usage.token_cache_write)
+
+
+#: The figures of a token count, in its one spelling.
+FIGURES = tuple(TokenCounts.model_fields)

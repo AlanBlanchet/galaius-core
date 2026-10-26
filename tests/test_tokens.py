@@ -17,7 +17,7 @@ PRICES = (UnitPrice(unit="token_in", usd_per_unit=3e-6), UnitPrice(unit="token_c
     ([], TokenCounts(), 0, 0.0),
 ])
 def test_token_counts_add_up_figure_by_figure_and_price_each_kind_at_its_own_rate(parts, total, prompt, usd) -> None:
-    summed = TokenCounts.sum(parts)
+    summed = sum(parts, TokenCounts())
     assert summed == total and summed.prompt == prompt and summed.counted == prompt + (summed.output or 0)
     assert summed.priced(PRICES) == pytest.approx(usd)
     assert (summed.cache_write is None) == all(part.cache_write is None for part in parts)   # never a synthetic zero
@@ -32,3 +32,13 @@ def test_token_counts_add_up_figure_by_figure_and_price_each_kind_at_its_own_rat
 def test_a_cumulative_counter_grows_by_what_it_holds_beyond_its_last_report(now, before, grown) -> None:
     assert now.since(before) == grown and (now - now) == TokenCounts(input=0, output=None if now.output is None else 0, cache_read=None if now.cache_read is None else 0)
     assert (before - now).covers(TokenCounts()) and now.covers(now)
+
+
+@pytest.mark.parametrize("older", [{"input_tokens": 10, "output_tokens": 2}, {"cache_read_input_tokens": 4}, {"input": 1, "total_tokens": 3}])
+def test_a_figure_in_an_older_spelling_is_refused_never_read_as_not_reported(older: dict) -> None:
+    with pytest.raises(ValueError, match="older spelling"):
+        TokenCounts.model_validate(older)
+
+
+def test_a_call_read_wholly_from_the_cache_is_billed() -> None:
+    assert TokenCounts(cache_read=1000).priced(PRICES) == pytest.approx(1000 * 0.3e-6)

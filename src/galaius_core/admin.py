@@ -104,7 +104,7 @@ class UsageRecord(WireModel):
 
 
 class UsageTotals(WireModel):
-    """What a period's calls of one provenance used, summed (`TokenCounts.sum`)."""
+    """What a period's calls of one provenance used, added up with `+`."""
 
     usage: TokenCounts
     calls: int = Field(ge=0)

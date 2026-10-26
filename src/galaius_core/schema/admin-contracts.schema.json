@@ -717,7 +717,7 @@
     },
     "UsageTotals": {
       "additionalProperties": true,
-      "description": "What a period's calls of one provenance used, summed (`TokenCounts.sum`).",
+      "description": "What a period's calls of one provenance used, added up with `+`.",
       "properties": {
         "calls": {
           "minimum": 0,
