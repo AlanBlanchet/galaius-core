@@ -22,3 +22,13 @@ def test_token_counts_add_up_figure_by_figure_and_price_each_kind_at_its_own_rat
     assert summed.priced(PRICES) == pytest.approx(usd)
     assert (summed.cache_write is None) == all(part.cache_write is None for part in parts)   # never a synthetic zero
     assert TokenCounts.model_validate(summed.model_dump(mode="json")) == summed and not summed.model_dump(mode="json").keys() - {"input", "output", "cache_read", "cache_write", "reasoning"}
+
+
+@pytest.mark.parametrize(("now", "before", "grown"), [
+    (TokenCounts(input=50, output=20, cache_read=900), TokenCounts(input=30, output=5, cache_read=400), TokenCounts(input=20, output=15, cache_read=500)),
+    (TokenCounts(input=7, output=2), TokenCounts(input=30, output=5), TokenCounts(input=7, output=2)),   # went backwards: restarted
+    (TokenCounts(input=5), TokenCounts(), TokenCounts(input=5)),
+])
+def test_a_cumulative_counter_grows_by_what_it_holds_beyond_its_last_report(now, before, grown) -> None:
+    assert now.since(before) == grown and (now - now) == TokenCounts(input=0, output=None if now.output is None else 0, cache_read=None if now.cache_read is None else 0)
+    assert (before - now).covers(TokenCounts()) and now.covers(now)

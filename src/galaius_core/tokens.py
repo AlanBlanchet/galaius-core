@@ -34,6 +34,23 @@ class TokenCounts(WireModel):
             return None if mine is None and theirs is None else (mine or 0) + (theirs or 0)
         return type(self)(**{figure: both(figure) for figure in FIGURES})
 
+    def __sub__(self, other: Self) -> Self:
+        """What this count holds beyond `other`, figure by figure, never below zero (a count is never negative): None
+        only when neither reported it."""
+        def beyond(figure: str) -> int | None:
+            mine, theirs = getattr(self, figure), getattr(other, figure)
+            return None if mine is None and theirs is None else max((mine or 0) - (theirs or 0), 0)
+        return type(self)(**{figure: beyond(figure) for figure in FIGURES})
+
+    def covers(self, other: Self) -> bool:
+        """Every figure at least `other`'s (an unreported figure counts as none): true of a cumulative counter and
+        any earlier report of it."""
+        return all((getattr(self, figure) or 0) >= (getattr(other, figure) or 0) for figure in FIGURES)
+
+    def since(self, previous: Self) -> Self:
+        """What a cumulative counter grew since `previous`; one that went backwards restarted from zero: all of it."""
+        return self - previous if self.covers(previous) else self
+
     @classmethod
     def sum(cls, counts: Iterable[Self]) -> Self:
         """Several calls (an agent's turns, a period's runs) as one; none: an empty count."""
