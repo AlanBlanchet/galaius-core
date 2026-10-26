@@ -1455,6 +1455,11 @@ ReasoningLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max", "ul
 #: written by hand) reads as not known, never guessed, and never fails the message carrying it.
 RecordedReasoning = Annotated[ReasoningLevel | None, BeforeValidator(lambda value: next((level for level in get_args(ReasoningLevel) if level == value), None))]
 
+#: The context, in tokens, an agent's conversation is compacted at (`AgentRevision.compact_at`): every model call re-reads the
+#: whole conversation, so this bounds what each call of a long run costs. Below the floor a run would compact every few turns;
+#: the ceiling is a 1M-token window less the 33k Claude Code keeps free below its compaction window.
+CompactAt = Annotated[int, Field(ge=100_000, le=967_000)]
+
 
 class AgentRevision(WireModel):
     id: UUID
@@ -1470,6 +1475,8 @@ class AgentRevision(WireModel):
     department: str | None = Field(default=None, min_length=1, max_length=120)
     reports_to: UUID | None = None
     reasoning: ReasoningLevel = "high"
+    #: The context, in tokens, its conversation is compacted at; None (left out of a dump): its PC's default.
+    compact_at: CompactAt | None = Field(default=None, exclude_if=lambda value: value is None)
     #: The tools its harness gives it, by name: None (left out of a dump) every tool its harness has, () none at all (an
     #: agent that only answers), else these. A reader released before None existed reads a left-out list as `()`, which
     #: meant every tool there.
@@ -2697,6 +2704,8 @@ AGENT_IMAGES_WIRE = AGENT_IMAGES_MAX * AGENT_IMAGE_DATA + 1024 * 1024
 #: A runner saying it takes messages showing images (`AgentMessageSpec.images`): it keeps each in the run's own folder
 #: and hands it to the agent.
 AGENT_IMAGES_FEATURE = "agent_images"
+#: A runner saying it honours `AgentMessageSpec.reasoning`: the effort a person sets on one conversation.
+AGENT_REASONING_FEATURE = "agent_reasoning"
 #: A runner saying it serves the files its file tools kept for its runs (`AgentMediaRequest` with a `FILE_KEY`), in parts
 #: from any `offset` (`AgentFile`): only then does a transcript show their cards.
 AGENT_FILES_FEATURE = "agent_file_parts"
@@ -2709,6 +2718,15 @@ class AgentMessageSpec(WireRequest):
 
     text: str = Field(default="")
     images: tuple[AgentMedia, ...] = Field(default=(), max_length=AGENT_IMAGES_MAX, exclude_if=lambda value: not value)
+    #: The effort this conversation runs at from this message on, over its role's (`AgentRevision.reasoning`); None: as it
+    #: is. Asked only of a runner saying `AGENT_REASONING_FEATURE`.
+    reasoning: ReasoningLevel | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @property
+    def content_features(self) -> frozenset[str]:
+        """The runner features what it carries needs: `AGENT_IMAGES_FEATURE` when it shows images, `AGENT_REASONING_FEATURE`
+        when it sets its conversation's effort."""
+        return frozenset({*((AGENT_IMAGES_FEATURE,) if self.images else ()), *((AGENT_REASONING_FEATURE,) if self.reasoning else ())})
 
     @model_validator(mode="after")
     def said_or_shown(self) -> Self:
@@ -2746,6 +2764,8 @@ class AgentStartSpec(AgentMessageSpec):
     def role_for_an_agent(self) -> Self:
         if (self.kind == "agent") != (self.role is not None):
             raise ValueError("an agent names its role; a session names none")
+        if self.kind == "session" and self.reasoning is not None:
+            raise ValueError("a session runs at the effort its program sets; only an agent's is set here")
         return self
 
 
@@ -2804,9 +2824,8 @@ class MachineAgentRequestBase(WireRequest):
 
     @property
     def needs(self) -> frozenset[str]:
-        """Every runner feature asking this needs: its kind's (`feature`), and `AGENT_IMAGES_FEATURE` for a message
-        showing images."""
-        return frozenset({self.feature, *((AGENT_IMAGES_FEATURE,) if isinstance(self, AgentMessageSpec) and self.images else ())})
+        """Every runner feature asking this needs: its kind's (`feature`), and a message's own (`content_features`)."""
+        return frozenset({self.feature, *(self.content_features if isinstance(self, AgentMessageSpec) else ())})
 
 
 class AgentFoldersRequest(MachineAgentRequestBase):

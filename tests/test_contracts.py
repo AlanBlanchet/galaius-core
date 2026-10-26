@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
+from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AGENT_REASONING_FEATURE, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
 from pydantic import ValidationError
 from galaius_core.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
@@ -453,6 +453,9 @@ def test_a_message_says_words_or_shows_images_and_asks_a_runner_that_takes_them(
     fields = dict(id=uuid4(), machine={"id": uuid4()}, workspace_id=uuid4(), initiator_account=uuid4(), expires_at=datetime.now(UTC), signature="0" * 64, run_id=uuid4())
     assert AgentSendRequest(**fields, text="hi").needs == {AgentSendRequest.feature}
     assert AgentSendRequest(**fields, **shown.model_dump()).needs == {AgentSendRequest.feature, AGENT_IMAGES_FEATURE}
+    # A conversation's own effort asks only a runner that honours it, and an unset one is never on the wire.
+    assert AgentSendRequest(**fields, text="hi", reasoning="medium").needs == {AgentSendRequest.feature, AGENT_REASONING_FEATURE}
+    assert "reasoning" not in AgentMessageSpec(text="hi").model_dump(mode="json")
 
 
 @pytest.mark.parametrize(("url", "origin"), [
