@@ -4226,10 +4226,15 @@ class WebLoad(WireModel):
         return self.working >= self.limit
 
 
+#: Why a PC cannot stop the owner's own editor session: its editor holds no hook that stops a session (`hook_missing`),
+#: or the session opened before that hook (`opened_before`: its editor reads hooks when a session opens; reopened, it
+#: can be stopped).
+EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: Why a PC refused an agent request, typed for the server to word (`MachineAgentAnswer.code`): a project folder's failure,
 #: `web_full` its conversations started from the web work at their most (`WebLimited`; `MachineAgentAnswer.web` says them),
-#: or `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that one).
-AgentRefusalCode = WorkspaceFailureCode | Literal["web_full", "under_way"]
+#: `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that one),
+#: or a stop of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
+AgentRefusalCode = WorkspaceFailureCode | Literal["web_full", "under_way"] | EditorStopRefusal
 
 
 class AgentRefusal(Kinded):
