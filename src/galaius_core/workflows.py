@@ -19,6 +19,7 @@ from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_cr
 from .prompts import PromptExecutionRef, PromptRevision
 from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
+from .community import CommunityEntryRef
 from .run_state import RunRow, RunState, state_of
 from .wire import Kinded, WireModel, WireRequest
 from .file_tools import CREATE_FILE, CREATE_FILE_TYPES, FileTool
@@ -4198,6 +4199,9 @@ class MachineAgentRun(WireModel, ContextGauge):
     #: The other runs it works for, first asker first: the runs that sent it work and the runs it said it works for
     #: (never itself nor its `parent_run_id`); left out when none, so a server released before the field still reads it.
     asked_by: tuple[UUID, ...] = Field(default=(), max_length=ASKED_BY_MAX, exclude_if=lambda value: not value)
+    #: The community entry it was started from (`agent_spawn(community=…)`); left out when none, so a server released
+    #: before the field still reads the list.
+    community: CommunityEntryRef | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @property
     def state(self) -> RunState:

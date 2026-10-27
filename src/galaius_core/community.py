@@ -10,11 +10,13 @@ A repository whose files may not be copied (no licence, copyleft, non-commercial
 `CommunitySource` with its link and no entry: listed, never stored, never started."""
 
 import base64
+import re
+import unicodedata
 from datetime import datetime
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import BeforeValidator, ConfigDict, Field, model_validator
 
 from .wire import WireModel, WireRequest
 
@@ -27,11 +29,61 @@ CommunityLicenceClass = Literal["copy", "reference"]
 _COMMIT = r"^[0-9a-f]{40}$"
 
 
+_BREAKING = frozenset({"Cc", "Zl", "Zp"})
+"""Unicode categories that break or steer a line: controls (C0, C1: a terminal escape), line and paragraph separators."""
+
+
+def visible(text: str) -> str:
+    """`text` as it reads: compatibility forms folded (a full-width bracket is a bracket), invisible format characters
+    (zero-width spaces, direction marks) dropped."""
+    return "".join(char for char in unicodedata.normalize("NFKC", text) if unicodedata.category(char) != "Cf")
+
+
+def plain_line(text: object, limit: int) -> str:
+    """A stranger's short text (a title, a name) as it reads (`visible`), on one line: no control character, no bracket,
+    cut to `limit`."""
+    spaced = "".join(" " if unicodedata.category(char) in _BREAKING else char for char in visible(str(text or "")))
+    return " ".join(spaced.split()).replace("[", "(").replace("]", ")")[:limit].strip()
+
+
+TITLE_MAX, AUTHOR_MAX, LICENCE_MAX = 80, 120, 40
+"""Characters of an entry's title, of its author's name, of its licence (an SPDX id)."""
+
+
+def PlainLine(limit: int) -> object:
+    """A stranger's short text as a field: one plain line (`plain_line`) cut to `limit`, "?" when nothing is left."""
+    return Annotated[str, BeforeValidator(lambda value: plain_line(value, limit) or "?"), Field(min_length=1, max_length=limit)]
+
+
+def _licence(value: object) -> str | None:
+    """A licence as one plain line, None when there is none or it is longer than an SPDX id (`LICENCE_MAX`): never cut."""
+    said = plain_line(value, LICENCE_MAX + 1)
+    return said if 0 < len(said) <= LICENCE_MAX else None
+
+
+def _https(value: object) -> str | None:
+    """A link as it may be shown and opened: https, at most 1024 characters, no space, control or invisible character;
+    None otherwise."""
+    if not isinstance(value, str) or not value.startswith("https://") or len(value) > 1024:
+        return None
+    return None if any(char.isspace() or unicodedata.category(char) in {*_BREAKING, "Cf"} for char in value) else value
+
+
+Licence = Annotated[str | None, BeforeValidator(_licence)]
+"""An entry's licence (SPDX id) as every reader shows it (`_licence`)."""
+HttpsLink = Annotated[str | None, BeforeValidator(_https)]
+"""An entry's pinned source as every reader shows and opens it (`_https`)."""
+
+
+CommunityRunKind = Literal["agent", "skill"]
+"""What a run can be started from: an agent or a skill, never a prompt (`CommunityPrompt.reviewed`)."""
+
+
 class CommunityAuthor(WireModel):
     """Who published it, as every reader sees it: a name, never an email or an account id.
     `source`: an open-licence collection imported as a whole (its name)."""
 
-    display_name: str = Field(min_length=1, max_length=120)
+    display_name: str = Field(min_length=1, max_length=AUTHOR_MAX)
     kind: Literal["person", "galaius", "source"]
 
 
@@ -44,7 +96,7 @@ class CommunityPrompt(WireModel):
     reviewed: bool = False
     """Its text was screened when it was imported, at its pinned commit: an agent may be started from it as a community
     agent. An entry whose text changes is screened again before it may."""
-    title: str = Field(min_length=1, max_length=80)
+    title: str = Field(min_length=1, max_length=TITLE_MAX)
     summary: str = Field(min_length=1, max_length=280)
     body: str = Field(min_length=1)
     tags: tuple[str, ...]
@@ -55,9 +107,9 @@ class CommunityPrompt(WireModel):
     uses_total: int = Field(ge=0)
     """Agents, in any workspace, whose current revision uses a copy of it (prompt or paradigm)."""
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    licence: str | None = None
+    licence: Licence = None
     """An imported entry's licence (SPDX id, e.g. `MIT`, `CC0-1.0`); None: published here."""
-    origin_url: str | None = None
+    origin_url: HttpsLink = None
     """Where an imported entry comes from (the file at its pinned commit)."""
 
     @model_validator(mode="after")
@@ -66,6 +118,36 @@ class CommunityPrompt(WireModel):
         if self.reviewed and self.kind == "prompt":
             raise ValueError("a prompt is never screened to start as an agent")
         return self
+
+
+class CommunityEntryRef(WireModel):
+    """The community entry an agent run was started from, as every reader of the run shows it (its PC's run list, the
+    server's mirror and ledger, the agents panel): its id, kind, one-line title, author, licence and pinned source — never
+    its text, nor any other key a record holds. Strangers' words: `title` and `author` arrive as one plain line, cut; a
+    licence too long or a link that is not https is dropped, so an entry never fails to read (a community run that lost
+    its mark would pass for one of his own roles)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    entry: UUID
+    kind: CommunityRunKind
+    title: PlainLine(TITLE_MAX)  # type: ignore[valid-type]
+    author: PlainLine(AUTHOR_MAX)  # type: ignore[valid-type]
+    licence: Licence = None
+    origin_url: HttpsLink = None
+
+    @classmethod
+    def of(cls, value: object) -> "CommunityEntryRef | None":
+        """It out of a run record's `community` (which holds more: the entry's text, its folders); None for a run started
+        from no entry, or a record naming no entry (no id, or a kind no run starts from). Its other fields never refuse it."""
+        try:
+            return cls.model_validate(value) if isinstance(value, dict) else None
+        except ValueError:
+            return None
+
+    def ref(self) -> "CommunityEntryRef":
+        """Its own fields alone, whatever subclass holds them (a run's `CommunityAgent`): what crosses to another reader."""
+        return CommunityEntryRef.model_validate(self.model_dump(include=set(CommunityEntryRef.model_fields)))
 
 
 class CommunityPage(WireModel):
