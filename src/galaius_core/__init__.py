@@ -151,7 +151,7 @@ from .cloud import (
 )
 from .criteria import CriteriaClause, CriteriaWeight, CriteriaError, parse_criteria, parse_criteria_weights, format_criteria, format_criteria_weights
 from .subscriptions import (
-    SUBSCRIPTIONS_FEATURE, SUBSCRIPTIONS_PER_PC, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
+    SUBSCRIPTIONS_FEATURE, SUBSCRIPTIONS_PER_PC, RUN_MOVE_WAITS_FEATURE, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
     SubscriptionRefusal, SubscriptionRefusalReason, RunMove, LoginUsage, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName,
 )
 from .tokens import TokenCounts
@@ -273,7 +273,7 @@ __all__ = [
     "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
     "CommunityAuthor", "CommunityKind", "CommunityLicenceClass", "CommunityPage", "CommunityPrompt", "CommunityQuery", "CommunitySort", "CommunitySource", "CommunitySources",
     "MEDIA_INPUT_BYTES", "MEDIA_TOOLS", "MediaAnswer", "MediaFile", "MediaImage", "MediaKind", "MediaQuote", "MediaRequest", "MediaSpec", "Model3DSpec", "MusicSpec", "SoundSpec", "SpeechSpec", "TranslationSpec",
-    "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
+    "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "RUN_MOVE_WAITS_FEATURE", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
     "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "PaidUseRefusal", "PaidUseSpend", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",

@@ -23,6 +23,8 @@ UsageWindowName = Literal["five_hour", "weekly", "monthly"]
 #: What a run does when its subscription reaches a cap: `finish` lets the current turn end and starts
 #: no new turn or session on it until the window drops; `cut` stops the run at that reading.
 AtCap = Literal["finish", "cut"]
+#: What a PC's runner says once it takes a `RunMove` that does not resume (`resume` False).
+RUN_MOVE_WAITS_FEATURE = "agent_subscription_moves_wait"
 
 
 class UsageWindow(WireModel):
@@ -175,13 +177,18 @@ class SubscriptionRefusal(Kinded):
 
 
 class RunMove(WireRequest):
-    """His « Continuer sur … » after a usage limit stopped a run: it continues its session on `subscription_id`, another
-    of his own subscriptions of the same provider on the same PC, under `limits` (contract A9: the PC carries the session's
-    transcript over, never a credential, and pins the run there). Never between accounts, never automatic."""
+    """A stopped run of his continues its session on `subscription_id`, another of his own subscriptions of the same
+    provider on the same PC, under `limits` (contract A9: the PC carries the session's transcript over, never a credential,
+    and pins the run there). Never between accounts.
+
+    `resume`: the PC resumes it there at once (his « Continuer sur … », the switch at a cap); False: it only moves, and
+    its next turn runs there (his pick in a conversation, the switch before a turn). Asked False only of a runner saying
+    `RUN_MOVE_WAITS_FEATURE`."""
 
     run_id: UUID
     subscription_id: UUID
     limits: SubscriptionLimits
+    resume: bool = Field(default=True, exclude_if=lambda value: value)
 
 
 class RunSubscription(SubscriptionUse):

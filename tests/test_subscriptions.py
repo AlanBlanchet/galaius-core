@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core import RunMove, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -62,3 +62,12 @@ def test_a_start_offers_each_provider_its_own_subscriptions_in_his_order() -> No
     choices = SubscriptionChoices(subscriptions=(codex, first, second))
     assert (choices.of("claude"), choices.of("codex"), SubscriptionChoices().of("claude")) == ((SubscriptionChoice(**first), SubscriptionChoice(**second)), (SubscriptionChoice(**codex),), ())
 
+
+
+@pytest.mark.parametrize(("resume", "on_wire"), [(True, False), (False, True)])
+def test_run_move_says_resume_only_when_it_waits(resume: bool, on_wire: bool) -> None:
+    """A move that resumes dumps as it always did (an older runner verifies it unchanged); one that waits names it."""
+    move = RunMove(run_id=uuid4(), subscription_id=uuid4(), limits=SubscriptionLimits(), resume=resume)
+    dumped = move.model_dump(mode="json")
+    assert ("resume" in dumped) is on_wire
+    assert RunMove.model_validate(dumped).resume is resume

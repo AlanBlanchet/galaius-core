@@ -4308,7 +4308,8 @@ class MachineAgentAnswer(WireModel):
     error: str | None = Field(default=None, max_length=400)
     #: Why it refused, typed (`MachineRefusal`): `error` is the PC's English sentence for the logs.
     refusal: MachineRefusal | None = Field(default=None, exclude_if=lambda value: value is None)
-    #: A started run's subscription, the one its launch walk pinned it to (None: the PC's own login, or lent).
+    #: A started run's subscription, the one its launch walk pinned it to; a sent message's, the one its run's next turn runs
+    #: on (a move held for it included); a moved run's, its new one (None: the PC's own login, or lent).
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     roots: tuple[str, ...] = Field(default=(), max_length=32)
     entries: tuple[MachineFileEntry, ...] = Field(default=(), max_length=500)
