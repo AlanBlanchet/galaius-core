@@ -3919,6 +3919,99 @@ class WorkspacesRequest(MachineAgentRequestBase):
     feature: ClassVar[str] = "workspaces"
 
 
+#: A runner showing a project folder's files to the web, read-only (`ProjectFilesBase`).
+PROJECT_FILES_FEATURE = "project_files"
+#: Most entries one folder listing carries; most paths one name search carries.
+PROJECT_FILES_MAX = 2000
+PROJECT_FOUND_MAX = 200
+#: Largest text a file answer carries (utf-8 bytes read; a longer file comes cut, `truncated`).
+PROJECT_TEXT_MAX = 1024 * 1024
+#: How a file differs from its repository's last commit, as `git status` says it.
+GitMark = Literal["modified", "added", "deleted", "renamed", "untracked", "conflict"]
+
+
+#: The dot names a project files view shows; every other one stays hidden (git's store, environment files, tool and
+#: editor settings), compared exactly.
+PROJECT_DOT_NAMES = frozenset({".github", ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig", ".githooks", ".dockerignore",
+                               ".pre-commit-config.yaml", ".python-version", ".nvmrc"})
+
+
+def project_hidden(name: str) -> bool:
+    """Whether a project files view never lists nor opens `name`, on every OS: a dot name outside PROJECT_DOT_NAMES
+    ('.', '..', '.git', '.env*' included), a name another system reads as a different one (':' streams, a trailing dot
+    or space, '\\'), a control character. The PC also hides every credential store its own list names."""
+    return (not name or (name.startswith(".") and name not in PROJECT_DOT_NAMES) or name.endswith((".", " "))
+            or any(char in "\\:/" or ord(char) < 0x20 or char == "\x7f" for char in name))
+
+
+def _project_path(value: str) -> str:
+    if value and (value.startswith("/") or any(project_hidden(part) for part in value.split("/"))):
+        raise ValueError("a project path is '/'-separated plain names beneath the project folder, never a hidden one (`project_hidden`)")
+    return value
+
+
+#: A file or folder beneath a project folder ("" the folder itself): no `project_hidden` name on the way.
+ProjectPath = Annotated[str, Field(max_length=1024), AfterValidator(_project_path)]
+
+
+class ProjectFilesBase(MachineAgentRequestBase):
+    """Read-only view of project folder `base` beneath agent root `root`: nothing a web-started agent there could not
+    read already, never a link, never a `project_hidden` name or a credential store, text redacted before it leaves."""
+
+    root: AgentRootPath
+    base: FolderPath = ""
+    feature: ClassVar[str] = PROJECT_FILES_FEATURE
+
+
+class ProjectFilesRequest(ProjectFilesBase):
+    """One folder's entries (folders first, then files, A to Z), with each one's git mark."""
+
+    op: Literal["files"] = "files"
+    path: ProjectPath = ""
+
+
+class ProjectFileRequest(ProjectFilesBase):
+    """One file: its text, its image, or its facts alone (`ProjectFileContent`)."""
+
+    op: Literal["file"] = "file"
+    path: Annotated[ProjectPath, Field(min_length=1)]
+
+
+class ProjectFindRequest(ProjectFilesBase):
+    """The project's files whose NAME holds `query` (case-insensitive), best first: git-ignored files left out."""
+
+    op: Literal["find"] = "find"
+    query: str = Field(min_length=1, max_length=120)
+
+
+class ProjectFileEntry(MachineFileEntry):
+    """One entry of a project folder; a folder is `modified` when anything beneath it carries a mark."""
+
+    modified_at: datetime | None = None
+    git: GitMark | None = None
+
+
+class ProjectFileContent(WireModel):
+    """One project file: `text` (utf-8, errors replaced, redacted, cut at PROJECT_TEXT_MAX), an `image` its first bytes
+    prove (`image_type`, at most MACHINE_AGENT_MEDIA, base64 in `data`), else its facts alone (`binary`, `too_large`)."""
+
+    path: str = Field(min_length=1, max_length=1024)
+    size: int = Field(ge=0)
+    modified_at: datetime | None = None
+    git: GitMark | None = None
+    kind: Literal["text", "image", "binary", "too_large"]
+    text: str | None = Field(default=None, max_length=PROJECT_TEXT_MAX)
+    truncated: bool = False
+    content_type: ImageContentType | None = None
+    data: str | None = Field(default=None, max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
+
+    @model_validator(mode="after")
+    def carries_its_kind(self) -> Self:
+        if (self.text is not None) != (self.kind == "text") or ((self.data is not None) or (self.content_type is not None)) != (self.kind == "image"):
+            raise ValueError("text comes with kind text, data and content_type with kind image, nothing with the others")
+        return self
+
+
 class ScreenStatusRequest(MachineAgentRequestBase):
     """Whether this PC may be watched and what it would show (`ScreenReadiness`) — no passkey."""
 
@@ -3945,7 +4038,7 @@ MachineAgentRequest = Annotated[
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
-    | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest,
+    | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest | ProjectFilesRequest | ProjectFileRequest | ProjectFindRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -4380,6 +4473,13 @@ class MachineAgentAnswer(WireModel):
     screen: ScreenReadiness | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `screen_open`: the session the PC opened for a passkey it verified itself.
     screen_opened: ScreenOpened | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: `files`: the folder's entries (`truncated` past PROJECT_FILES_MAX) and how many it left out (`hidden`, never their names).
+    files: tuple[ProjectFileEntry, ...] = Field(default=(), max_length=PROJECT_FILES_MAX, exclude_if=lambda value: not value)
+    hidden: int = Field(default=0, ge=0, exclude_if=lambda value: value == 0)
+    #: `file`: the project file asked for.
+    content: ProjectFileContent | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: `find`: paths beneath the project folder, best first (`truncated` past PROJECT_FOUND_MAX).
+    found: tuple[str, ...] = Field(default=(), max_length=PROJECT_FOUND_MAX, exclude_if=lambda value: not value)
 
 
 def _port_slug(label: str) -> str:
