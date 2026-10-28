@@ -19,6 +19,8 @@ from galaius_core import (
     ProjectFileAsk,
     ProjectFileBytes,
     ProjectFileBytesRequest,
+    ProjectFileContent,
+    ProjectFileRequest,
     AgentRevision,
     ConnectionResource,
     ConnectionResourceRef,
@@ -180,3 +182,20 @@ def test_a_bytes_part_never_runs_past_its_file(size: int, offset: int, data: byt
     else:
         with pytest.raises(ValidationError):
             ProjectFileBytes(**fields)
+
+
+@pytest.mark.parametrize(("offset", "sent"), [(0, False), (4096, True)])
+def test_a_text_read_from_its_start_is_sent_as_a_runner_before_offsets_reads_it(offset: int, sent: bool) -> None:
+    request = ProjectFileRequest(id=uuid4(), machine={"id": uuid4()}, workspace_id=uuid4(), initiator_account=uuid4(), expires_at=datetime.now(UTC),
+                                 signature="0" * 64, root="dev", path="logs/big.log", offset=offset)
+    assert ("offset" in request.model_dump(mode="json")) is sent
+
+
+@pytest.mark.parametrize(("offset", "end", "parsed"), [(0, 10, True), (4, 10, True), (4, 4, True), (4, 3, False), (0, 11, False)])
+def test_a_text_page_lies_within_its_file(offset: int, end: int, parsed: bool) -> None:
+    fields = {"path": "big.log", "size": 10, "kind": "text", "text": "x", "offset": offset, "end": end}
+    if parsed:
+        assert ProjectFileContent(**fields).end == end
+    else:
+        with pytest.raises(ValidationError):
+            ProjectFileContent(**fields)

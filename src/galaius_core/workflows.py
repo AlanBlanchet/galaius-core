@@ -3930,6 +3930,8 @@ PROJECT_TEXT_MAX = 1024 * 1024
 #: A runner answering a project file's raw bytes part by part (`ProjectFileBytesRequest`); most bytes one part carries.
 PROJECT_FILE_BYTES_FEATURE = "project_file_bytes"
 PROJECT_BYTES_PART = 1024 * 1024
+#: A runner reading a project file's text from a byte `offset` (`ProjectFileRequest.offset`): its later pages, its end.
+PROJECT_FILE_OFFSET_FEATURE = "project_file_offset"
 #: How a file differs from its repository's last commit, as `git status` says it.
 GitMark = Literal["modified", "added", "deleted", "renamed", "untracked", "conflict"]
 
@@ -4010,6 +4012,12 @@ class ProjectFileAsk(WireRequest):
     path: Annotated[ProjectPath, Field(min_length=1)]
 
 
+class ProjectFileFromAsk(ProjectFileAsk):
+    """A project file read from byte `offset` (0, its start, is never sent: a runner before offsets reads it alike)."""
+
+    offset: int = Field(default=0, ge=0, exclude_if=lambda offset: offset == 0)
+
+
 class ProjectFindAsk(WireRequest):
     """What a person asks of a project name search: the words a name holds."""
 
@@ -4022,8 +4030,11 @@ class ProjectFilesRequest(ProjectFilesBase, ProjectFolderAsk):
     op: Literal["files"] = "files"
 
 
-class ProjectFileRequest(ProjectFilesBase, ProjectFileAsk):
-    """One file: its text, its image, or its facts alone (`ProjectFileContent`)."""
+class ProjectFileRequest(ProjectFilesBase, ProjectFileFromAsk):
+    """One file: its text, its image, or its facts alone (`ProjectFileContent`). Its text from `offset` on: at most
+    PROJECT_TEXT_MAX bytes, starting and ending where neither cuts a line, else a word or a secret (what such a cut
+    would split is left out), so pages asked each from the `end` of the one before join whole. An offset other than 0
+    needs PROJECT_FILE_OFFSET_FEATURE."""
 
     op: Literal["file"] = "file"
 
@@ -4034,13 +4045,12 @@ class ProjectFindRequest(ProjectFilesBase, ProjectFindAsk):
     op: Literal["find"] = "find"
 
 
-class ProjectFileBytesRequest(ProjectFilesBase, ProjectFileAsk):
+class ProjectFileBytesRequest(ProjectFilesBase, ProjectFileFromAsk):
     """`length` raw bytes of one file from `offset` (a player's seek, a viewer's read, a download, part by part), never
     redacted: only a file a `file` read would not show as text (`ProjectFileContent.kind` image or binary); past its end
     an empty part saying its size."""
 
     op: Literal["bytes"] = "bytes"
-    offset: int = Field(default=0, ge=0)
     length: int = Field(default=PROJECT_BYTES_PART, ge=1, le=PROJECT_BYTES_PART)
     feature: ClassVar[str] = PROJECT_FILE_BYTES_FEATURE
 
@@ -4071,7 +4081,8 @@ class ProjectFileEntry(MachineFileEntry):
 
 class ProjectFileContent(WireModel):
     """One project file: `text` (utf-8, errors replaced, redacted, cut at PROJECT_TEXT_MAX), an `image` its first bytes
-    prove (`image_type`, at most MACHINE_AGENT_MEDIA, base64 in `data`), else its facts alone (`binary`, `too_large`)."""
+    prove (`image_type`, at most MACHINE_AGENT_MEDIA, base64 in `data`), else its facts alone (`binary`, `too_large`).
+    A text is the file's bytes from `offset` to `end` (the next page's offset); `truncated`: more after `end`."""
 
     path: str = Field(min_length=1, max_length=1024)
     size: int = Field(ge=0)
@@ -4080,6 +4091,8 @@ class ProjectFileContent(WireModel):
     kind: Literal["text", "image", "binary", "too_large"]
     text: str | None = Field(default=None, max_length=PROJECT_TEXT_MAX)
     truncated: bool = False
+    offset: int = Field(default=0, ge=0, exclude_if=lambda offset: offset == 0)
+    end: int | None = Field(default=None, ge=0, exclude_if=lambda end: end is None)
     content_type: ImageContentType | None = None
     data: str | None = Field(default=None, max_length=(MACHINE_AGENT_MEDIA * 4) // 3 + 8)
 
@@ -4087,6 +4100,8 @@ class ProjectFileContent(WireModel):
     def carries_its_kind(self) -> Self:
         if (self.text is not None) != (self.kind == "text") or ((self.data is not None) or (self.content_type is not None)) != (self.kind == "image"):
             raise ValueError("text comes with kind text, data and content_type with kind image, nothing with the others")
+        if self.end is not None and not self.offset <= self.end <= self.size:
+            raise ValueError("a text page lies within its file: offset <= end <= size")
         return self
 
 
