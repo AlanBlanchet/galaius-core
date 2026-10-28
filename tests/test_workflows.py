@@ -15,6 +15,11 @@ from pydantic import ValidationError
 
 from galaius_core import (
     MACHINE_AGENT_REQUESTS,
+    MachineAgentAnswer,
+    ProjectFileRefusal,
+    ProjectFileRefused,
+    ProjectTextAsk,
+    Refused,
     PROJECT_BYTES_PART,
     ProjectFileAsk,
     ProjectFileBytes,
@@ -149,6 +154,8 @@ def test_value_preview_image_accepts_a_larger_pre_existing_thumbnail() -> None:
 @pytest.mark.parametrize(("path", "parsed"), [
     ("src/app.py", True), (".github/workflows/ci.yml", True), ("keys/ID_RSA", False), ("deploy/prod.pem", False),
     ("ops/service-account-prod.json", False), (".env.local", False), ("conf/.npmrc", False), ("a/./b", False),
+    ("keys/signing.der", False), ("keys/app.pk8", False), ("keys/AuthKey.p8", False), ("android/store.bks", False),
+    ("ops/kubeconfig.yaml", False), ("ops/prod.kubeconfig", False), ("docs/kube-config.md", True),
 ])
 def test_a_project_path_naming_a_credential_store_or_hidden_name_is_refused_at_parse(path: str, parsed: bool) -> None:
     if parsed:
@@ -204,3 +211,32 @@ def test_a_text_page_lies_within_its_file(offset: int, end: int, parsed: bool) -
     else:
         with pytest.raises(ValidationError):
             ProjectFileContent(**fields)
+
+
+def _request(op: str, **fields) -> dict:
+    return {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+            "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": op, "root": "dev", "base": "app", "path": "a.log", **fields}
+
+
+@pytest.mark.parametrize("op", ["file", "bytes"])
+def test_a_file_read_opens_unless_told_it_follows_one_and_a_released_pc_never_hears_the_default(op: str) -> None:
+    first = MACHINE_AGENT_REQUESTS.validate_python(_request(op))
+    later = MACHINE_AGENT_REQUESTS.validate_python(_request(op, opens=False, offset=5))
+    assert first.opens and not later.opens
+    assert "opens" not in first.model_dump(mode="json") and later.model_dump(mode="json")["opens"] is False
+
+
+def test_a_text_read_from_a_line_start_is_a_person_s_ask_the_bytes_read_never_takes() -> None:
+    assert ProjectTextAsk.model_validate({"path": "a.log", "offset": "9", "line_start": "1"}).line_start
+    assert "line_start" not in MACHINE_AGENT_REQUESTS.validate_python(_request("file")).model_dump(mode="json")
+    assert MACHINE_AGENT_REQUESTS.validate_python(_request("file", line_start=True)).line_start
+    with pytest.raises(ValidationError):
+        MACHINE_AGENT_REQUESTS.validate_python(_request("bytes", line_start=True))
+    with pytest.raises(ValidationError):
+        ProjectTextAsk.model_validate({"path": "a.log", "opens": "0"})
+
+
+@pytest.mark.parametrize("reason", ["secret", "unchecked", "sealed", "text", "busy"])
+def test_a_project_file_refusal_travels_typed_in_a_machine_answer(reason: str) -> None:
+    answer = MachineAgentAnswer(request_id=uuid4(), error="a sentence", refusal=Refused.refusal_of(ProjectFileRefused(reason, "a sentence")))
+    assert MachineAgentAnswer.model_validate_json(answer.model_dump_json()).refusal == ProjectFileRefusal(reason=reason)

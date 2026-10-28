@@ -3963,10 +3963,11 @@ class CredentialStores(BaseModel):
 
 CREDENTIAL_STORES = CredentialStores(
     names=frozenset({"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk", "authorized_keys", "known_hosts",
-                     "credentials", "credentials.json", "auth.json", "keychain", "keychains", "keyrings", "password-store", "wallets", "kubeconfig"}),
-    suffixes=(".kdbx", ".kdb", ".keychain", ".keychain-db", ".ppk", ".p12", ".pfx", ".pem", ".key", ".jks", ".keystore", ".gpg", ".asc", ".ovpn",
-              ".tfstate", ".tfstate.backup"),
-    patterns=("service-account*.json", "*-service-account*.json", "client_secret*.json"),
+                     "credentials", "credentials.json", "auth.json", "keychain", "keychains", "keyrings", "password-store", "wallets"}),
+    # A DER key (`.der`, PKCS#8 `.pk8` / `.p8`) carries no text a redaction could find: hidden by its name.
+    suffixes=(".kdbx", ".kdb", ".keychain", ".keychain-db", ".ppk", ".p12", ".pfx", ".pem", ".key", ".der", ".pk8", ".p8", ".jks", ".keystore", ".bks",
+              ".gpg", ".asc", ".ovpn", ".tfstate", ".tfstate.backup"),
+    patterns=("service-account*.json", "*-service-account*.json", "client_secret*.json", "kubeconfig*", "*.kubeconfig"),
     dot_names=frozenset({".env", ".netrc", ".npmrc", ".pypirc", ".pgpass", ".git-credentials", ".ssh", ".gnupg", ".aws", ".kube", ".docker",
                          ".password-store", ".vault-token", ".terraform.d", ".credentials.json"}),
     dot_prefixes=(".env.",),
@@ -4019,6 +4020,20 @@ class ProjectFileFromAsk(ProjectFileAsk):
     offset: int = Field(default=0, ge=0, le=2**62, exclude_if=lambda offset: offset == 0)
 
 
+class ProjectTextAsk(ProjectFileFromAsk):
+    """A project file's text read from byte `offset`; `line_start`: from the first line start at or after it (a tail
+    page, whole lines only; the file's start is one), the page's `offset` saying exactly where. Sent only when set."""
+
+    line_start: bool = Field(default=False, exclude_if=lambda line_start: not line_start)
+
+
+class ProjectFilePart(BaseModel):
+    """One read of a file that may follow another: `opens` False, a later part or page of a read its PC already logged
+    (the PC logs a read that opens, and every refused one). Never what a person asks; sent only when False."""
+
+    opens: bool = Field(default=True, exclude_if=lambda opens: opens)
+
+
 class ProjectFindAsk(WireRequest):
     """What a person asks of a project name search: the words a name holds."""
 
@@ -4031,11 +4046,11 @@ class ProjectFilesRequest(ProjectFilesBase, ProjectFolderAsk):
     op: Literal["files"] = "files"
 
 
-class ProjectFileRequest(ProjectFilesBase, ProjectFileFromAsk):
+class ProjectFileRequest(ProjectFilesBase, ProjectTextAsk, ProjectFilePart):
     """One file: its text, its image, or its facts alone (`ProjectFileContent`). Its text from `offset` on: at most
     PROJECT_TEXT_MAX bytes, starting and ending where neither cuts a line, else a word or a secret (what such a cut
-    would split is left out), so pages asked each from the `end` of the one before join whole. An offset other than 0
-    needs PROJECT_FILE_OFFSET_FEATURE."""
+    would split is left out), so pages asked each from the `end` of the one before join whole. An offset other than 0,
+    `line_start` or `opens` False needs PROJECT_FILE_OFFSET_FEATURE."""
 
     op: Literal["file"] = "file"
 
@@ -4046,7 +4061,7 @@ class ProjectFindRequest(ProjectFilesBase, ProjectFindAsk):
     op: Literal["find"] = "find"
 
 
-class ProjectFileBytesRequest(ProjectFilesBase, ProjectFileFromAsk):
+class ProjectFileBytesRequest(ProjectFilesBase, ProjectFileFromAsk, ProjectFilePart):
     """`length` raw bytes of one file from `offset` (a player's seek, a viewer's read, a download, part by part), never
     redacted: only a file a `file` read would not show as text (`ProjectFileContent.kind` image or binary); past its end
     an empty part saying its size."""
@@ -4426,6 +4441,11 @@ EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that one),
 #: or a stop of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
 AgentRefusalCode = WorkspaceFailureCode | Literal["web_full", "under_way"] | EditorStopRefusal
+#: Why a PC refused a project file read (`ProjectFolder`): `secret` its bytes hold one; `unchecked` it cannot check them
+#: for one (an environment file it cannot read, a packed file damaged, too large or holding another packed file);
+#: `sealed` packed in a format it cannot open, or encrypted; `text` it shows the file as text, redacted, never raw;
+#: `busy` it reads other project files already.
+ProjectFileRefusalCode = Literal["secret", "unchecked", "sealed", "text", "busy"]
 
 
 class AgentRefusal(Kinded):
@@ -4433,6 +4453,13 @@ class AgentRefusal(Kinded):
 
     kind: Literal["agent"] = "agent"
     reason: AgentRefusalCode
+
+
+class ProjectFileRefusal(Kinded):
+    """A PC's refusal of a project file read, typed (`ProjectFileRefusalCode`): one kind of `MachineRefusal`."""
+
+    kind: Literal["project_file"] = "project_file"
+    reason: ProjectFileRefusalCode
 
 
 class ScreenRefusal(Kinded):
@@ -4444,13 +4471,13 @@ class ScreenRefusal(Kinded):
 
 #: Why a PC refused a request, typed for the page to word from one `(kind, reason)` table in its reader's language (the PC
 #: cannot know it); `MachineAgentAnswer.error` keeps the PC's English sentence for the logs.
-MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal, Field(discriminator="kind")]
+MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal | ProjectFileRefusal, Field(discriminator="kind")]
 
 
 #: What a party refuses, typed once (`Refused`): the reason, for its reader to word in its own language (the refusing party
 #: cannot know it), and its English sentence for the logs (`str(error)`). A PC's runtime raises it, the server raises and reads it.
 R = TypeVar("R")
-#: The kinds a machine answer carries (`MachineAgentAnswer.refusal`): an agent, a subscription or a screen refusal.
+#: The kinds a machine answer carries (`MachineAgentAnswer.refusal`): an agent, a subscription, a screen or a project file refusal.
 ANSWERED: tuple[type[BaseModel], ...] = get_args(get_args(MachineRefusal)[0])
 
 
@@ -4493,6 +4520,10 @@ class Refused(PermissionError, Generic[R]):
         `Refused` of one of the answer's kinds; None for any other error."""
         refusal = error.refusal if isinstance(error, Refused) else None
         return refusal if isinstance(refusal, ANSWERED) else None
+
+
+class ProjectFileRefused(Refused[ProjectFileRefusal]):
+    """A project file read a PC refuses, its reason a `ProjectFileRefusalCode`."""
 
 
 class MachineAgentAnswer(WireModel):
