@@ -189,7 +189,7 @@ wheels = [
 
 [[package]]
 name = "galaius-core"
-version = "0.78.0"
+version = "0.79.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

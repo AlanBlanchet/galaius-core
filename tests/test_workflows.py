@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from galaius_core import (
+    ProjectFileAsk,
     AgentRevision,
     ConnectionResource,
     ConnectionResourceRef,
@@ -136,3 +137,15 @@ def test_value_preview_image_accepts_a_larger_pre_existing_thumbnail() -> None:
     oversized = "a" * 200_000  # far past a 64 KB-bounded thumbnail's ~87K base64 characters
     preview = ValuePreview(kind="image", text="29 detection: book 9", media_type="image/jpeg", image=oversized)
     assert preview.image == oversized
+
+
+@pytest.mark.parametrize(("path", "parsed"), [
+    ("src/app.py", True), (".github/workflows/ci.yml", True), ("keys/ID_RSA", False), ("deploy/prod.pem", False),
+    ("ops/service-account-prod.json", False), (".env.local", False), ("conf/.npmrc", False), ("a/./b", False),
+])
+def test_a_project_path_naming_a_credential_store_or_hidden_name_is_refused_at_parse(path: str, parsed: bool) -> None:
+    if parsed:
+        assert ProjectFileAsk(path=path).path == path
+    else:
+        with pytest.raises(ValidationError):
+            ProjectFileAsk(path=path)

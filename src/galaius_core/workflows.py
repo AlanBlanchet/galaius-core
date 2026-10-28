@@ -1,6 +1,7 @@
 """Provider-independent immutable workflow and execution wire contracts."""
 
 import base64
+import fnmatch
 import hashlib
 import json
 import re
@@ -3936,12 +3937,43 @@ PROJECT_DOT_NAMES = frozenset({".github", ".gitignore", ".gitattributes", ".gitm
                                ".pre-commit-config.yaml", ".python-version", ".nvmrc"})
 
 
+class CredentialStores(BaseModel):
+    """Names of credential stores, compared casefolded wherever they appear on a path: `names`, `suffixes`, `patterns`
+    (fnmatch) and the hidden `dot_names` / `dot_prefixes`. What a PC never opens (its levels, its fence, a copy to
+    another PC) and a project files view never lists."""
+
+    model_config = ConfigDict(frozen=True)
+    names: frozenset[str]
+    suffixes: tuple[str, ...]
+    patterns: tuple[str, ...] = ()
+    dot_names: frozenset[str] = frozenset()
+    dot_prefixes: tuple[str, ...] = ()
+
+    def secret(self, name: str) -> bool:
+        """Whether one name is a credential store's, hidden or not."""
+        folded = name.casefold()
+        return (folded in self.names or folded in self.dot_names or folded.startswith(self.dot_prefixes) or folded.endswith(self.suffixes)
+                or any(fnmatch.fnmatch(folded, pattern) for pattern in self.patterns))
+
+
+CREDENTIAL_STORES = CredentialStores(
+    names=frozenset({"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "id_ecdsa_sk", "id_ed25519_sk", "authorized_keys", "known_hosts",
+                     "credentials", "credentials.json", "auth.json", "keychain", "keychains", "keyrings", "password-store", "wallets", "kubeconfig"}),
+    suffixes=(".kdbx", ".kdb", ".keychain", ".keychain-db", ".ppk", ".p12", ".pfx", ".pem", ".key", ".jks", ".keystore", ".gpg", ".asc", ".ovpn",
+              ".tfstate", ".tfstate.backup"),
+    patterns=("service-account*.json", "*-service-account*.json", "client_secret*.json"),
+    dot_names=frozenset({".env", ".netrc", ".npmrc", ".pypirc", ".pgpass", ".git-credentials", ".ssh", ".gnupg", ".aws", ".kube", ".docker",
+                         ".password-store", ".vault-token", ".terraform.d", ".credentials.json"}),
+    dot_prefixes=(".env.",),
+)
+
+
 def project_hidden(name: str) -> bool:
     """Whether a project files view never lists nor opens `name`, on every OS: a dot name outside PROJECT_DOT_NAMES
-    ('.', '..', '.git', '.env*' included), a name another system reads as a different one (':' streams, a trailing dot
-    or space, '\\'), a control character. The PC also hides every credential store its own list names."""
+    ('.', '..', '.git', '.env*' included), a credential store (`CREDENTIAL_STORES`), a name another system reads as a
+    different one (':' streams, a trailing dot or space, '\\'), a control character."""
     return (not name or (name.startswith(".") and name not in PROJECT_DOT_NAMES) or name.endswith((".", " "))
-            or any(char in "\\:/" or ord(char) < 0x20 or char == "\x7f" for char in name))
+            or any(char in "\\:/" or ord(char) < 0x20 or char == "\x7f" for char in name) or CREDENTIAL_STORES.secret(name))
 
 
 def _project_path(value: str) -> str:
@@ -3963,25 +3995,40 @@ class ProjectFilesBase(MachineAgentRequestBase):
     feature: ClassVar[str] = PROJECT_FILES_FEATURE
 
 
-class ProjectFilesRequest(ProjectFilesBase):
-    """One folder's entries (folders first, then files, A to Z), with each one's git mark."""
+class ProjectFolderAsk(WireRequest):
+    """What a person asks of a project folder listing: the folder ("" the project folder)."""
 
-    op: Literal["files"] = "files"
     path: ProjectPath = ""
 
 
-class ProjectFileRequest(ProjectFilesBase):
-    """One file: its text, its image, or its facts alone (`ProjectFileContent`)."""
+class ProjectFileAsk(WireRequest):
+    """What a person asks of a project file read: the file."""
 
-    op: Literal["file"] = "file"
     path: Annotated[ProjectPath, Field(min_length=1)]
 
 
-class ProjectFindRequest(ProjectFilesBase):
+class ProjectFindAsk(WireRequest):
+    """What a person asks of a project name search: the words a name holds."""
+
+    query: str = Field(min_length=1, max_length=120)
+
+
+class ProjectFilesRequest(ProjectFilesBase, ProjectFolderAsk):
+    """One folder's entries (folders first, then files, A to Z), with each one's git mark."""
+
+    op: Literal["files"] = "files"
+
+
+class ProjectFileRequest(ProjectFilesBase, ProjectFileAsk):
+    """One file: its text, its image, or its facts alone (`ProjectFileContent`)."""
+
+    op: Literal["file"] = "file"
+
+
+class ProjectFindRequest(ProjectFilesBase, ProjectFindAsk):
     """The project's files whose NAME holds `query` (case-insensitive), best first: git-ignored files left out."""
 
     op: Literal["find"] = "find"
-    query: str = Field(min_length=1, max_length=120)
 
 
 class ProjectFileEntry(MachineFileEntry):
