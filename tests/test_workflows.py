@@ -6,6 +6,7 @@ workflow node (`AgentRevision.capabilities` and `ConnectorImplementation.tool` /
 the exact place a new tool kind is silently invisible to the workflow graph if only one of the two
 unions is extended."""
 
+import base64
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -13,7 +14,11 @@ import pytest
 from pydantic import ValidationError
 
 from galaius_core import (
+    MACHINE_AGENT_REQUESTS,
+    PROJECT_BYTES_PART,
     ProjectFileAsk,
+    ProjectFileBytes,
+    ProjectFileBytesRequest,
     AgentRevision,
     ConnectionResource,
     ConnectionResourceRef,
@@ -149,3 +154,29 @@ def test_a_project_path_naming_a_credential_store_or_hidden_name_is_refused_at_p
     else:
         with pytest.raises(ValidationError):
             ProjectFileAsk(path=path)
+
+
+@pytest.mark.parametrize(("fields", "parsed"), [
+    ({"path": "media/clip.mp4", "offset": 0, "length": PROJECT_BYTES_PART}, True), ({"path": "a.glb", "offset": 10**12, "length": 1}, True),
+    ({"path": "a.glb", "length": PROJECT_BYTES_PART + 1}, False), ({"path": "a.glb", "length": 0}, False), ({"path": "a.glb", "offset": -1}, False),
+    ({"path": ".env", "length": 1}, False), ({"path": "", "length": 1}, False), ({"path": "../x.mp4", "length": 1}, False),
+])
+def test_a_bytes_read_asks_one_bounded_part_of_a_plain_project_path(fields: dict, parsed: bool) -> None:
+    body = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+            "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "bytes", "root": "dev", "base": "app", **fields}
+    if parsed:
+        assert isinstance(MACHINE_AGENT_REQUESTS.validate_python(body), ProjectFileBytesRequest)
+    else:
+        with pytest.raises(ValidationError):
+            MACHINE_AGENT_REQUESTS.validate_python(body)
+
+
+@pytest.mark.parametrize(("size", "offset", "data", "parsed"), [(10, 0, b"x" * 10, True), (10, 8, b"xy", True), (10, 10, b"", True), (10, 50, b"", True),
+                                                                (10, 8, b"xyz", False), (10, 10, b"x", False)])
+def test_a_bytes_part_never_runs_past_its_file(size: int, offset: int, data: bytes, parsed: bool) -> None:
+    fields = {"path": "a.mp4", "size": size, "offset": offset, "data": base64.b64encode(data).decode()}
+    if parsed:
+        assert ProjectFileBytes(**fields).content == data
+    else:
+        with pytest.raises(ValidationError):
+            ProjectFileBytes(**fields)

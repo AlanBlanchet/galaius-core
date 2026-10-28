@@ -3927,6 +3927,9 @@ PROJECT_FILES_MAX = 2000
 PROJECT_FOUND_MAX = 200
 #: Largest text a file answer carries (utf-8 bytes read; a longer file comes cut, `truncated`).
 PROJECT_TEXT_MAX = 1024 * 1024
+#: A runner answering a project file's raw bytes part by part (`ProjectFileBytesRequest`); most bytes one part carries.
+PROJECT_FILE_BYTES_FEATURE = "project_file_bytes"
+PROJECT_BYTES_PART = 1024 * 1024
 #: How a file differs from its repository's last commit, as `git status` says it.
 GitMark = Literal["modified", "added", "deleted", "renamed", "untracked", "conflict"]
 
@@ -4031,6 +4034,34 @@ class ProjectFindRequest(ProjectFilesBase, ProjectFindAsk):
     op: Literal["find"] = "find"
 
 
+class ProjectFileBytesRequest(ProjectFilesBase, ProjectFileAsk):
+    """`length` raw bytes of one file from `offset` (a player's seek, a viewer's read, a download, part by part), never
+    redacted: only a file a `file` read would not show as text (`ProjectFileContent.kind` image or binary); past its end
+    an empty part saying its size."""
+
+    op: Literal["bytes"] = "bytes"
+    offset: int = Field(default=0, ge=0)
+    length: int = Field(default=PROJECT_BYTES_PART, ge=1, le=PROJECT_BYTES_PART)
+    feature: ClassVar[str] = PROJECT_FILE_BYTES_FEATURE
+
+
+class ProjectFileBytes(MediaBytes):
+    """One part of a project file's raw bytes (`ProjectFileBytesRequest`): the whole file's `size`, its bytes from
+    `offset` (none from its end on)."""
+
+    path: str = Field(min_length=1, max_length=1024)
+    size: int = Field(ge=0)
+    modified_at: datetime | None = None
+    offset: int = Field(ge=0)
+    data: str = Field(max_length=(PROJECT_BYTES_PART * 4) // 3 + 8)
+
+    @model_validator(mode="after")
+    def within_the_file(self) -> Self:
+        if self.offset + len(self.content) > max(self.size, self.offset):
+            raise ValueError("these bytes run past the end of that file")
+        return self
+
+
 class ProjectFileEntry(MachineFileEntry):
     """One entry of a project folder; a folder is `modified` when anything beneath it carries a mark."""
 
@@ -4085,7 +4116,7 @@ MachineAgentRequest = Annotated[
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
-    | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest | ProjectFilesRequest | ProjectFileRequest | ProjectFindRequest,
+    | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest | ProjectFilesRequest | ProjectFileRequest | ProjectFindRequest | ProjectFileBytesRequest,
     Field(discriminator="op"),
 ]
 MACHINE_AGENT_REQUESTS: TypeAdapter[MachineAgentRequest] = TypeAdapter(MachineAgentRequest)
@@ -4527,6 +4558,8 @@ class MachineAgentAnswer(WireModel):
     content: ProjectFileContent | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `find`: paths beneath the project folder, best first (`truncated` past PROJECT_FOUND_MAX).
     found: tuple[str, ...] = Field(default=(), max_length=PROJECT_FOUND_MAX, exclude_if=lambda value: not value)
+    #: `bytes`: the part of the project file asked for.
+    part: ProjectFileBytes | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _port_slug(label: str) -> str:
