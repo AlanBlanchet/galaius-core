@@ -4013,9 +4013,10 @@ class ProjectFileAsk(WireRequest):
 
 
 class ProjectFileFromAsk(ProjectFileAsk):
-    """A project file read from byte `offset` (0, its start, is never sent: a runner before offsets reads it alike)."""
+    """A project file read from byte `offset` (0, its start, is never sent: a runner before offsets reads it alike; at
+    most 2**62, past any file and inside every PC's seek)."""
 
-    offset: int = Field(default=0, ge=0, exclude_if=lambda offset: offset == 0)
+    offset: int = Field(default=0, ge=0, le=2**62, exclude_if=lambda offset: offset == 0)
 
 
 class ProjectFindAsk(WireRequest):
