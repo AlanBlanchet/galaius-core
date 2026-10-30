@@ -14,12 +14,12 @@ import pytest
 from pydantic import ValidationError
 
 from galaius_core import (
+    refusal_of,
     MACHINE_AGENT_REQUESTS,
     MachineAgentAnswer,
     ProjectFileRefusal,
     ProjectFileRefused,
     ProjectTextAsk,
-    Refused,
     PROJECT_BYTES_PART,
     ProjectFileAsk,
     ProjectFileBytes,
@@ -238,5 +238,5 @@ def test_a_text_read_from_a_line_start_is_a_person_s_ask_the_bytes_read_never_ta
 
 @pytest.mark.parametrize("reason", ["secret", "unchecked", "sealed", "text", "busy"])
 def test_a_project_file_refusal_travels_typed_in_a_machine_answer(reason: str) -> None:
-    answer = MachineAgentAnswer(request_id=uuid4(), error="a sentence", refusal=Refused.refusal_of(ProjectFileRefused(reason, "a sentence")))
+    answer = MachineAgentAnswer(request_id=uuid4(), error="a sentence", refusal=refusal_of(ProjectFileRefused(reason, "a sentence")))
     assert MachineAgentAnswer.model_validate_json(answer.model_dump_json()).refusal == ProjectFileRefusal(reason=reason)

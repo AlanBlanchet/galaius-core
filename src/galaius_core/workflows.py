@@ -4316,6 +4316,17 @@ MODEL_ID_MAX = 120
 ASKED_BY_MAX = 32
 
 
+#: Why a PC's launcher passed over one (CLI, model) candidate of a launch's ranked list: its CLI is not installed or is
+#: switched off there, not signed in (or its sign-in check failed), cannot run the agent as set (permission mode, images,
+#: tool policy, a model capability), its sandbox cannot be built, the vendor's quota refused it, or the subscription it was
+#: to run on is at a cap or not signed in there.
+LaunchSkipReason = Literal[
+    "cli_missing", "provider_off", "unauthenticated", "auth_check_failed", "permission_mode_unsupported",
+    "images_unsupported", "tool_policy_unsupported", "sandbox_unavailable", "model_capability_unsupported",
+    "quota_exceeded", "subscription_capped", "subscription_missing",
+]
+
+
 class PassedOverCandidate(WireModel):
     """A (CLI, model) the machine's launcher ranked ABOVE the one a run started on, and why it did
     not start there: `reason` is the launcher's stable code (`quota_exceeded`, `cli_missing`,
@@ -4323,9 +4334,10 @@ class PassedOverCandidate(WireModel):
     reason names no instant). What lets the web say « Claude indisponible jusqu'à 22:01, lancé
     avec Codex » instead of showing a Codex run as if Codex had been the choice."""
 
-    provider: str = Field(max_length=40)
+    #: The CLI's id (`claude`, `codex`), a slug: shown to another member by its program name, never as free text.
+    provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     model: str = Field(max_length=MODEL_ID_MAX)
-    reason: str = Field(max_length=40)
+    reason: LaunchSkipReason
     until: float | None = Field(default=None, ge=0)
 
 
@@ -4432,11 +4444,20 @@ class WebLoad(WireModel):
 #: or the session opened before that hook (`opened_before`: its editor reads hooks when a session opens; reopened, it
 #: can be stopped).
 EditorStopRefusal = Literal["hook_missing", "opened_before"]
-#: Why a PC refused an agent request, typed for the server to word (`MachineAgentAnswer.code`): a project folder's failure,
-#: `web_full` its conversations started from the web work at their most (`WebLimited`; `MachineAgentAnswer.web` says them),
-#: `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that one),
-#: or a stop of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
-AgentRefusalCode = WorkspaceFailureCode | Literal["web_full", "under_way"] | EditorStopRefusal
+#: Why a PC refused an agent request, typed for the server to word (`MachineAgentAnswer.refusal`): a project folder's failure,
+#: `web_full` its conversations started from the web work at their most (`WebLimited`; `AgentRefusal.web` says them),
+#: `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that
+#: one), or a start still starting; its owner switched off `agents_off` its agents, `continue_off` continuing his editor
+#: conversations from the web, `approvals_off` answering a session's approvals from the web; `folder_closed` the folder is
+#: none it opens to agents (none at all, gone, hidden, a link), `folder_not_lent` its owner did not open it to the member
+#: it is lent to; `fence_closed` its agent fence gives the folder no level, `fence_broken` the fence is on and cannot be
+#: built there; `no_candidate` no (CLI, model) of the ranked list could start (`AgentRefusal.skips` says why each);
+#: `model_unavailable` no model its CLIs run suits the agent; `role_absent` the agent is not in its catalog yet; or a stop
+#: of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
+AgentRefusalCode = WorkspaceFailureCode | Literal[
+    "web_full", "under_way", "agents_off", "continue_off", "approvals_off", "folder_closed", "folder_not_lent", "fence_closed",
+    "fence_broken", "no_candidate", "model_unavailable", "role_absent",
+] | EditorStopRefusal
 #: Why a PC refused a project file read (`ProjectFolder`): `secret` its bytes hold one; `unchecked` it cannot check them
 #: for one (an environment file it cannot read, a packed file damaged, too large or holding another packed file);
 #: `sealed` packed in a format it cannot open, or encrypted; `text` it shows the file as text, redacted, never raw;
@@ -4449,6 +4470,45 @@ class AgentRefusal(Kinded):
 
     kind: Literal["agent"] = "agent"
     reason: AgentRefusalCode
+    #: `no_candidate`: each candidate of the ranked list and why it did not start, in its order.
+    skips: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=64)
+    #: `web_full`: its conversations started from the web working now and its maximum (None: this server's own refusal).
+    web: WebLoad | None = None
+
+    @model_validator(mode="after")
+    def says_its_own(self) -> Self:
+        if self.skips and self.reason != "no_candidate":
+            raise ValueError("only a refusal for no candidate names the candidates passed over")
+        if self.web is not None and self.reason != "web_full":
+            raise ValueError("only a refusal for a full PC names its conversations from the web")
+        return self
+
+
+#: What a PC was doing when its own code failed rather than the request (`OwnFault`): answering the web, starting or
+#: driving an agent, listing its files, reading its data, running a step.
+OwnFaultDoing = Literal["answering_web", "driving_agent", "listing_files", "reading_data", "running_step"]
+#: The kind of that fault, naming no field, class or file: `contract` an answer this release could not build (a contract
+#: `ValidationError`), `code` its code failed outright (a traceback, a `KeyError`).
+OwnFaultKind = Literal["contract", "code"]
+
+
+class OwnFault(Kinded):
+    """A PC's own code failed while `doing` something, not the request: the fault's text stays in that PC's log, the
+    reader is told what it was doing, the fault's kind and the command that reads that log. One kind of `MachineRefusal`."""
+
+    kind: Literal["own_fault"] = "own_fault"
+    doing: OwnFaultDoing
+    fault: OwnFaultKind
+
+    #: Each `doing` and `fault` in English, said once: the PC's answer and log (`said`), the web's English words.
+    DOING: ClassVar[dict[OwnFaultDoing, str]] = {"answering_web": "answering the web", "driving_agent": "starting or driving an agent",
+                                                 "listing_files": "listing its files", "reading_data": "reading its data", "running_step": "running a step"}
+    KIND: ClassVar[dict[OwnFaultKind, str]] = {"contract": "its answer did not fit what Galaius expects", "code": "its own code failed"}
+
+    @property
+    def said(self) -> str:
+        """The PC's sentence for this fault (its answer's `error`): what it was doing and the fault's kind, no byte of its text."""
+        return f"this computer could not build its answer while {self.DOING[self.doing]}: {self.KIND[self.fault]}"
 
 
 class ProjectFileRefusal(Kinded):
@@ -4467,59 +4527,89 @@ class ScreenRefusal(Kinded):
 
 #: Why a PC refused a request, typed for the page to word from one `(kind, reason)` table in its reader's language (the PC
 #: cannot know it); `MachineAgentAnswer.error` keeps the PC's English sentence for the logs.
-MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal | ProjectFileRefusal, Field(discriminator="kind")]
+MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal | ProjectFileRefusal | OwnFault, Field(discriminator="kind")]
 
 
 #: What a party refuses, typed once (`Refused`): the reason, for its reader to word in its own language (the refusing party
 #: cannot know it), and its English sentence for the logs (`str(error)`). A PC's runtime raises it, the server raises and reads it.
 R = TypeVar("R")
-#: The kinds a machine answer carries (`MachineAgentAnswer.refusal`): an agent, a subscription, a screen or a project file refusal.
+#: The kinds a machine answer carries (`MachineAgentAnswer.refusal`): an agent, a subscription, a screen or a project file
+#: refusal, or a fault of the PC's own.
 ANSWERED: tuple[type[BaseModel], ...] = get_args(get_args(MachineRefusal)[0])
+#: A machine refusal as data is kept and read (`kept_refusal`; `MACHINE_REFUSAL.dump_json` to keep one).
+MACHINE_REFUSAL: TypeAdapter[MachineRefusal] = TypeAdapter(MachineRefusal)
 
 
-def _restored(kind: type["Refused[Any]"], state: dict[str, Any], sentence: str) -> "Refused[Any]":
-    """A pickled or copied refusal, rebuilt without its kind's own constructor (`Refused.__reduce__`)."""
+class RefusedLine(WireModel):
+    """A command's typed refusal as one line of its output, after its `ERROR:` sentence: a program relaying it (the web's
+    mirror of a PC's runs) reads its reason back to word it in its reader's language."""
+
+    refusal: MachineRefusal
+
+
+def _restored(kind: type["Coded[Any]"], state: dict[str, Any], sentence: str) -> "Coded[Any]":
+    """A pickled or copied coded error, rebuilt without its kind's own constructor (`Coded.__reduce__`)."""
     error = kind.__new__(kind)
-    PermissionError.__init__(error, sentence)
+    super(Coded, error).__init__(sentence)
     error.__dict__.update(state)
     return error
 
 
-class Refused(PermissionError, Generic[R]):
-    """A refusal: `refusal` its reason, typed `R`. A kind declares its type parameter alone (`class AgentRefused(
-    Refused[AgentRefusal])`); a bare reason builds that kind's model, validated here (`AgentRefused("web_full", "4
-    conversations … stop one first")`) — every refusal model names its reason `reason`.
-
-    A `PermissionError` (an `OSError`): every path that answers a refusal already catches it; an `except OSError` around
-    a call that refuses catches it too."""
+class Coded(Exception, Generic[R]):
+    """An error carrying its reason typed `R` (`refusal`) for its reader to word in his own language, and its English sentence
+    for the logs (`str(error)`). A kind declares its type parameter alone (`class AgentRefused(Refused[AgentRefusal])`); a
+    bare reason builds that kind's model, validated here (`AgentRefused("web_full", "4 conversations … stop one first")`) —
+    every reason model names its reason `reason`. A kind picks its builtin exception beside it (`Refused`: a
+    `PermissionError`; a `RuntimeError` an existing `except` already catches)."""
 
     _reasons: ClassVar[TypeAdapter[Any]]
     _model: ClassVar[bool]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        declared = next((get_args(base)[0] for base in cls.__dict__.get("__orig_bases__", ()) if getattr(base, "__origin__", None) is Refused), None)
-        if declared is not None:
+        declared = next((get_args(base)[0] for base in cls.__dict__.get("__orig_bases__", ())
+                         if isinstance(origin := getattr(base, "__origin__", None), type) and issubclass(origin, Coded)), None)
+        if declared is not None and not isinstance(declared, TypeVar):
             cls._reasons = TypeAdapter(declared)
             cls._model = isinstance(declared, type) and issubclass(declared, BaseModel)
 
     def __init__(self, refusal: R | str | None, sentence: str) -> None:
+        if not hasattr(type(self), "_reasons"):
+            raise TypeError(f"{type(self).__name__} declares no reason type: raise a kind of it (`class AgentRefused(Refused[AgentRefusal])`)")
         super().__init__(sentence)
         self.refusal: R = self._reasons.validate_python({"reason": refusal} if self._model and isinstance(refusal, str) else refusal)
 
     def __reduce__(self) -> tuple[Any, ...]:
         return _restored, (type(self), dict(self.__dict__), str(self))
 
-    @staticmethod
-    def refusal_of(error: BaseException) -> MachineRefusal | None:
-        """The refusal a machine answer carries for `error` (`MachineAgentAnswer.refusal`): its typed reason when it is a
-        `Refused` of one of the answer's kinds; None for any other error."""
-        refusal = error.refusal if isinstance(error, Refused) else None
-        return refusal if isinstance(refusal, ANSWERED) else None
+
+def refusal_of(error: BaseException) -> MachineRefusal | None:
+    """The refusal a machine answer carries for `error` (`MachineAgentAnswer.refusal`): its typed reason when it is a
+    `Coded` of one of the answer's kinds (`ANSWERED`); None for any other error."""
+    refusal = error.refusal if isinstance(error, Coded) else None
+    return refusal if isinstance(refusal, ANSWERED) else None
+
+
+def kept_refusal(kept: object) -> MachineRefusal | None:
+    """A machine refusal kept as data (its JSON in a store row, its object in a receipt) read back; None when there is
+    none, or one of a kind this release does not know (its sentence, kept beside it, says it)."""
+    try:
+        return (MACHINE_REFUSAL.validate_json if isinstance(kept, (str, bytes)) else MACHINE_REFUSAL.validate_python)(kept) if kept else None
+    except ValidationError:
+        return None
+
+
+class Refused(Coded[R], PermissionError):
+    """A refusal: a `Coded` that is a `PermissionError` (an `OSError`): every path that answers a refusal already catches
+    it; an `except OSError` around a call that refuses catches it too."""
 
 
 class ProjectFileRefused(Refused[ProjectFileRefusal]):
     """A project file read a PC refuses, its reason a `ProjectFileRefusalCode`."""
+
+
+class AgentRefused(Refused[AgentRefusal]):
+    """An agent request a PC refuses (or this server for it), its reason an `AgentRefusalCode`."""
 
 
 class MachineAgentAnswer(WireModel):

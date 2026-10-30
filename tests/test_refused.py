@@ -8,7 +8,7 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import AgentRefusal, MachineRefusal, Refused, ScreenRefusal, SubscriptionCap, SubscriptionRefusal
+from galaius_core import refusal_of, AgentRefusal, Coded, MachineRefusal, Refused, ScreenRefusal, SubscriptionCap, SubscriptionRefusal
 
 
 class Agent(Refused[AgentRefusal]):
@@ -34,9 +34,16 @@ CAP = SubscriptionCap(window="weekly", used_percent=81, cap_percent=80, at_cap="
     (Job("download_failed", "too many redirects"), "download_failed", None),          # never on a machine answer
 ])
 def test_a_refusal_is_typed_at_the_raise_read_in_one_call_and_survives_a_copy(raised: Refused, reason, answered) -> None:
-    assert isinstance(raised, PermissionError) and raised.refusal == reason and Refused.refusal_of(raised) == answered
+    assert isinstance(raised, PermissionError) and raised.refusal == reason and refusal_of(raised) == answered
     for again in (copy.copy(raised), pickle.loads(pickle.dumps(raised))):
         assert (type(again), again.refusal, str(again)) == (type(raised), raised.refusal, str(raised))
-    assert Refused.refusal_of(ValueError("not a refusal")) is None
+    assert refusal_of(ValueError("not a refusal")) is None
     with pytest.raises(ValidationError):
         type(raised)("no_such_reason", "a reason its kind does not know is refused at the raise")
+
+
+@pytest.mark.parametrize("bare", [Coded, Refused])
+def test_a_kind_with_no_reason_type_is_refused_at_its_raise(bare: type[Coded]) -> None:
+    """A bare `Coded` / `Refused` names no reason type: raised, it says so, never an `AttributeError` from deep inside."""
+    with pytest.raises(TypeError, match="declares no reason type"):
+        bare("web_full", "full")
