@@ -264,15 +264,17 @@ class WireModel(BaseModel):
         return data
 
 
-def _kind_required(schema: dict[str, Any]) -> None:
-    schema["required"] = sorted({*schema.get("required", ()), "kind"})
+def _constants_required(schema: dict[str, Any], _model: type[Any]) -> None:
+    schema["required"] = sorted({*schema.get("required", ()), *(name for name, field in schema.get("properties", {}).items() if "const" in field)})
 
 
 class Kinded(WireModel):
-    """One member of a union discriminated on `kind`, whose `kind` defaults to its own: read without it from a sender
-    older than the union, always written with it, and required in its schema (a page narrows the union on it)."""
+    """One member of a union discriminated on a constant (`kind`, `code`): every field fixed to one value defaults to it,
+    is always written, and is required in its schema (a page narrows the union on it, or reads a fact the member states,
+    such as a refusal's `reason`). Read alone, a member takes one without it; read through the union it cannot (no
+    tag), so a member kept before it joined a union gets its tag backfilled then."""
 
-    model_config = ConfigDict(json_schema_extra=_kind_required)
+    model_config = ConfigDict(json_schema_extra=_constants_required)
 
 
 class WireRequest(WireModel):

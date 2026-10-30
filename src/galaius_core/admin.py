@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from .failure import Caused
 from .wire import WireModel, WireRequest
 from .tokens import TokenCounts
 from .permissions import Permission
@@ -150,7 +151,7 @@ class OperatorServiceSummary(WireModel):
     recorded_at: datetime
 
 
-class OperatorRunFailure(WireModel):
+class OperatorRunFailure(Caused):
     workspace_id: UUID
     run_id: UUID
     status: Literal["failed", "cancelled", "interrupted"]

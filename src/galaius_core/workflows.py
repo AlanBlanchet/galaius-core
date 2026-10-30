@@ -18,6 +18,7 @@ from .cost import NodeCostActual, RunCostActual
 from .tokens import TokenCounts
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
+from .failure import CAUSES, Caused, FailureCause
 from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from .community import CommunityEntryRef
@@ -2202,7 +2203,7 @@ class NodePolicy(WireModel):
         return self.backoff_seconds * 2 ** (retry - 1)
 
 
-class NodeError(WireModel):
+class NodeError(Caused):
     """One node's failure once its retries are spent: the `error` port's value, and what a run
     records about each error it survived (`WorkflowRun.recovered`)."""
 
@@ -4590,6 +4591,16 @@ def refusal_of(error: BaseException) -> MachineRefusal | None:
     return refusal if isinstance(refusal, ANSWERED) else None
 
 
+def cause_of(error: BaseException | None) -> FailureCause | None:
+    """Why `error` failed, typed: its `Coded` reason when that is a `FailureCause`, else the cause of the error it was
+    raised from; None when no error in that chain carries one."""
+    while error is not None:
+        if isinstance(error, Coded) and isinstance(error.refusal, CAUSES):
+            return error.refusal
+        error = error.__cause__
+    return None
+
+
 def kept_refusal(kept: object) -> MachineRefusal | None:
     """A machine refusal kept as data (its JSON in a store row, its object in a receipt) read back; None when there is
     none, or one of a kind this release does not know (its sentence, kept beside it, says it)."""
@@ -5116,7 +5127,7 @@ class RunPhase(WireModel):
     until: datetime | None = None
 
 
-class WorkflowRun(WireModel):
+class WorkflowRun(Caused):
     id: UUID
     workflow: WorkflowRevisionRef
     status: Literal["queued", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]
@@ -5286,7 +5297,7 @@ class ConversationCreateRequest(WireRequest):
         return self
 
 
-class Conversation(WireModel):
+class Conversation(Caused):
     id: UUID
     revision: int = Field(default=0, ge=0)
     model: ConfiguredModelRef

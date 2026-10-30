@@ -8,19 +8,23 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from galaius_core.workflows import Coded, cause_of
 from galaius_core.paid_use import (
     CHARGE_WORDS,
     DEFAULT_MONTHLY_CAP_USD,
     PaidProviderSwitch,
     PaidProviderUpdate,
     PaidUseCapUpdate,
+    MonthlyCapReached,
+    PaidUseOff,
     PaidUsePolicy,
     PaidUseRefusal,
     PaidUseSpend,
     PaidUseState,
     ProviderChargeState,
+    TurnCapReached,
     charge_kind,
     charge_word,
     month_start,
@@ -118,18 +122,42 @@ def test_month_start_is_the_first_instant_of_the_month() -> None:
     assert month_start(datetime(2026, 9, 30, 13, 45, 12, tzinfo=UTC)) == datetime(2026, 9, 1, tzinfo=UTC)
 
 
-def test_a_cap_refusal_must_carry_the_figures_it_refused_on() -> None:
-    with pytest.raises(ValidationError):
-        PaidUseRefusal(code="monthly_cap_reached", provider="openai", message="over")
-    refusal = PaidUseRefusal(code="monthly_cap_reached", provider="openai", message="over",
-                             spend=PaidUseSpend(period_start=month_start(), spent_usd=10.0, cap_usd=10.0))
-    assert refusal.spend is not None
+_REFUSAL = TypeAdapter(PaidUseRefusal)
+_SPEND = {"period_start": "2026-10-01T00:00:00Z", "spent_usd": 9.0, "cap_usd": 10.0}
 
 
-def test_a_not_enabled_refusal_needs_no_figures() -> None:
-    refusal = PaidUseRefusal(code="paid_use_not_enabled", provider="openai",
-                             message="paid use of openai is off for this workspace")
-    assert refusal.spend is None
+@pytest.mark.parametrize(("body", "member", "reason"), [
+    ({"code": "paid_use_not_enabled"}, PaidUseOff, "switched_off"),
+    ({"code": "monthly_cap_reached", "spend": _SPEND}, MonthlyCapReached, "cap_reached"),
+    ({"code": "turn_cap_reached", "spend": _SPEND, "worst_usd": 2.0, "held_usd": 9.0}, TurnCapReached, "cap_reached"),
+])
+def test_a_refusal_reads_as_its_code_s_member_and_needs_every_figure_it_states(body: dict, member: type, reason: str) -> None:
+    """The client words a refusal from its figures alone (`refusalSentence`): each member requires its own, so a body
+    missing one is refused here rather than read as « $0.00 »; its constants (the tag a page narrows on, the `reason`
+    every reader branches on) are written and required in its schema."""
+    whole = {"provider": "openai", "message": "over", **body}
+    refusal = _REFUSAL.validate_python(whole)
+    assert type(refusal) is member and refusal.status == (403 if member is PaidUseOff else 402)
+    assert refusal.reason == reason and refusal.model_dump()["reason"] == reason
+    assert {"code", "reason"} <= set(member.model_json_schema()["required"])
+    for figure in set(body) - {"code"}:
+        with pytest.raises(ValidationError):
+            _REFUSAL.validate_python({key: value for key, value in whole.items() if key != figure})
+
+
+def test_cause_of_reads_a_refusal_through_the_errors_raised_from_it() -> None:
+    off = PaidUseOff(provider="openai", message="off")
+
+    class Denied(Coded[PaidUseRefusal]):
+        pass
+    try:
+        try:
+            raise Denied(off, "off")
+        except Denied as denied:
+            raise RuntimeError("the step failed") from denied
+    except RuntimeError as wrapped:
+        assert cause_of(wrapped) is off
+    assert cause_of(RuntimeError("plain")) is None
 
 
 def test_state_carries_a_row_per_provider_with_its_word() -> None:
@@ -141,7 +169,7 @@ def test_state_carries_a_row_per_provider_with_its_word() -> None:
             ProviderChargeState(provider="self_hosted", charge="local", allowed=True),
             ProviderChargeState(provider="gemini", charge="metered_api", allowed=True, spent_usd=0.2),
             ProviderChargeState(provider="openai", charge="metered_api", allowed=False,
-                                refusal="paid use of openai is off for this workspace"),
+                                refusal=PaidUseOff(provider="openai", message="paid use of openai is off for this workspace")),
         ),
     )
     assert [item.word for item in state.providers] == ["abonnement", "local", "payant à l'usage", "payant à l'usage"]
@@ -172,8 +200,7 @@ def test_a_refusal_states_a_fact_and_leaves_the_sentence_to_the_reader_language(
     """visual-critic r1, HIGH, routed to the backend: the English refusal was printed verbatim in
     the French UI, and it said "switch it on in Billing" while shown inside Billing. The wire
     carries the CODE, the provider and the figures; the words a reader sees are the client's."""
-    refusal = PaidUseRefusal(code="paid_use_not_enabled", provider="openai",
-                             message="paid use of openai is not enabled for this workspace")
+    refusal = PaidUseOff(provider="openai", message="paid use of openai is not enabled for this workspace")
     assert refusal.code == "paid_use_not_enabled"
     for pointer in ("Billing", "switch it on", "raise the ceiling", "Facturation"):
         assert pointer not in refusal.message

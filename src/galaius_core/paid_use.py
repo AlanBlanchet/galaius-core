@@ -20,12 +20,12 @@ before anyone configures anything.
 """
 
 from datetime import UTC, datetime
-from typing import Literal, Self
+from typing import Annotated, ClassVar, Literal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, computed_field
 
-from .wire import WireModel, WireRequest
+from .wire import Kinded, WireModel, WireRequest
 
 #: How a call is paid for. Derived from the route + provider, never stored on a model: the same
 #: model is `subscription` through a CLI session and `metered_api` through a key.
@@ -152,25 +152,77 @@ class PaidUseSpend(WireModel):
         return 1.0 if self.cap_usd <= 0 else min(1.0, self.total_usd / self.cap_usd)
 
 
+#: What a refused metered call asks of its reader: switch the provider on, or raise the month's limit.
+PaidUseReason = Literal["switched_off", "cap_reached"]
+
+
+class PaidUseRefused(Kinded):
+    """A metered call refused before it was made, as its body answers it — a real status (`status`) and a real reason,
+    never a 200 with the refusal folded inside. Its reader's words come from `code` + the figures (the client's
+    `refusalSentence`); `message` is the same fact in English, for a log. `reason` is what the reader can do about it,
+    one per family (`PaidUseReason`): a switch to flip, or a limit to raise."""
+
+    status: ClassVar[int] = 402
+    reason: PaidUseReason
+    provider: str = Field(min_length=1, max_length=40)
+    message: str = Field(min_length=1, max_length=300)
+    #: The month's figures and its limit: what a cap refusal is about (`CapRefused` requires them).
+    spend: PaidUseSpend | None = None
+
+
+class PaidUseOff(PaidUseRefused):
+    """Paid use of `provider` was never switched on for the organisation."""
+
+    status: ClassVar[int] = 403
+    code: Literal["paid_use_not_enabled"] = "paid_use_not_enabled"
+    reason: Literal["switched_off"] = "switched_off"
+
+
+class CapRefused(PaidUseRefused):
+    """A call the month's hard limit stops: `spend` the month's figures and the limit (`cap_usd`) it holds."""
+
+    reason: Literal["cap_reached"] = "cap_reached"
+    spend: PaidUseSpend
+
+
+class MonthlyCapReached(CapRefused):
+    """The month already at its limit for `provider`."""
+
+    code: Literal["monthly_cap_reached"] = "monthly_cap_reached"
+
+
+class TurnCapReached(CapRefused):
+    """A turn not sent: its worst case (`worst_usd`) on top of what the month already holds without it (`held_usd`:
+    spent, and the worst cases of the turns in flight) would cross the limit."""
+
+    code: Literal["turn_cap_reached"] = "turn_cap_reached"
+    worst_usd: float = Field(ge=0)
+    held_usd: float = Field(ge=0)
+
+
+#: Why a metered call is refused, one member per `code`.
+PaidUseRefusal = Annotated[PaidUseOff | MonthlyCapReached | TurnCapReached, Field(discriminator="code")]
+
+
 class ProviderChargeState(WireModel):
     """One provider as a picker row: what it costs, whether the owner switched it on, and what it
     has cost this month."""
 
     provider: str = Field(min_length=1, max_length=40)
     charge: ChargeKind
-    allowed: bool
     #: What THIS provider cost this month, when the ledger attributes it. `None` is UNKNOWN —
     #: never 0, and never the month's total standing in for a per-provider figure (visual-critic
     #: r1 read 0.20794, the whole month, on every metered row).
     spent_usd: float | None = Field(default=None, ge=0)
-    #: Why a call would be refused right now. A STATEMENT of fact, in one sentence, for a log and
-    #: for a client with no localization of its own — the words a reader sees come from `refused`
-    #: + the figures, in the reader's language, and carry the action. This sentence names no
-    #: screen to go to: it gets shown INSIDE that screen (visual-critic r1).
-    refusal: str | None = Field(default=None, max_length=300)
-    #: Which refusal applies, for a client that writes its own sentence. None when the call would
-    #: go through.
-    refused: Literal["paid_use_not_enabled", "monthly_cap_reached"] | None = None
+    #: Why a call would be refused right now (None: it would go through); its reader's words come from its code + figures,
+    #: shown INSIDE the screen that fixes it (visual-critic r1).
+    refusal: PaidUseRefusal | None = None
+
+    @computed_field
+    @property
+    def allowed(self) -> bool:
+        """Whether a call would go through right now: no refusal, read from it (never a second answer beside it)."""
+        return self.refusal is None
 
     @property
     def word(self) -> str:
@@ -202,17 +254,3 @@ class PaidUseCapUpdate(WireRequest):
     monthly_cap_usd: float | None = Field(default=None, ge=0)
 
 
-class PaidUseRefusal(WireModel):
-    """The body a refused metered call answers with — a real status and a real reason, never a 200
-    with the refusal folded inside."""
-
-    code: Literal["paid_use_not_enabled", "monthly_cap_reached"]
-    provider: str = Field(min_length=1, max_length=40)
-    message: str = Field(min_length=1, max_length=300)
-    spend: PaidUseSpend | None = None
-
-    @model_validator(mode="after")
-    def cap_refusal_shows_the_figures(self) -> Self:
-        if self.code == "monthly_cap_reached" and self.spend is None:
-            raise ValueError("a cap refusal states the month's spend and the ceiling it crossed")
-        return self
