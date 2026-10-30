@@ -228,17 +228,28 @@ class RunAllowance(WireRequest):
     up_to_percent: int = Field(ge=1, le=100)
 
 
-class SubscriptionUsage(WireModel):
-    """One subscription's last usage reading on a PC."""
+class LoginIdentity(WireModel):
+    """Which vendor login a PC's CLI is signed in to and as whom, as its own status command says: the server tells one
+    login from another by `login` (the same vendor account in two folders or on two PCs is one login)."""
+
+    #: Who it is signed in as, as its status command says (an e-mail, an organisation), once signed in.
+    account: str = Field(default="", max_length=200)
+    #: Which login that is: a digest of the account its status answer names, equal for the same vendor login wherever it
+    #: is signed in (the server refuses one login on two accounts); "" when not signed in, or not said (an older PC).
+    login: str = Field(default="", pattern=r"^([0-9a-f]{16})?$", exclude_if=lambda value: not value)
+
+
+class SubscriptionUsage(LoginIdentity):
+    """One subscription's last usage reading on a PC, and the login its folder holds now."""
 
     subscription_id: UUID
     windows: tuple[UsageWindow, ...] = Field(default=(), max_length=8)
 
 
-class LoginUsage(WireModel):
+class LoginUsage(LoginIdentity):
     """The last usage reading of one program's default login on a PC (the login its owner's own editor
-    sessions use, outside any subscription); no window: none now (signed out, not installed, a login
-    its vendor meters none for)."""
+    sessions use, outside any subscription), and which login that is; no window: none now (signed out, not
+    installed, a login its vendor meters none for)."""
 
     provider: AgentProvider
     windows: tuple[UsageWindow, ...] = Field(default=(), max_length=8)

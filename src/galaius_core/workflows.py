@@ -18,7 +18,7 @@ from .cost import NodeCostActual, RunCostActual
 from .tokens import TokenCounts
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
-from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from .community import CommunityEntryRef
 from .run_state import RunRow, RunState, state_of
@@ -4241,7 +4241,7 @@ class AgentSignIn(WireModel):
     expires_at: datetime
 
 
-class AgentProviderState(WireModel):
+class AgentProviderState(LoginIdentity):
     """One CLI galaius can drive agents through, on this machine: switched on, installed, and where
     its install and sign-in from the web stand."""
 
@@ -4257,11 +4257,6 @@ class AgentProviderState(WireModel):
     #: says so): installed and once signed in, its owner signs in again, never installs it again.
     expired: bool = Field(default=False, exclude_if=lambda value: not value)
     version: str = Field(default="", max_length=80)
-    #: Who it is signed in as, as its status command says (an e-mail, an organisation), once ready.
-    account: str = Field(default="", max_length=200)
-    #: Which login that is: a digest of its status answer, equal for the same vendor login wherever it
-    #: is signed in (the server refuses one login on two accounts); "" when not signed in.
-    login: str = Field(default="", pattern=r"^([0-9a-f]{16})?$", exclude_if=lambda value: not value)
     sign_in: AgentSignIn | None = None
     failure: AgentProgramFailure | None = None
     #: The program's or installer's last line, for the log (English, never a secret).
