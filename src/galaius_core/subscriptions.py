@@ -25,6 +25,8 @@ UsageWindowName = Literal["five_hour", "weekly", "monthly"]
 AtCap = Literal["finish", "cut"]
 #: What a PC's runner says once it takes a `RunMove` that does not resume (`resume` False).
 RUN_MOVE_WAITS_FEATURE = "agent_subscription_moves_wait"
+#: What a PC's runner says once it takes a `RunMove` from or to its own login of the run's CLI (`subscription_id` None).
+RUN_MOVE_LOGIN_FEATURE = "agent_login_moves"
 
 
 class UsageWindow(WireModel):
@@ -177,18 +179,24 @@ class SubscriptionRefusal(Kinded):
 
 
 class RunMove(WireRequest):
-    """A stopped run of his continues its session on `subscription_id`, another of his own subscriptions of the same
-    provider on the same PC, under `limits` (contract A9: the PC carries the session's transcript over, never a credential,
-    and pins the run there). Never between accounts.
+    """A run of his continues its session on `subscription_id`, another of his own subscriptions of the same provider on
+    the same PC, under `limits`; None: on that PC's own login of its CLI (contract A9: the PC carries the session's
+    transcript over, never a credential, and pins the run there; no login is signed out). Never between accounts.
 
     `resume`: the PC resumes it there at once (his « Continuer sur … », the switch at a cap); False: it only moves, and
     its next turn runs there (his pick in a conversation, the switch before a turn). Asked False only of a runner saying
-    `RUN_MOVE_WAITS_FEATURE`."""
+    `RUN_MOVE_WAITS_FEATURE`; from or to the PC's own login only of one saying `RUN_MOVE_LOGIN_FEATURE`."""
 
     run_id: UUID
-    subscription_id: UUID
-    limits: SubscriptionLimits
+    subscription_id: UUID | None
+    limits: SubscriptionLimits | None = Field(default=None, exclude_if=lambda value: value is None)
     resume: bool = Field(default=True, exclude_if=lambda value: value)
+
+    @model_validator(mode="after")
+    def limits_of_a_subscription(self) -> Self:
+        if (self.limits is None) != (self.subscription_id is None):
+            raise ValueError("a move to a subscription carries its caps (limits), one to the PC's own login none")
+        return self
 
 
 class RunSubscription(SubscriptionUse):

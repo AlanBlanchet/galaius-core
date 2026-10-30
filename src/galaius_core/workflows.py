@@ -3215,7 +3215,8 @@ class AgentSignInCodeRequest(MachineAgentRequestBase, SealedSignInCode):
 
 
 class AgentMoveRequest(MachineAgentRequestBase, RunMove):
-    """`RunMove` for one stopped run started here: its session carried to the other subscription's folder, resumed there."""
+    """`RunMove` for one run started here: its session carried to the other login's folder (a subscription's, or this
+    PC's own), resumed there unless the move does not `resume`."""
 
     op: Literal["move"] = "move"
     action: ClassVar[bool] = True
