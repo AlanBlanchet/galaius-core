@@ -90,6 +90,10 @@ class Person(WireModel):
     agents: tuple[PersonAgent, ...]
     may_edit: bool
     may_remove: bool
+    #: In the Owners group: every right by construction, until they leave it.
+    owner: bool
+    #: Why this person's rights do not change, in the reader's words (an Owner's); None while they can.
+    rights_fixed: str | None
 
 
 class PendingInvite(WireModel):
