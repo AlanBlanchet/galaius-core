@@ -14,7 +14,8 @@ from pydantic import Field, model_validator
 
 from .cloud import ResourceRequirement
 from .pool import ModelWeightFormat, SandboxTier
-from .workflows import ConnectionResourceRef, ModelTask
+from .model_task import ModelTask
+from .workflows import ConnectionResourceRef
 from .wire import WireModel
 
 UserModelOriginKind = Literal["huggingface_repo", "uploaded_weights", "object_storage", "docker_image"]

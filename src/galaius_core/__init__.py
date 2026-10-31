@@ -157,7 +157,7 @@ from .subscriptions import (
 from .tokens import TokenCounts
 from .workflows import (
     ValueType,
-    DirectTool, ModelTask, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, provider_sovereignty, workflow_sovereignty, workflow_data_tier, WorkflowFunctionTool,
+    DirectTool, Placement, VISION_MODEL_TASKS, model_task_ports, Sovereignty, DataSovereigntyTier, ProviderSovereignty, provider_sovereignty, workflow_sovereignty, workflow_data_tier, WorkflowFunctionTool,
     NodeSovereigntyRecord, actual_workflow_sovereignty, SovereigntyRequired, meets_requirement, NodeSovereigntyEntry, WorkflowSovereigntySummary,
     NodeLibraryRef, NodeLibraryDefinition, NodeLibraryEntry, NodeLibraryUse,
     Effect, Implementation, BuiltinImplementation, AgentImplementation, ModelChoice, ModelImplementation, FunctionImplementation, ScriptImplementation, ScriptLanguage, ConnectorImplementation, SubgraphImplementation, MachineImplementation, BuiltinOp, WorkflowNode, 
@@ -194,7 +194,32 @@ from .screen import (
 )
 from .community import CommunityAuthor, CommunityEntryRef, CommunityKind, CommunityRunKind, plain_line, visible, PlainLine, Licence, HttpsLink, TITLE_MAX, AUTHOR_MAX, LICENCE_MAX, CommunityLicenceClass, CommunityPage, CommunityPrompt, CommunityQuery, CommunitySort, CommunitySource, CommunitySources
 from .media import MEDIA_INPUT_BYTES, MEDIA_TOOLS, MediaAnswer, MediaFile, MediaImage, MediaKind, MediaQuote, MediaRequest, MediaSpec, Model3DSpec, MusicSpec, SoundSpec, SpeechSpec, TranslationSpec
-from .failure import CAUSES, Caused, FailureCause
+from .cause import Cause
+from .failure import Caused, FailureCause
+from .model_task import ModelTask
+from .step_fault import (
+    ClipTooShort,
+    EndpointReason,
+    EndpointRefused,
+    InputEmpty,
+    InputFault,
+    InputReason,
+    JobTimeout,
+    ModelRetired,
+    NoKey,
+    NoRunner,
+    NoSpeech,
+    NothingReturned,
+    OutputLimit,
+    ProviderInvalid,
+    ProviderSilent,
+    ReasonedFault,
+    Returned,
+    StepFault,
+    StepFaultCause,
+    VendorReason,
+    VendorRefused,
+)
 from .paid_use import (
     CHARGE_WORDS,
     DEFAULT_MONTHLY_CAP_USD,
@@ -283,7 +308,7 @@ __all__ = [
     "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "RUN_MOVE_LOGIN_FEATURE", "RUN_MOVE_WAITS_FEATURE", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginIdentity", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
-    "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "CAUSES", "Caused", "FailureCause", "CapRefused", "MonthlyCapReached", "PaidUseOff", "PaidUseReason", "PaidUseRefused", "PaidUseRefusal", "PaidUseSpend", "TurnCapReached", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
+    "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "Cause", "Caused", "FailureCause", "ClipTooShort", "EndpointReason", "EndpointRefused", "InputEmpty", "InputFault", "InputReason", "JobTimeout", "ModelRetired", "NoKey", "NoRunner", "NoSpeech", "NothingReturned", "OutputLimit", "ProviderInvalid", "ProviderSilent", "ReasonedFault", "Returned", "StepFault", "StepFaultCause", "VendorReason", "VendorRefused", "CapRefused", "MonthlyCapReached", "PaidUseOff", "PaidUseReason", "PaidUseRefused", "PaidUseRefusal", "PaidUseSpend", "TurnCapReached", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",

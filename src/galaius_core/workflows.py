@@ -18,7 +18,9 @@ from .cost import NodeCostActual, RunCostActual
 from .tokens import TokenCounts
 from .criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
 from .prompts import PromptExecutionRef, PromptRevision
-from .failure import CAUSES, Caused, FailureCause
+from .cause import Cause
+from .model_task import ModelTask
+from .failure import Caused, FailureCause
 from .subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from .community import CommunityEntryRef
@@ -159,16 +161,6 @@ class MachineRef(WireModel):
 
 
 
-#: What a model does, named by the Hugging Face Hub `pipeline_tag` ids (huggingface.js
-#: `PIPELINE_DATA`) — an existing cross-vendor vocabulary, so a hosted API model and a local
-#: checkpoint doing the same job share one task; the PORTS it exposes may still differ by
-#: `Placement.target` (`model_task_ports`'s `placement` argument) — a machine-local detector reads
-#: image PATHS already on that machine (never uploaded), a hosted one is handed the real file.
-ModelTask = Literal[
-    "text-generation", "text-to-image", "text-to-video", "object-detection", "image-segmentation",
-    "feature-extraction", "text-to-speech", "automatic-speech-recognition", "image-to-3d", "text-to-3d",
-    "depth-estimation", "keypoint-detection", "image-to-text", "text-to-music", "text-to-sound",
-]
 
 class MachineModelSpec(WireModel):
     """A checkpoint an enrolled machine can run itself (`MachineCommand.model`): its Hugging Face id,
@@ -4595,7 +4587,7 @@ def cause_of(error: BaseException | None) -> FailureCause | None:
     """Why `error` failed, typed: its `Coded` reason when that is a `FailureCause`, else the cause of the error it was
     raised from; None when no error in that chain carries one."""
     while error is not None:
-        if isinstance(error, Coded) and isinstance(error.refusal, CAUSES):
+        if isinstance(error, Coded) and isinstance(error.refusal, Cause):
             return error.refusal
         error = error.__cause__
     return None

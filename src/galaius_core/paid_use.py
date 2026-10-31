@@ -25,7 +25,8 @@ from uuid import UUID
 
 from pydantic import Field, computed_field
 
-from .wire import Kinded, WireModel, WireRequest
+from .cause import Cause
+from .wire import WireModel, WireRequest
 
 #: How a call is paid for. Derived from the route + provider, never stored on a model: the same
 #: model is `subscription` through a CLI session and `metered_api` through a key.
@@ -156,7 +157,7 @@ class PaidUseSpend(WireModel):
 PaidUseReason = Literal["switched_off", "cap_reached"]
 
 
-class PaidUseRefused(Kinded):
+class PaidUseRefused(Cause):
     """A metered call refused before it was made, as its body answers it — a real status (`status`) and a real reason,
     never a 200 with the refusal folded inside. Its reader's words come from `code` + the figures (the client's
     `refusalSentence`); `message` is the same fact in English, for a log. `reason` is what the reader can do about it,

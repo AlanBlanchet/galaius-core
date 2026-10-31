@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, ClassVar, TypeVar
 
-from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, model_validator
 from pydantic_core import to_jsonable_python
 
 M = TypeVar("M")
@@ -247,6 +247,13 @@ class WireModel(BaseModel):
     """A contract read from the other side: unknown fields are kept (see module docstring)."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derived_again(cls, data: Any) -> Any:
+        """A computed field read back (a dump validated again) is derived again from the fields, never kept beside it."""
+        computed = cls.__pydantic_computed_fields__
+        return {key: value for key, value in data.items() if key not in computed} if computed and isinstance(data, dict) else data
 
     def model_dump(self, **options: Any) -> dict[str, Any]:
         data = super().model_dump(**options)

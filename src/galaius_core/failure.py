@@ -1,13 +1,17 @@
 """Why something failed, typed: one alias every failure carries (`FailureCause`) and one mixin holding it (`Caused`).
 Its reader's words come from its type and figures; the English sentence beside it is the same fact for a log."""
 
-from .paid_use import PaidUseRefusal, PaidUseRefused
+from typing import Annotated
+
+from pydantic import Field
+
+from .paid_use import PaidUseRefusal
+from .step_fault import StepFaultCause
 from .wire import WireModel
 
-#: Why a run, a step or a chat turn failed, when the server knows it: one member per `code`.
-FailureCause = PaidUseRefusal
-#: The family bases its members derive from, for an `isinstance` (`cause_of`): a new family joins both lines.
-CAUSES: tuple[type[WireModel], ...] = (PaidUseRefused,)
+#: Why a run, a step or a chat turn failed, when the server knows it: a metered call refused, or a model step failed past
+#: the server; one member per `code`.
+FailureCause = Annotated[PaidUseRefusal | StepFaultCause, Field(discriminator="code")]
 
 
 class Caused(WireModel):
