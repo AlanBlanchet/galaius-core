@@ -616,7 +616,7 @@ def test_text_written_for_code_is_recognised_so_no_screen_shows_it() -> None:
         dump = str(error)
     assert internals(dump) and "MachineFence" in dump
     assert internals("Traceback (most recent call last):\n  File \"/srv/app.py\", line 2")
-    assert internals("<galaius_core.workflows.contracts.MachineFence object at 0x7f3a>")
+    assert internals("<galaius_core.machine.places.MachineFence object at 0x7f3a>")
     assert not internals("bubblewrap cannot build its sandbox here: once, as root, run sudo apparmor_parser -r …")
     assert not internals("the agent fence needs Linux (bubblewrap and Landlock)")
     # An exception class by its name is written as code spells it, never as a sentence spells it.
