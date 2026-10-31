@@ -25,8 +25,7 @@ from uuid import UUID
 
 from pydantic import Field, computed_field
 
-from galaius_core.wire import Cause
-from galaius_core.wire import WireModel, WireRequest
+from galaius_core.wire import Cause, WireModel, WireRequest
 
 #: How a call is paid for. Derived from the route + provider, never stored on a model: the same
 #: model is `subscription` through a CLI session and `metered_api` through a key.

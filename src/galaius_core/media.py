@@ -22,7 +22,7 @@ from galaius_core.tools.files import FileTool
 from galaius_core.wire import WireModel, WireRequest
 
 MediaKind = Literal["translation", "model_3d", "speech", "music", "sound"]
-#: The agent tool that asks for each kind, and the files it keeps (`workflows.FILE_TOOL_REGISTRY`).
+#: The agent tool that asks for each kind, and the files it keeps (`workflows.contracts.FILE_TOOL_REGISTRY`).
 _AUDIO = ((".mp3", "audio/mpeg"), (".wav", "audio/wav"), (".ogg", "audio/ogg"))
 MEDIA_TOOLS: dict[MediaKind, FileTool] = {
     "translation": FileTool(tool="translate", writes=((".txt", "text/plain"),)),

@@ -1,6 +1,6 @@
-"""The agent tools whose answer names the files they kept for their run (`workflows.file_token`), each with the formats it
+"""The agent tools whose answer names the files they kept for their run (`workflows.contracts.file_token`), each with the formats it
 writes (suffix, the content type it is served with): `create_file` here, each media job's in `media.MEDIA_TOOLS`; together
-they make `workflows.FILE_TOOL_REGISTRY`, which the chat's file cards and every kept-file rule read."""
+they make `workflows.contracts.FILE_TOOL_REGISTRY`, which the chat's file cards and every kept-file rule read."""
 
 from galaius_core.wire import WireModel
 

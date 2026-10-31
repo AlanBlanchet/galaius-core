@@ -24,7 +24,7 @@ CloudProviderKind = Literal["scaleway"]
 CloudMachineState = Literal["provisioning", "running", "stopping", "stopped", "failed"]
 
 #: Rank for the sovereignty-tier floor check (`cheapest_fit`'s `min_tier`): lower = more
-#: sovereign. Mirrors `workflows._SOVEREIGNTY_RANK`'s "lower rank is more sovereign, at-least-as-
+#: sovereign. Mirrors `workflows.contracts._SOVEREIGNTY_RANK`'s "lower rank is more sovereign, at-least-as-
 #: sovereign-as-the-floor" shape, over the finer per-endpoint `DataSovereigntyTier` axis instead
 #: of the coarser routing `Sovereignty` axis that rank covers.
 _TIER_RANK: dict[DataSovereigntyTier, int] = {"eu_sovereign": 0, "eu_hosted_foreign_law": 1, "non_eu": 2}
