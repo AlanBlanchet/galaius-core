@@ -16,7 +16,7 @@ import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Annotated, Any, ClassVar, TypeVar
+from typing import Annotated, Any, ClassVar, Self, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, computed_field, model_validator
 from pydantic_core import to_jsonable_python
@@ -305,6 +305,11 @@ class Cause(Kinded):
     @property
     def message(self) -> str:
         return self.said
+
+    def on_machine(self, name: str | None) -> Self:
+        """The same fact, told of a step on the machine named `name` (None: a pooled peer, never named): a cause about the
+        machine itself names it; any other stays as it is."""
+        return self
 
 
 class WireRequest(WireModel):

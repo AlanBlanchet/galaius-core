@@ -14,10 +14,10 @@ from uuid import UUID
 from pydantic import Field
 
 from galaius_core.wire import WireModel, WireRequest
+from galaius_core.machine.need import AcceleratorKind, InstanceTypeName, RegionName, ResourceRequirement
 from galaius_core.workflows.contracts import (
-    AcceleratorKind, DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources,
-    NodeSovereigntyRecord, ResourceRequirement, Sovereignty, SovereigntyRequired, meets_requirement,
-    resources_fit,
+    DataSovereigntyTier, MachineAccelerator, MachineRef, MachineResources, NodeSovereigntyRecord, Sovereignty,
+    SovereigntyRequired, meets_requirement, resources_fit,
 )
 
 CloudProviderKind = Literal["scaleway"]
@@ -41,8 +41,8 @@ class CloudInstanceType(WireModel):
     honest pair rather than a silently-converted single number."""
 
     provider: CloudProviderKind
-    name: str = Field(min_length=1, max_length=40)
-    region: str = Field(min_length=1, max_length=40)
+    name: InstanceTypeName
+    region: RegionName
     cpu_count: int = Field(ge=1, le=256)
     ram_mb: int = Field(ge=1, le=1 << 22)
     disk_gb: int = Field(ge=1, le=1 << 16)
@@ -98,8 +98,8 @@ class WorkspaceCloudLimits(WireModel):
 class CloudMachine(WireModel):
     id: UUID
     provider: CloudProviderKind
-    region: str = Field(min_length=1, max_length=40)
-    instance_type: str = Field(min_length=1, max_length=40)
+    region: RegionName
+    instance_type: InstanceTypeName
     jurisdiction: str = Field(min_length=2, max_length=8)
     sovereignty: DataSovereigntyTier
     state: CloudMachineState

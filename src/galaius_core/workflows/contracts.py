@@ -21,6 +21,7 @@ from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
 from galaius_core.identity.subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequirement, ScriptLanguage
 
 from galaius_core.community import CommunityEntryRef
 from galaius_core.workflows.run_state import RunRow, RunState, state_of
@@ -236,9 +237,6 @@ class MachineRuntime(WireModel):
     version: str | None = Field(default=None, max_length=80)
 
 
-AcceleratorKind = Literal["cuda", "mps", "rocm", "none"]
-
-
 class MachineAccelerator(WireModel):
     """One GPU (or `none`) the runner detected, so model steps default to a machine that has one."""
 
@@ -254,23 +252,6 @@ class MachineResources(WireModel):
     cpu_count: int = Field(ge=1, le=256)
     ram_mb: int = Field(ge=1, le=1 << 22)
     disk_free_gb: int = Field(ge=0, le=1 << 16)
-
-
-class ResourceRequirement(WireModel):
-    """What one workflow node needs to run, derived from the model registry / the user's model
-    record. Every field optional: unset means "no constraint from this axis", never zero — a node
-    with no declared requirement places on any connected machine, today's behaviour unchanged.
-
-    Defined here (not in `.cloud`, which uses it) because `Placement` (below) carries one for an
-    AUTO machine placement, and `Placement` predates `.cloud` in the dependency order — `.cloud`
-    imports this and `resources_fit` from here rather than the reverse, so the placement contract
-    never needs a cross-module forward reference."""
-
-    cpu_count: int | None = Field(default=None, ge=1, le=256)
-    ram_mb: int | None = Field(default=None, ge=1, le=1 << 22)
-    gpu_kind: AcceleratorKind | None = None
-    vram_mb: int | None = Field(default=None, ge=1, le=1 << 20)
-    disk_gb: int | None = Field(default=None, ge=1, le=1 << 16)
 
 
 def resources_fit(requirement: ResourceRequirement, resources: MachineResources | None, accelerators: tuple[MachineAccelerator, ...]) -> bool:
@@ -341,7 +322,7 @@ class MachineProblem(WireModel):
 
 class MachineSummary(WireModel):
     id: UUID
-    name: str = Field(min_length=1, max_length=120)
+    name: MachineName
     state: Literal["online", "offline", "revoked"]
     runtimes: tuple[MachineRuntime, ...] = Field(default=(), max_length=16)
     accelerators: tuple[MachineAccelerator, ...] = Field(default=(), max_length=16)
@@ -2017,13 +1998,6 @@ class ScriptFile(WireRequest):
         — the editor computes the same bytes (frontend graph/scriptSource.ts `scriptFileDigest`)."""
         payload = {"language": language, **self.model_dump(mode="json")}
         return hashlib.sha256((self.DIGEST_TAG + json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)).encode()).hexdigest()
-
-
-#: What a Script step is written in; each fixes the program that runs it on the machine: Python (the
-#: runner's own, or uv for declared packages), shell (`/bin/sh`: Linux / macOS), PowerShell (`pwsh`,
-#: else Windows PowerShell), cmd (Windows only). A machine says which it runs (`script:<language>`
-#: among its features); a step never lands on one that does not.
-ScriptLanguage = Literal["python", "shell", "powershell", "cmd"]
 
 
 class ScriptImplementation(_Implementation):
@@ -5046,6 +5020,11 @@ class WorkflowRun(Caused):
     #: run's `queued` / `started` events begin those phases; every other change to `phase` or
     #: `waits` is a `progress` event whose payload is a `PhaseEvent`.
     waits: tuple[RunPhase, ...] = Field(default=(), max_length=64)
+
+    def ended(self, status: Literal["failed", "interrupted"], cause: FailureCause) -> Self:
+        """This run ended `status` for `cause`, its `error` the cause's own English (`model_copy`: a record past its
+        ceilings stays readable)."""
+        return self.model_copy(update={"status": status, "error": cause.message[:400], "cause": cause, "updated_at": datetime.now(UTC)})
 
 
 class PhaseEvent(WireModel):

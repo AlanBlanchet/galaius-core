@@ -8,6 +8,7 @@ from galaius_core import (
     MachinePoolSettingsUpdate,
     MachineRef,
     MachineResources,
+    PoolBudget,
     PooledMachineCandidate,
     ResourceRequirement,
     RunBudgetCheck,
@@ -31,22 +32,11 @@ def test_egress_policy_never_permits_a_blocked_host_even_if_explicitly_allow_lis
         assert not policy.permits(blocked, 443)
 
 
-def test_check_budget_refuses_a_run_that_would_cross_the_ceiling() -> None:
-    check = RunBudgetCheck(workspace_id=uuid4(), committed_usd_this_period=9.5, estimated_run_usd=1.0, ceiling_usd_this_period=10.0)
+@pytest.mark.parametrize(("committed", "refusal"), [(9.5, PoolBudget(projected_usd=10.5, ceiling_usd=10.0)), (9.0, None)])
+def test_check_budget_refuses_only_a_run_that_would_cross_the_ceiling(committed: float, refusal: PoolBudget | None) -> None:
+    check = RunBudgetCheck(workspace_id=uuid4(), committed_usd_this_period=committed, estimated_run_usd=1.0, ceiling_usd_this_period=10.0)
 
-    decision = check_budget(check)
-
-    assert decision.allowed is False
-    assert "10.0000" in decision.reason
-
-
-def test_check_budget_allows_a_run_that_lands_exactly_on_the_ceiling() -> None:
-    check = RunBudgetCheck(workspace_id=uuid4(), committed_usd_this_period=9.0, estimated_run_usd=1.0, ceiling_usd_this_period=10.0)
-
-    decision = check_budget(check)
-
-    assert decision.allowed is True
-    assert decision.projected_usd == 10.0
+    assert check_budget(check) == refusal
 
 
 def test_sharing_a_machine_without_a_price_is_refused() -> None:

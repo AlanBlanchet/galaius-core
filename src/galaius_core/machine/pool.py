@@ -19,6 +19,7 @@ from pydantic import Field, model_validator
 
 from galaius_core.machine.cloud import ResourceRequirement, resources_fit
 from galaius_core.wire import WireModel, WireRequest
+from galaius_core.workflows.step_fault import PoolBudget
 from galaius_core.workflows.contracts import MachineAccelerator, MachineRef, MachineResources
 
 #: gVisor (`runsc`) is the only tier this codebase currently proves closes the container-escape
@@ -95,21 +96,13 @@ class RunBudgetCheck(WireModel):
     ceiling_usd_this_period: float = Field(ge=0)
 
 
-class RunBudgetDecision(WireModel):
-    allowed: bool
-    reason: str = Field(min_length=1, max_length=200)
-    projected_usd: float = Field(ge=0)
-
-
-def check_budget(check: RunBudgetCheck) -> RunBudgetDecision:
-    """Pure server-side gate: committed + estimate vs ceiling. No I/O, no client-reported spend —
-    the caller already resolved `committed_usd_this_period` from the provider's own billing data
-    before constructing `check`; this function only enforces the arithmetic, so the same
-    projection can never be computed two different ways in two call sites."""
+def check_budget(check: RunBudgetCheck) -> PoolBudget | None:
+    """Pure server-side gate: committed + estimate vs ceiling, the refusal when it crosses it. No I/O, no client-reported
+    spend — the caller already resolved `committed_usd_this_period` from the provider's own billing data before
+    constructing `check`; this function only enforces the arithmetic, so the same projection can never be computed two
+    different ways in two call sites."""
     projected = check.committed_usd_this_period + check.estimated_run_usd
-    if projected > check.ceiling_usd_this_period:
-        return RunBudgetDecision(allowed=False, projected_usd=projected, reason=f"would bring workspace spend to ${projected:.4f}, over its ${check.ceiling_usd_this_period:.4f} ceiling this period")
-    return RunBudgetDecision(allowed=True, projected_usd=projected, reason="within ceiling")
+    return PoolBudget(projected_usd=projected, ceiling_usd=check.ceiling_usd_this_period) if projected > check.ceiling_usd_this_period else None
 
 
 #: A user-supplied model's weight format: `torch.load`/`pickle.load` execute arbitrary code as the

@@ -7,6 +7,13 @@ from pydantic import TypeAdapter, ValidationError
 from galaius_core import (
     Cause,
     ClipTooShort,
+    CloudLaunch,
+    MachineFault,
+    MachineUnfit,
+    PoolBudget,
+    ResourceRequirement,
+    ServerFault,
+    StorageFault,
     CriteriaInvalid,
     CriteriaMiswritten,
     Coded,
@@ -61,6 +68,16 @@ CAUSE = TypeAdapter(FailureCause)
      "OpenAI runs on Galaius's key here, paid from this organisation's credits, and they are short (balance $0.40, this needs up to $1.25; the last auto top-up failed)"),
     (InsufficientCredits(balance_usd=2, estimate_usd=3, runs_paused=False), "this organisation's credits are short (balance $2.00, this needs up to $3.00)"),
     (NothingReturned(what="content", filtered=True, vendor_code="SAFETY"), "the model returned no content"),
+    (MachineUnfit(requirement=ResourceRequirement(gpu_kind="cuda"), language="python", cloud="sovereign"),
+     "no connected machine, pooled peer or cloud launch meets this step's needs; no sovereign cloud instance fits them"),
+    (CloudLaunch(dry_run=False, instance="L4-1-24G", region="fr-par-2", usd_per_hour=0.9), "a L4-1-24G machine is starting in fr-par-2; rerun once it connects"),
+    (CloudLaunch(dry_run=True, instance="L4-1-24G", region="fr-par-2", usd_per_hour=0.9), "dry run only: no cloud credentials are configured, so no machine was launched"),
+    (PoolBudget(projected_usd=21.5, ceiling_usd=20), "a pooled run would bring this period's pooled spend to $21.50, over its $20.00 ceiling"),
+    (ServerFault(reason="crashed"), "the run stopped on a server error"),
+    (StorageFault(reason="refused", detail="HTTP Error 404: Not Found"), "file storage refused the request: HTTP Error 404: Not Found"),
+    (StorageFault(reason="credential_malformed"), "the file storage connection's secret lacks a key the store needs"),
+    (StorageFault(reason="not_granted", grant="write"), "this file storage connection is not granted write"),
+    (MachineFault(reason="declined", machine="Station"), "Station: the run read private data and this machine step was not allowed to run"),
 ])
 def test_a_step_fault_says_its_english_once_and_reads_back_through_the_cause_union(fault, message):
     dumped = CAUSE.dump_python(fault, mode="json")
@@ -116,3 +133,23 @@ def test_a_step_fault_raised_under_another_error_is_still_its_cause():
             raise RuntimeError("step failed") from inner
     except RuntimeError as outer:
         assert cause_of(outer) == fault
+
+
+@pytest.mark.parametrize("name", ["PC", "x" * 120])
+def test_a_machine_fault_named_after_any_machine_reads_back(name):
+    """Every machine name a summary holds names the fault too (`MachineName`), and only a fault about the machine takes it."""
+    named = MachineFault(reason="offline", waited_s=30).on_machine(name)
+    assert CAUSE.validate_json(CAUSE.dump_json(named)) == named and named.message == f"{name}: the machine is offline"
+    other = PoolBudget(projected_usd=1, ceiling_usd=0.5)
+    assert other.on_machine(name) is other
+
+
+def test_only_an_offline_machine_was_waited_for():
+    with pytest.raises(ValidationError, match="waited_s"):
+        MachineFault(reason="disconnected", waited_s=3)
+
+
+@pytest.mark.parametrize(("reason", "grant"), [("not_granted", None), ("refused", "read")])
+def test_a_storage_fault_names_a_grant_exactly_when_one_is_missing(reason, grant):
+    with pytest.raises(ValidationError, match="grant"):
+        StorageFault(reason=reason, grant=grant)

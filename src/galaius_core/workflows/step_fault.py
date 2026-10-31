@@ -1,6 +1,6 @@
-"""Why a model step failed one hop past the server, typed: what its provider answered (a refusal, no answer, an answer
-nobody can read, an address the server will not follow), what it sent back (nothing, or cut at its output limit), or
-what the step lacks to run. Its reader's words come from its `code` and figures; `message` is the same fact in English,
+"""Why a step failed, typed: what its provider answered (a refusal, no answer, an answer nobody can read, an address the
+server will not follow), what it sent back (nothing, or cut at its output limit), what the step lacks to run, why no
+machine took it, or what stopped the run on the server. Its reader's words come from its `code` and figures; `message` is the same fact in English,
 for a log only, said once here."""
 
 from collections.abc import Mapping
@@ -12,14 +12,16 @@ from pydantic import Field, ValidationInfo, computed_field, field_validator, mod
 from galaius_core.models.criteria import CriteriaName, PropertyKind
 from galaius_core.wire import Cause, ProviderId
 from galaius_core.models.task import ModelTask
+from galaius_core.machine.need import InstanceTypeName, MachineName, RegionName, ResourceRequirement, ScriptLanguage
 
 
 class StepFault(Cause):
-    """One way a model step failed past the server. A kind states its English once (`SAID`, a template over its own
-    fields); `detail` is the provider's own words, verbatim, when it wrote any, and `vendor_code` its own code for the
-    failure (an error code, a stop or block reason), when it gave one: never a sentence of ours."""
+    """One way a step failed: its provider, its machine, its input or the server. A kind states its English once (`SAID`,
+    a template over its own fields); `detail` is the outside party's own words (a provider, a machine, a store),
+    verbatim, when it wrote any, and `vendor_code` its own code for the failure (an error code, a stop or block reason),
+    when it gave one: never a sentence of ours."""
 
-    #: A provider failed the call: the server is its gateway.
+    #: By default a provider failed the call and the server is its gateway; each kind declares its own.
     status: ClassVar[int] = 502
     SAID: ClassVar[str]
     detail: str | None = Field(default=None, max_length=300)
@@ -157,13 +159,18 @@ class OutputLimit(StepFault):
 Returned = Literal["content", "text", "image", "audio", "music", "sound", "video", "vector", "pose", "mesh", "depth_map", "predictions", "pages", "match"]
 
 
-class JobTimeout(StepFault):
-    """A provider job still unfinished after `seconds`: the step stopped waiting for its `what`, the provider may finish it."""
+class TimedOut(StepFault):
+    """Something the step waited on passed its `seconds`."""
 
     status: ClassVar[int] = 504
+    seconds: float = Field(gt=0)
+
+
+class JobTimeout(TimedOut):
+    """A provider job still unfinished after `seconds`: the step stopped waiting for its `what`, the provider may finish it."""
+
     code: Literal["job_timeout"] = "job_timeout"
     what: Returned
-    seconds: float = Field(gt=0)
     SAID: ClassVar[str] = "the {what} took longer than {seconds:g} s; the provider may still finish it"
 
 
@@ -209,7 +216,8 @@ class NoKey(StepFault):
 #: What a step lacks to run: a source image wired in, an audio file (not a text), an enrolled machine chosen, or an
 #: input its model does not take (a reference image on a text-only model), file storage in its workspace, its model in
 #: the step's connection, or a request small enough to send.
-InputReason = Literal["image_missing", "audio_not_file", "machine_missing", "image_unused", "no_storage", "model_unconfigured", "request_too_large"]
+InputReason = Literal["image_missing", "audio_not_file", "machine_missing", "image_unused", "no_storage", "model_unconfigured", "request_too_large",
+                      "model_unregistered"]
 
 
 class InputFault(ReasonedFault):
@@ -224,7 +232,8 @@ class InputFault(ReasonedFault):
         "image_unused": "this model makes video from text only; wire nothing into its reference image port",
         "no_storage": "this workspace has no file storage for the step's files",
         "model_unconfigured": "the step's connection does not offer this model",
-        "request_too_large": "the step's request is larger than the provider call accepts"}
+        "request_too_large": "the step's request is larger than the provider call accepts",
+        "model_unregistered": "the step's own model is no longer registered in this workspace; pick another"}
 
 
 class InputEmpty(StepFault):
@@ -299,8 +308,171 @@ class CriteriaMiswritten(StepFault):
     SAID: ClassVar[str] = "'{name}' is a {kind}, not written that way"
 
 
-#: Why a model step failed past the server, one member per `code`.
+class OnMachine(StepFault):
+    """A fault about the step's machine: `machine` its name, when one was chosen, said first."""
+
+    machine: MachineName | None = None
+
+    def on_machine(self, name: str | None) -> Self:
+        return type(self).model_validate({**self.model_dump(exclude={"message"}), "machine": name})
+
+    @property
+    def said(self) -> str:
+        said = super().said
+        return f"{self.machine}: {said}" if self.machine else said
+
+
+#: Why a step's machine did not run it. Reaching it: `offline` (not connected, `waited_s` for it), `disconnected`
+#: mid-step, `unanswered` (connected, said nothing in time). Placing it: `unplaced` (no machine and no need set). Its
+#: owner's rules: `unsaved` (a machine runs only workflows its owner saved), `not_allowed` (file steps for people its
+#: owner allows), `script_unapproved` (its owner approves each script digest), `cloud_forbidden` / `pool_forbidden` (this
+#: workspace may not launch cloud machines / use pooled ones). The pool: `pool_empty` (none shared, idle and fitting),
+#: `pool_unscrubbed` (no GPU one scrubbed since its last tenant), `pool_claimed` (another run took it first).
+MachineReason = Literal["offline", "disconnected", "unanswered", "unplaced", "unsaved", "not_allowed", "script_unapproved", "cloud_forbidden",
+                        "pool_forbidden", "pool_empty", "pool_unscrubbed", "pool_claimed", "pool_failed", "declined"]
+
+
+class MachineFault(OnMachine, ReasonedFault):
+    """A step's machine did not run it (`MachineReason`)."""
+
+    status: ClassVar[int] = 409
+    code: Literal["machine_fault"] = "machine_fault"
+    reason: MachineReason
+    waited_s: float | None = Field(default=None, ge=0)
+    SAID: ClassVar[Mapping[str, str]] = {
+        "offline": "the machine is offline", "disconnected": "the machine disconnected", "unanswered": "the machine did not answer in time",
+        "unplaced": "this step is not placed on a machine",
+        "unsaved": "a machine runs only workflows its owner saved: save this workflow, then run it again",
+        "not_allowed": "file steps on this machine run only for people its owner allows",
+        "script_unapproved": "this script is not approved on this machine: its owner approves its exact digest first",
+        "cloud_forbidden": "this workspace may not launch cloud machines", "pool_forbidden": "this workspace may not use pooled machines",
+        "pool_empty": "no pooled machine is shared, idle and fit for this step", "pool_unscrubbed": "no pooled GPU machine is scrubbed since its last tenant",
+        "pool_claimed": "another run took the pooled machine first; run it again",
+        "pool_failed": "the pooled machine failed this step: run it again, or place it on one of your own machines",
+        "declined": "the run read private data and this machine step was not allowed to run"}
+
+    @model_validator(mode="after")
+    def _waited_offline(self) -> Self:
+        if self.waited_s is not None and self.reason != "offline":
+            raise ValueError("waited_s: only an offline machine was waited for")
+        return self
+
+
+#: Why the cloud launched no machine either, when it was tried: no instance type `fits`, the workspace's cloud spending
+#: `limit` (money), no `sovereign` instance where the need requires one (security), or the provider `failed` (its words in
+#: `detail`).
+CloudRefusal = Literal["fits", "limit", "sovereign", "failed"]
+
+
+class MachineUnfit(StepFault):
+    """No connected machine, pooled peer or cloud launch meets the step's `requirement` (and its script `language`):
+    `cloud` why a cloud launch did not either, when one was tried."""
+
+    status: ClassVar[int] = 409
+    code: Literal["no_fit"] = "no_fit"
+    requirement: ResourceRequirement
+    language: ScriptLanguage | None = None
+    cloud: CloudRefusal | None = None
+    SAID: ClassVar[str] = "no connected machine, pooled peer or cloud launch meets this step's needs"
+    CLOUD: ClassVar[Mapping[str, str]] = {
+        "fits": "no cloud instance type fits them", "limit": "a cloud launch would pass this workspace's cloud spending limit",
+        "sovereign": "no sovereign cloud instance fits them", "failed": "the cloud provider refused the launch"}
+
+    @property
+    def said(self) -> str:
+        return f"{self.SAID}; {self.CLOUD[self.cloud]}" if self.cloud else self.SAID
+
+
+class CloudLaunch(StepFault):
+    """The step's machine is a cloud `instance` launched in `region` at `usd_per_hour`: the step ends here and a rerun
+    once it connects places on it; `dry_run` when no cloud credentials are configured, so nothing was launched."""
+
+    status: ClassVar[int] = 503
+    code: Literal["cloud_launch"] = "cloud_launch"
+    dry_run: bool
+    instance: InstanceTypeName
+    region: RegionName
+    usd_per_hour: float = Field(ge=0)
+    SAID: ClassVar[str] = "a {instance} machine is starting in {region}; rerun once it connects"
+
+    @property
+    def said(self) -> str:
+        return "dry run only: no cloud credentials are configured, so no machine was launched" if self.dry_run else super().said
+
+
+class PoolBudget(StepFault):
+    """A pooled run would bring the workspace's pooled spend this period to `projected_usd`, over its `ceiling_usd`."""
+
+    status: ClassVar[int] = 402
+    code: Literal["pool_budget"] = "pool_budget"
+    projected_usd: float = Field(ge=0)
+    ceiling_usd: float = Field(ge=0)
+    SAID: ClassVar[str] = "a pooled run would bring this period's pooled spend to ${projected_usd:.2f}, over its ${ceiling_usd:.2f} ceiling"
+
+
+class StepTimedOut(OnMachine, TimedOut):
+    """The step ran past its `seconds`; `waiting` what it still waited on (its `machine` to connect), if anything."""
+
+    code: Literal["timed_out"] = "timed_out"
+    waiting: Literal["machine"] | None = None
+    SAID: ClassVar[str] = "timed out after {seconds:g} s"
+
+    @property
+    def said(self) -> str:
+        said = super().said
+        return f"{said} waiting for its machine to connect" if self.waiting == "machine" else said
+
+
+#: What stopped a run on the server: it `restarted` mid-run, it `crashed` (an error of the server's own, logged), or its
+#: execution settings were `config_unavailable`.
+ServerReason = Literal["restarted", "crashed", "config_unavailable"]
+
+
+class ServerFault(ReasonedFault):
+    """The server could not finish the run (`ServerReason`)."""
+
+    status: ClassVar[int] = 503
+    code: Literal["server_fault"] = "server_fault"
+    reason: ServerReason
+    SAID: ClassVar[Mapping[str, str]] = {
+        "restarted": "the server restarted before the run finished", "crashed": "the run stopped on a server error",
+        "config_unavailable": "the workflow's execution settings are unavailable"}
+
+
+#: Why a workspace's file storage did not serve a step. Its connection: `credential_missing` (no secret saved),
+#: `credential_malformed` (the secret lacks a key the store needs), `provider_unsupported`. The store: `refused` (its
+#: own words in `detail`), `answer_invalid` (an answer that does not parse), `too_large` (past what a step reads).
+StorageReason = Literal["credential_missing", "credential_malformed", "provider_unsupported", "not_granted", "refused", "answer_invalid", "too_large"]
+#: What a file storage connection may be granted (`ConnectionResource.capabilities`).
+StorageGrant = Literal["list", "read", "write"]
+
+
+class StorageFault(ReasonedFault):
+    """A workspace's file storage did not serve the step (`StorageReason`); `not_granted` names the `grant` its
+    connection lacks."""
+
+    status: ClassVar[int] = 502
+    code: Literal["storage_fault"] = "storage_fault"
+    reason: StorageReason
+    grant: StorageGrant | None = None
+    SAID: ClassVar[Mapping[str, str]] = {
+        "credential_missing": "the file storage connection has no saved secret",
+        "credential_malformed": "the file storage connection's secret lacks a key the store needs",
+        "provider_unsupported": "this file storage provider is not supported",
+        "not_granted": "this file storage connection is not granted {grant}",
+        "refused": "file storage refused the request", "answer_invalid": "file storage sent an answer that could not be read",
+        "too_large": "the file is larger than a step moves"}
+
+    @model_validator(mode="after")
+    def _grant_not_granted(self) -> Self:
+        if (self.grant is None) == (self.reason == "not_granted"):
+            raise ValueError("grant: named exactly when the connection is not granted it")
+        return self
+
+
+#: Why a step failed, one member per `code`.
 StepFaultCause = Annotated[VendorRefused | ProviderSilent | ProviderInvalid | EndpointRefused | NoSpeech | OutputLimit | JobTimeout
                            | NothingReturned | ClipTooShort | ModelRetired | NoKey | InputFault | InputEmpty | NoRunner | PlatformUnpriced
-                           | NoModelPasses | CriteriaInvalid | CriteriaMiswritten, Field(discriminator="code")]
+                           | NoModelPasses | CriteriaInvalid | CriteriaMiswritten | MachineFault | MachineUnfit | CloudLaunch | PoolBudget | StepTimedOut
+                           | ServerFault | StorageFault, Field(discriminator="code")]
 

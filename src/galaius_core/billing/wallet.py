@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from galaius_core.machine.need import InstanceTypeName, RegionName
 from galaius_core.wire import Cause, ProviderId, WireModel, WireRequest
 
 
@@ -229,8 +230,8 @@ MachineReservationStatus = Literal["held", "active", "completed", "cancelled"]
 
 class MachineReservationRequest(WireRequest):
     provider: Literal["scaleway"] = "scaleway"
-    region: str = Field(min_length=1, max_length=40)
-    instance_type: str = Field(min_length=1, max_length=40)
+    region: RegionName
+    instance_type: InstanceTypeName
     hours: float = Field(gt=0, le=720)
 
 
