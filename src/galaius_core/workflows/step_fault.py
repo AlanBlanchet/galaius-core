@@ -9,7 +9,8 @@ from typing import Annotated, ClassVar, Literal, Self
 
 from pydantic import Field, ValidationInfo, computed_field, field_validator, model_validator
 
-from galaius_core.wire import Cause
+from galaius_core.models.criteria import CriteriaName, PropertyKind
+from galaius_core.wire import Cause, ProviderId
 from galaius_core.models.task import ModelTask
 
 
@@ -30,10 +31,6 @@ class StepFault(Cause):
         """A provider's words run to its own length: kept to the field's ceiling, never refused for it."""
         limit = next((rule.max_length for rule in cls.model_fields[info.field_name].metadata if hasattr(rule, "max_length")), None)
         return value[:limit] if isinstance(value, str) and limit is not None else value
-
-    @property
-    def said(self) -> str:
-        return self.SAID.format_map(vars(self))
 
     @computed_field
     @property
@@ -66,7 +63,7 @@ class VendorRefused(ReasonedFault):
     vendor_status: int | None = None
     #: The provider whose Galaius key the call went on, not the organisation's: its reader is told whose key, never the
     #: vendor's words (`detail` stays empty; the server log keeps them).
-    platform_provider: str | None = Field(default=None, max_length=40)
+    platform_provider: ProviderId | None = None
 
     #: What each HTTP status means for the reader; any other status is a failure he cannot fix (`failed`).
     BY_STATUS: ClassVar[Mapping[int, VendorReason]] = {401: "key_refused", 403: "key_forbidden", 404: "model_unknown", 402: "no_funds", 429: "rate_limited"}
@@ -205,7 +202,7 @@ class NoKey(StepFault):
 
     status: ClassVar[int] = 409
     code: Literal["no_key"] = "no_key"
-    provider: str = Field(min_length=1, max_length=40)
+    provider: ProviderId
     SAID: ClassVar[str] = "no {provider} key in this organisation: add one in Connections"
 
 
@@ -245,12 +242,65 @@ class NoRunner(StepFault):
     status: ClassVar[int] = 422
     code: Literal["no_runner"] = "no_runner"
     task: ModelTask
-    provider: str = Field(min_length=1, max_length=40)
+    provider: ProviderId
     model: str = Field(min_length=1, max_length=200)
     SAID: ClassVar[str] = "no runner for {task} on {provider} ({model})"
 
 
+class PlatformUnpriced(StepFault):
+    """`model` has no price Galaius can bill: it never runs on Galaius's `provider` key, only on the organisation's own."""
+
+    status: ClassVar[int] = 409
+    code: Literal["platform_unpriced"] = "platform_unpriced"
+    provider: ProviderId
+    model: str = Field(min_length=1, max_length=200)
+    SAID: ClassVar[str] = "{model} has no price Galaius can bill, so it does not run on Galaius's {provider} key"
+
+
+class NoModelPasses(StepFault):
+    """No `task` model passes the step's choice (`criteria`, as its node states them; None: the choice names none)."""
+
+    status: ClassVar[int] = 422
+    code: Literal["no_model_passes"] = "no_model_passes"
+    task: ModelTask
+    criteria: str | None = None
+
+    @property
+    def said(self) -> str:
+        return f"no {self.task} model passes {self.criteria or 'this choice'}"
+
+
+#: What a step's model choice names that its task's catalog does not have: a property, a percentile of a property
+#: publishing none, a benchmark.
+CriteriaReason = Literal["not_a_property", "no_percentile", "not_a_benchmark"]
+
+
+class CriteriaInvalid(ReasonedFault):
+    """The step's choice names `name`, which `task` models do not offer (`reason`)."""
+
+    status: ClassVar[int] = 422
+    code: Literal["criteria_invalid"] = "criteria_invalid"
+    reason: CriteriaReason
+    task: ModelTask
+    name: CriteriaName
+    SAID: ClassVar[Mapping[str, str]] = {
+        "not_a_property": "'{name}' is not a property of {task} models", "no_percentile": "'{name}' has no published field to take a percentile of",
+        "not_a_benchmark": "'{name}' is not a benchmark of {task}"}
+
+
+class CriteriaMiswritten(StepFault):
+    """The step's choice writes `name`, a `task` property, as another kind than the one it is (`kind`)."""
+
+    status: ClassVar[int] = 422
+    code: Literal["criteria_miswritten"] = "criteria_miswritten"
+    task: ModelTask
+    name: CriteriaName
+    kind: PropertyKind
+    SAID: ClassVar[str] = "'{name}' is a {kind}, not written that way"
+
+
 #: Why a model step failed past the server, one member per `code`.
 StepFaultCause = Annotated[VendorRefused | ProviderSilent | ProviderInvalid | EndpointRefused | NoSpeech | OutputLimit | JobTimeout
-                           | NothingReturned | ClipTooShort | ModelRetired | NoKey | InputFault | InputEmpty | NoRunner, Field(discriminator="code")]
+                           | NothingReturned | ClipTooShort | ModelRetired | NoKey | InputFault | InputEmpty | NoRunner | PlatformUnpriced
+                           | NoModelPasses | CriteriaInvalid | CriteriaMiswritten, Field(discriminator="code")]
 

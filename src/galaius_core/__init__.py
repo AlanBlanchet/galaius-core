@@ -200,8 +200,12 @@ from galaius_core.media import MEDIA_INPUT_BYTES, MEDIA_TOOLS, MediaAnswer, Medi
 from galaius_core.wire import Cause
 from galaius_core.failure import Caused, FailureCause
 from galaius_core.models.task import ModelTask
+from galaius_core.models.criteria import PropertyKind
 from galaius_core.workflows.step_fault import (
     ClipTooShort,
+    CriteriaInvalid,
+    CriteriaMiswritten,
+    CriteriaReason,
     EndpointReason,
     EndpointRefused,
     InputEmpty,
@@ -210,10 +214,12 @@ from galaius_core.workflows.step_fault import (
     JobTimeout,
     ModelRetired,
     NoKey,
+    NoModelPasses,
     NoRunner,
     NoSpeech,
     NothingReturned,
     OutputLimit,
+    PlatformUnpriced,
     ProviderInvalid,
     ProviderSilent,
     ReasonedFault,
@@ -311,12 +317,12 @@ __all__ = [
     "SUBSCRIPTIONS_FEATURE", "SUBSCRIPTIONS_PER_PC", "RUN_MOVE_LOGIN_FEATURE", "RUN_MOVE_WAITS_FEATURE", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginIdentity", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
-    "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "Cause", "Caused", "FailureCause", "ClipTooShort", "EndpointReason", "EndpointRefused", "InputEmpty", "InputFault", "InputReason", "JobTimeout", "ModelRetired", "NoKey", "NoRunner", "NoSpeech", "NothingReturned", "OutputLimit", "ProviderInvalid", "ProviderSilent", "ReasonedFault", "Returned", "StepFault", "StepFaultCause", "VendorReason", "VendorRefused", "CapRefused", "MonthlyCapReached", "PaidUseOff", "PaidUseReason", "PaidUseRefused", "PaidUseRefusal", "PaidUseSpend", "TurnCapReached", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
+    "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "Cause", "Caused", "FailureCause", "ClipTooShort", "CriteriaInvalid", "CriteriaMiswritten", "CriteriaReason", "EndpointReason", "EndpointRefused", "InputEmpty", "InputFault", "InputReason", "JobTimeout", "ModelRetired", "NoKey", "NoModelPasses", "NoRunner", "NoSpeech", "NothingReturned", "OutputLimit", "PlatformUnpriced", "ProviderInvalid", "ProviderSilent", "ReasonedFault", "Returned", "StepFault", "StepFaultCause", "VendorReason", "VendorRefused", "CapRefused", "MonthlyCapReached", "PaidUseOff", "PaidUseReason", "PaidUseRefused", "PaidUseRefusal", "PaidUseSpend", "TurnCapReached", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",
     "ToolUsageRoute", "ToolUsageSummary", "ToolUsageSummaryEntry", "ToolUsageTotals",
     "ValueType",
-    "DirectTool", "ModelTask", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "CriteriaClause", "CriteriaWeight", "CriteriaError", "parse_criteria", "parse_criteria_weights", "format_criteria", "format_criteria_weights", "ChatRun", "McpBinding", "ModelChoice", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ScriptLanguage", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "RunInitiator", "RunPhase", "RunPhaseKind", "PhaseEvent", "MACHINE_PHASES", "NodePolicy", "NodeError", "JoinRule", "OnError", "CONTROL_PORTS", "CONTROL_INPUTS", "StepEvent", "StepStatus", "BlockCategory", "Plumbing", "PlumbingCondition", "BuiltinOpSpec", "BUILTIN_OPS", "NodeSignatureRequest", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
+    "DirectTool", "ModelTask", "PropertyKind", "Placement", "VISION_MODEL_TASKS", "model_task_ports", "NodeLibraryRef", "NodeLibraryDefinition", "NodeLibraryEntry", "NodeLibraryUse", "Effect", "Implementation", "BuiltinImplementation", "AgentImplementation", "CriteriaClause", "CriteriaWeight", "CriteriaError", "parse_criteria", "parse_criteria_weights", "format_criteria", "format_criteria_weights", "ChatRun", "McpBinding", "ModelChoice", "ModelImplementation", "FunctionImplementation", "ScriptImplementation", "ScriptLanguage", "ConnectorImplementation", "SubgraphImplementation", "MachineImplementation", "BuiltinOp", "WorkflowNode", "RunInitiator", "RunPhase", "RunPhaseKind", "PhaseEvent", "MACHINE_PHASES", "NodePolicy", "NodeError", "JoinRule", "OnError", "CONTROL_PORTS", "CONTROL_INPUTS", "StepEvent", "StepStatus", "BlockCategory", "Plumbing", "PlumbingCondition", "BuiltinOpSpec", "BUILTIN_OPS", "NodeSignatureRequest", "ValueTypeSpec", "VALUE_TYPES", "FILE_VALUE_TYPES", "value_type_accepts", "value_type_widening", "MachineModelSpec", "MACHINE_MODELS", "SshAgentTool", "SshOperationName", "ObjectStorageAgentTool", "ObjectStorageOperationName",
     "HarnessToolDescriptor", "MESSAGE_FIELDS", "MESSAGE_PROVIDERS", "MessageAccount", "MessageField", "MessageProvider", "MessageProviderChoice", "MessageProviderSpec", "SendMessageTool", "GitAgentTool", "GitConnector", "GitOperationName", "MailAgentTool", "MailOperationName", "WebhookAgentTool",
     "ChangelogEntry", "ReleaseInfo",
     "CompanyDetails", "CompanyProfile", "CompanyProfileUpdate", "CompanyLogoUpload", "CompanyLookupResult", "VatCheck", "WorkspaceKind",

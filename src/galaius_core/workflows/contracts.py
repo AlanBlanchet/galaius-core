@@ -16,7 +16,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Fie
 
 from galaius_core.billing.cost import NodeCostActual, RunCostActual
 from galaius_core.billing.tokens import TokenCounts
-from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, ModelComparator, format_criteria, format_criteria_weights
+from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, PropertyKind, ModelComparator, format_criteria, format_criteria_weights
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
@@ -4750,7 +4750,7 @@ class ModelProperty(WireModel):
     name: str = Field(min_length=1, max_length=160)
     description: str = Field(min_length=1, max_length=400)
     source: str = Field(max_length=160)
-    kind: Literal["flag", "number", "choice"]
+    kind: PropertyKind
     weightable: bool
     rankable: bool = False
     percentile: bool

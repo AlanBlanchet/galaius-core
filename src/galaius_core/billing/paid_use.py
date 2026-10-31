@@ -25,7 +25,7 @@ from uuid import UUID
 
 from pydantic import Field, computed_field
 
-from galaius_core.wire import Cause, WireModel, WireRequest
+from galaius_core.wire import Cause, ProviderId, WireModel, WireRequest
 
 #: How a call is paid for. Derived from the route + provider, never stored on a model: the same
 #: model is `subscription` through a CLI session and `metered_api` through a key.
@@ -164,8 +164,7 @@ class PaidUseRefused(Cause):
 
     status: ClassVar[int] = 402
     reason: PaidUseReason
-    provider: str = Field(min_length=1, max_length=40)
-    message: str = Field(min_length=1, max_length=300)
+    provider: ProviderId
     #: The month's figures and its limit: what a cap refusal is about (`CapRefused` requires them).
     spend: PaidUseSpend | None = None
 
@@ -176,6 +175,7 @@ class PaidUseOff(PaidUseRefused):
     status: ClassVar[int] = 403
     code: Literal["paid_use_not_enabled"] = "paid_use_not_enabled"
     reason: Literal["switched_off"] = "switched_off"
+    SAID: ClassVar[str] = "paid use of {provider} is not enabled for this workspace"
 
 
 class CapRefused(PaidUseRefused):
@@ -189,6 +189,7 @@ class MonthlyCapReached(CapRefused):
     """The month already at its limit for `provider`."""
 
     code: Literal["monthly_cap_reached"] = "monthly_cap_reached"
+    SAID: ClassVar[str] = "this month already cost ${spend.total_usd:.2f} of a ${spend.cap_usd:.2f} ceiling, so paid calls to {provider} are stopped"
 
 
 class TurnCapReached(CapRefused):
@@ -198,6 +199,8 @@ class TurnCapReached(CapRefused):
     code: Literal["turn_cap_reached"] = "turn_cap_reached"
     worst_usd: float = Field(ge=0)
     held_usd: float = Field(ge=0)
+    SAID: ClassVar[str] = ("this turn could cost up to ${worst_usd:.2f}: with ${held_usd:.2f} already spent or in flight this month it would cross "
+                           "the ${spend.cap_usd:.2f} hard limit for {provider}, so it is not sent")
 
 
 #: Why a metered call is refused, one member per `code`.

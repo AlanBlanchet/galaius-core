@@ -6,12 +6,13 @@ from typing import Annotated
 from pydantic import Field
 
 from galaius_core.billing.paid_use import PaidUseRefusal
+from galaius_core.billing.wallet import InsufficientCredits
 from galaius_core.workflows.step_fault import StepFaultCause
 from galaius_core.wire import WireModel
 
 #: Why a run, a step or a chat turn failed, when the server knows it: a metered call refused, or a model step failed past
 #: the server; one member per `code`.
-FailureCause = Annotated[PaidUseRefusal | StepFaultCause, Field(discriminator="code")]
+FailureCause = Annotated[PaidUseRefusal | InsufficientCredits | StepFaultCause, Field(discriminator="code")]
 
 
 class Caused(WireModel):

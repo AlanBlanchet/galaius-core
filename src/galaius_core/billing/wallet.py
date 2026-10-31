@@ -10,12 +10,12 @@ via `usd_to_micros`), so this module is the ONE place the conversion happens.
 """
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import ClassVar, Literal, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from galaius_core.wire import WireModel, WireRequest
+from galaius_core.wire import Cause, ProviderId, WireModel, WireRequest
 
 
 def usd_to_micros(usd: float) -> int:
@@ -97,9 +97,8 @@ class CreditWallet(WireModel):
     #: (or, with no policy, below `$0`) — the ONE flag every surface that shows the balance reads
     #: to warn, rather than each screen re-deriving its own threshold comparison.
     low_balance: bool
-    #: Set by a failed auto top-up charge (`AutoTopUpFailure`); while true, `execute_workflow`'s
-    #: pre-run check refuses every run for this workspace regardless of balance, until the owner
-    #: clears it (a successful manual top-up, or a successful retried auto top-up, clears it).
+    #: Set by a failed auto top-up charge (`AutoTopUpFailure`), cleared by a later successful one: while true, the
+    #: credit gate does not charge the card again; runs the balance covers still start.
     runs_paused: bool
     updated_at: datetime
 
@@ -359,11 +358,19 @@ class OperatorGrantRequest(WireRequest):
     note: str = Field(min_length=1)
 
 
-class InsufficientCredits(WireModel):
-    """Returned instead of starting a run whose estimate would take the wallet balance below
-    zero — the wallet's own `BudgetOverrun` analog, same 402 shape, so a client's existing
-    budget-exceeded handling extends to this with one more `code` branch."""
+class InsufficientCredits(Cause):
+    """The wallet cannot cover `estimate_usd`: a run whose estimate would take the balance below zero, or a step on
+    Galaius's `provider` key (None: the whole run). `runs_paused`: the last auto top-up failed (the gate then does not charge the card again)."""
 
+    status: ClassVar[int] = 402
+    code: Literal["insufficient_credits"] = "insufficient_credits"
     balance_usd: float
     estimate_usd: float
     runs_paused: bool
+    provider: ProviderId | None = None
+
+    @property
+    def said(self) -> str:
+        paid = f"{self.provider} runs on Galaius's key here, paid from this organisation's credits, and they" if self.provider else "this organisation's credits"
+        paused = "; the last auto top-up failed" if self.runs_paused else ""
+        return f"{paid} are short (balance ${self.balance_usd:.2f}, this needs up to ${self.estimate_usd:.2f}{paused})"

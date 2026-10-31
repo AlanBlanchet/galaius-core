@@ -146,7 +146,7 @@ def test_a_refusal_reads_as_its_code_s_member_and_needs_every_figure_it_states(b
 
 
 def test_cause_of_reads_a_refusal_through_the_errors_raised_from_it() -> None:
-    off = PaidUseOff(provider="openai", message="off")
+    off = PaidUseOff(provider="openai")
 
     class Denied(Coded[PaidUseRefusal]):
         pass
@@ -169,7 +169,7 @@ def test_state_carries_a_row_per_provider_with_its_word() -> None:
             ProviderChargeState(provider="self_hosted", charge="local", allowed=True),
             ProviderChargeState(provider="gemini", charge="metered_api", allowed=True, spent_usd=0.2),
             ProviderChargeState(provider="openai", charge="metered_api", allowed=False,
-                                refusal=PaidUseOff(provider="openai", message="paid use of openai is off for this workspace")),
+                                refusal=PaidUseOff(provider="openai")),
         ),
     )
     assert [item.word for item in state.providers] == ["abonnement", "local", "payant à l'usage", "payant à l'usage"]
@@ -200,7 +200,7 @@ def test_a_refusal_states_a_fact_and_leaves_the_sentence_to_the_reader_language(
     """visual-critic r1, HIGH, routed to the backend: the English refusal was printed verbatim in
     the French UI, and it said "switch it on in Billing" while shown inside Billing. The wire
     carries the CODE, the provider and the figures; the words a reader sees are the client's."""
-    refusal = PaidUseOff(provider="openai", message="paid use of openai is not enabled for this workspace")
+    refusal = PaidUseOff(provider="openai")
     assert refusal.code == "paid_use_not_enabled"
     for pointer in ("Billing", "switch it on", "raise the ceiling", "Facturation"):
         assert pointer not in refusal.message

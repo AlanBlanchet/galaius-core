@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import re
 import math
-from typing import Literal, Self, get_args
+from typing import Annotated, Literal, Self, get_args
 
 from pydantic import Field, model_validator
 
 from galaius_core.wire import WireModel
+
+#: How a model property is written in a choice: a bare flag, a number compared, a word from its values.
+PropertyKind = Literal["flag", "number", "choice"]
+
+#: A property or benchmark a model choice names, as a clause, a weight and a refusal of it carry it.
+CriteriaName = Annotated[str, Field(min_length=1, max_length=160)]
+_WRITTEN_FOR: dict[str, PropertyKind] = {"comparison": "number", "membership": "choice"}
 
 
 class CriteriaError(ValueError):
@@ -29,11 +36,17 @@ class CriteriaClause(WireModel):
     accepted words, never numbers."""
 
     kind: Literal["comparison", "bare", "provider", "membership"]
-    name: str = Field(min_length=1, max_length=160, pattern=r"^[\w.-]+$")
+    name: CriteriaName = Field(pattern=r"^[\w.-]+$")
     operator: CriteriaOperator = ""
     value: float | None = None
     percentile: bool = False
     values: tuple[str, ...] = Field(default=(), max_length=32)
+
+    @property
+    def property_kind(self) -> PropertyKind | None:
+        """The kind of property this clause is written for: a comparison reads a number, a membership a choice; a bare
+        name or a provider clause fits any."""
+        return _WRITTEN_FOR.get(self.kind)
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
@@ -59,7 +72,7 @@ class CriteriaClause(WireModel):
 class CriteriaWeight(WireModel):
     """One `name=weight` ranking clause: a weight ORDERS what already passed, never admits."""
 
-    name: str = Field(min_length=1, max_length=160, pattern=r"^[\w-]+\.[\w.-]+$")
+    name: CriteriaName = Field(pattern=r"^[\w-]+\.[\w.-]+$")
     weight: float = Field(gt=0, allow_inf_nan=False)
 
     def __str__(self) -> str:

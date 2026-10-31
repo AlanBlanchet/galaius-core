@@ -7,6 +7,8 @@ from pydantic import TypeAdapter, ValidationError
 from galaius_core import (
     Cause,
     ClipTooShort,
+    CriteriaInvalid,
+    CriteriaMiswritten,
     Coded,
     EndpointRefused,
     FailureCause,
@@ -15,7 +17,10 @@ from galaius_core import (
     JobTimeout,
     ModelRetired,
     NoKey,
+    InsufficientCredits,
+    NoModelPasses,
     NoRunner,
+    PlatformUnpriced,
     NoSpeech,
     NothingReturned,
     OutputLimit,
@@ -48,6 +53,13 @@ CAUSE = TypeAdapter(FailureCause)
     (InputFault(reason="image_missing"), "a source image is required"),
     (InputEmpty(port="prompt"), 'input "prompt" is empty'),
     (NoRunner(task="text-to-video", provider="mistral", model="mistral-small"), "no runner for text-to-video on mistral (mistral-small)"),
+    (PlatformUnpriced(provider="OpenAI", model="gpt-x"), "gpt-x has no price Galaius can bill, so it does not run on Galaius's OpenAI key"),
+    (NoModelPasses(task="text-generation", criteria="cost < $1"), "no text-generation model passes cost < $1"),
+    (NoModelPasses(task="text-generation"), "no text-generation model passes this choice"),
+    (CriteriaMiswritten(task="text-generation", name="cost", kind="number"), "'cost' is a number, not written that way"),
+    (InsufficientCredits(balance_usd=0.4, estimate_usd=1.25, runs_paused=True, provider="OpenAI"),
+     "OpenAI runs on Galaius's key here, paid from this organisation's credits, and they are short (balance $0.40, this needs up to $1.25; the last auto top-up failed)"),
+    (InsufficientCredits(balance_usd=2, estimate_usd=3, runs_paused=False), "this organisation's credits are short (balance $2.00, this needs up to $3.00)"),
     (NothingReturned(what="content", filtered=True, vendor_code="SAFETY"), "the model returned no content"),
 ])
 def test_a_step_fault_says_its_english_once_and_reads_back_through_the_cause_union(fault, message):
@@ -63,7 +75,7 @@ def _concrete(kind: type) -> set[type]:
 
 
 def test_every_cause_is_a_member_of_the_union_and_answers_a_status():
-    members = {member for arm in get_args(get_args(FailureCause)[0]) for member in (get_args(get_args(arm)[0]) or (arm,))}
+    members = {member for arm in get_args(get_args(FailureCause)[0]) for member in (get_args(get_args(arm)[0]) if get_args(arm) else (arm,))}
     assert _concrete(Cause) == members
     assert all(isinstance(member.status, int) for member in members)
 

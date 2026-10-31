@@ -16,9 +16,9 @@ import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, ClassVar, TypeVar
+from typing import Annotated, Any, ClassVar, TypeVar
 
-from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, computed_field, model_validator
 from pydantic_core import to_jsonable_python
 
 M = TypeVar("M")
@@ -284,11 +284,27 @@ class Kinded(WireModel):
     model_config = ConfigDict(json_schema_extra=_constants_required)
 
 
+#: A model provider's id (`openai`, `anthropic`, …), as every cause naming one carries it.
+ProviderId = Annotated[str, Field(min_length=1, max_length=40)]
+
+
 class Cause(Kinded):
     """Why something failed, typed: its page narrows it on `code` and words it from its figures; `message` is the same
-    fact in English, for a log. `status` is the HTTP status a route answers with it."""
+    fact in English, for a log, said once per kind (`SAID`, a template over its own fields). `status` is the HTTP status
+    a route answers with it."""
 
     status: ClassVar[int]
+    #: Each kind's sentence; read as this base alone (a kind from a newer release), a cause says only that it failed.
+    SAID: ClassVar[str] = "it failed"
+
+    @property
+    def said(self) -> str:
+        return self.SAID.format_map(vars(self))
+
+    @computed_field
+    @property
+    def message(self) -> str:
+        return self.said
 
 
 class WireRequest(WireModel):
