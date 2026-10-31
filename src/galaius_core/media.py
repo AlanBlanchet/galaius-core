@@ -18,8 +18,8 @@ from uuid import UUID
 
 from pydantic import Field
 
-from .file_tools import FileTool
-from .wire import WireModel, WireRequest
+from galaius_core.tools.files import FileTool
+from galaius_core.wire import WireModel, WireRequest
 
 MediaKind = Literal["translation", "model_3d", "speech", "music", "sound"]
 #: The agent tool that asks for each kind, and the files it keeps (`workflows.FILE_TOOL_REGISTRY`).

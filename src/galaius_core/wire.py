@@ -284,6 +284,13 @@ class Kinded(WireModel):
     model_config = ConfigDict(json_schema_extra=_constants_required)
 
 
+class Cause(Kinded):
+    """Why something failed, typed: its page narrows it on `code` and words it from its figures; `message` is the same
+    fact in English, for a log. `status` is the HTTP status a route answers with it."""
+
+    status: ClassVar[int]
+
+
 class WireRequest(WireModel):
     """A contract only a client authors and sends: an unknown field is refused."""
 

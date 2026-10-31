@@ -18,7 +18,7 @@ from uuid import UUID
 
 from pydantic import BeforeValidator, ConfigDict, Field, model_validator
 
-from .wire import WireModel, WireRequest
+from galaius_core.wire import WireModel, WireRequest
 
 CommunityKind = Literal["prompt", "agent", "skill"]
 """What an entry is: a prompt (instructions for one task), an agent (a role's system prompt), a skill (instructions an

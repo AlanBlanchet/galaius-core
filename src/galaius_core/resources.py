@@ -13,9 +13,9 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel, WireRequest
-from .status_words import StatusWord
-from .workflows import GitUrl
+from galaius_core.wire import WireModel, WireRequest
+from galaius_core.workflows.status_words import StatusWord
+from galaius_core.workflows.contracts import GitUrl
 
 #: What a person (or agent) may do with a resource. Each verb implies every verb before it.
 Verb = Literal["see", "read", "use", "write_on_review", "write", "manage"]

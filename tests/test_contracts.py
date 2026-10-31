@@ -14,7 +14,7 @@ from typing import get_args
 
 from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_FEATURE, AGENT_IMAGES_MAX, AGENT_REASONING_FEATURE, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
 from pydantic import ValidationError
-from galaius_core.sealing import SecretsSeal
+from galaius_core.identity.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
 from galaius_core import ASKED_BY_MAX, MachineAgentRun, MachineFence
 from galaius_core import SCREEN_QUALITIES, SCREEN_WIDTHS, ScreenAllowance, ScreenFrame, ScreenSpec
@@ -149,7 +149,7 @@ def test_contracts_are_immutable() -> None:
 
 def test_standalone_package_exports_contracts_and_bundles_all_schemas() -> None:
     assert PromptCreateRequest.__module__ == "galaius_core.prompts"
-    assert WorkflowKey.__module__ == "galaius_core.workflows"
+    assert WorkflowKey.__module__ == "galaius_core.workflows.contracts"
     schema_dir = files("galaius_core").joinpath("schema")
     schema_names = {path.name for path in schema_dir.iterdir() if path.name.endswith(".json")}
     assert schema_names == {
@@ -616,7 +616,7 @@ def test_text_written_for_code_is_recognised_so_no_screen_shows_it() -> None:
         dump = str(error)
     assert internals(dump) and "MachineFence" in dump
     assert internals("Traceback (most recent call last):\n  File \"/srv/app.py\", line 2")
-    assert internals("<galaius_core.workflows.MachineFence object at 0x7f3a>")
+    assert internals("<galaius_core.workflows.contracts.MachineFence object at 0x7f3a>")
     assert not internals("bubblewrap cannot build its sandbox here: once, as root, run sudo apparmor_parser -r …")
     assert not internals("the agent fence needs Linux (bubblewrap and Landlock)")
     # An exception class by its name is written as code spells it, never as a sentence spells it.

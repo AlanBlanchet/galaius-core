@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from .wire import WireModel, WireRequest
+from galaius_core.wire import WireModel, WireRequest
 
 _PART = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")

@@ -12,11 +12,12 @@ from pydantic import BaseModel, ValidationError, create_model
 
 import galaius_core
 from galaius_core import AgentCatalogSnapshot, AgentGraphUpdate, AgentRevision, PromptExecutionRef, PromptKey, PromptRevision, WorkflowNode, WorkflowRevision
-from galaius_core.builtin_ops import _Settings
+from galaius_core.workflows.builtin_ops import _Settings
 from galaius_core.wire import ContractDump, ContractView, WireModel, WireRequest
 
-for module in pkgutil.iter_modules(galaius_core.__path__):
-    importlib.import_module(f"galaius_core.{module.name}")
+MODULES = {module.name for module in pkgutil.walk_packages(galaius_core.__path__, "galaius_core.") if not module.ispkg}
+for name in MODULES:
+    importlib.import_module(name)
 
 
 def contracts(root: type[BaseModel] = BaseModel) -> list[type[BaseModel]]:
@@ -45,7 +46,7 @@ def test_a_reader_keeps_unknown_fields_and_an_author_refuses_them(model: type[Ba
 
 
 def test_contract_count_covers_every_module() -> None:
-    assert {model.__module__ for model in contracts()} >= {f"galaius_core.{module.name}" for module in pkgutil.iter_modules(galaius_core.__path__)} - {"galaius_core.wire", "galaius_core.__init__"}
+    assert {model.__module__ for model in contracts()} >= MODULES - {"galaius_core.wire"}
 
 
 def agent(**fields) -> tuple[AgentRevision, PromptRevision]:

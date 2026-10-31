@@ -4,7 +4,7 @@ from datetime import date
 
 from pydantic import Field
 
-from .wire import WireModel
+from galaius_core.wire import WireModel
 
 
 class ChangelogEntry(WireModel):

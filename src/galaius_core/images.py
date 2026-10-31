@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import Field, computed_field
 
-from .wire import WireModel, WireRequest
+from galaius_core.wire import WireModel, WireRequest
 
 #: The sizes, qualities and backgrounds an image model draws at — the server's image step takes the
 #: same values (its node config), so a request and a workflow step never disagree on them.

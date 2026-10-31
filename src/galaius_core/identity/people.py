@@ -1,0 +1,188 @@
+"""The people of a company and what each one may do (owner, review 6: « assign permissions to the
+different people », not groups). One row per person: their company rights (each with where it comes
+from), the PCs they may use, the projects they reach. A change is a DELTA (only the keys it names
+move) judged all-or-nothing, previewed first by the same server code that applies it."""
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import Field
+
+from galaius_core.identity.accounts import EMAIL_PATTERN
+from galaius_core.identity.permissions import Permission, PermissionInfo
+from galaius_core.resources import Verb
+from galaius_core.wire import WireModel, WireRequest
+
+SignInKind = Literal["google", "password", "agent", "other"]
+#: Where a held (or refused) right comes from: ticked for this person, given by a seat in the org
+#: (group / department, named in `via`), taken away for this person, or not held at all.
+PersonRightSource = Literal["self", "inherited", "denied", "none"]
+PresetName = Literal["admin", "member", "viewer"]
+#: The fixed presets beside « Administrateur » (= every company right the reader holds, computed per
+#: reader). A key the running catalog does not hold is left out where the presets are served.
+PERSON_PRESETS: dict[Literal["member", "viewer"], tuple[str, ...]] = {
+    "member": ("agents.view", "agents.run", "workflows.run", "workflows.edit", "billing.view", "accounts.connect_own"),
+    "viewer": ("agents.view", "billing.view"),
+}
+#: The most a PC's owner hands someone else on it: agents that read (`read_only`) or also write in the
+#: folders it opens (`workspace_write`); never `full_access` (the agent runs as the owner's OS user).
+PcLevel = Literal["read_only", "workspace_write"]
+#: Where an invitation's email is: handed to the mail server, still being retried, given up on
+#: (the inviter sends the sign-in link themself), or none (an invitation older than its mail).
+InviteMail = Literal["sent", "retrying", "failed", "none"]
+
+
+class PersonRight(WireModel):
+    key: Permission
+    held: bool
+    source: PersonRightSource
+    via: str | None = None
+    may_change: bool
+
+
+class PersonPc(WireModel):
+    machine_id: UUID
+    name: str
+    owner_name: str
+    #: The person may use this PC (always True on a PC they own).
+    granted: bool
+    #: The person owns this PC.
+    owner: bool
+    #: The signed-in actor owns this PC: only a PC's owner hands it to someone.
+    may_change: bool
+
+
+class PersonProject(WireModel):
+    project_id: UUID
+    name: str
+    verb: Verb | None
+    may_change: bool
+
+
+class PersonAgent(WireModel):
+    """One agent the reader sees and what this person may do with it (`verb`: the highest verb they
+    reach it with by any way — a grant, the company audience, a department, stewardship — gated by
+    their rights: a grant of `use` without « Lancer les agents » reads `read`). `granted`: the verb
+    given to this person themself, the part `PersonChange.agents` moves."""
+
+    agent_id: UUID
+    name: str
+    verb: Verb | None
+    granted: Verb | None
+    #: The reader manages this agent (gives and takes back a person's grant on it).
+    may_change: bool
+
+
+class Person(WireModel):
+    account_id: UUID
+    name: str
+    email: str
+    sign_in: SignInKind
+    guest: bool
+    you: bool
+    last_seen_at: datetime | None
+    #: Opaque digest of this person's access; `PUT` carries it in `If-Match` (409 when it moved).
+    revision: str
+    rights: tuple[PersonRight, ...]
+    pcs: tuple[PersonPc, ...]
+    projects: tuple[PersonProject, ...]
+    agents: tuple[PersonAgent, ...]
+    may_edit: bool
+    may_remove: bool
+
+
+class PendingInvite(WireModel):
+    invitation_id: UUID
+    email: str
+    rights: tuple[Permission, ...]
+    invited_by: str
+    created_at: datetime
+    mail: InviteMail
+
+
+class People(WireModel):
+    workspace_id: UUID
+    personal: bool
+    may_invite: bool
+    may_manage: bool
+    catalog: tuple[PermissionInfo, ...]
+    presets: dict[PresetName, tuple[Permission, ...]]
+    people: tuple[Person, ...]
+    invitations: tuple[PendingInvite, ...]
+    #: The address an invitee signs in at (what their mail links to), for the inviter to send by hand.
+    sign_in_link: str
+
+
+class PersonChange(WireRequest):
+    """A delta: only the keys present change; an absent right / PC / project is left as it is."""
+
+    rights: dict[Permission, bool] = Field(default_factory=dict)
+    pcs: dict[UUID, bool] = Field(default_factory=dict)
+    projects: dict[UUID, Verb | None] = Field(default_factory=dict)
+    #: The verb given to this person on each agent; None takes their own grant back.
+    agents: dict[UUID, Verb | None] = Field(default_factory=dict)
+
+
+class Refusal(WireModel):
+    key: str
+    reason: str
+
+
+class ReachCount(WireModel):
+    before: int
+    after: int
+
+
+class ReachCounts(WireModel):
+    """What the person reaches before and after the change, counted only over what the actor may see."""
+
+    agents: ReachCount
+    pcs: ReachCount
+    projects: ReachCount
+
+
+class PersonEffect(WireModel):
+    gains: tuple[str, ...]
+    loses: tuple[str, ...]
+    counts: ReachCounts
+    refused: tuple[Refusal, ...]
+    warnings: tuple[str, ...]
+
+
+class InviteProject(WireRequest):
+    project_id: UUID
+    verb: Verb
+
+
+class InviteAgent(WireRequest):
+    agent_id: UUID
+    verb: Verb
+
+
+class PersonInvite(WireRequest):
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
+    rights: tuple[Permission, ...] = ()
+    pcs: tuple[UUID, ...] = ()
+    projects: tuple[InviteProject, ...] = ()
+    agents: tuple[InviteAgent, ...] = ()
+
+
+class PcGrant(WireModel):
+    """One person a PC's owner lets use the PC: start agents (at most `level`) in `roots` — empty:
+    every folder the PC opens to agents — and run file nodes on it."""
+
+    account_id: UUID
+    level: PcLevel = "read_only"
+    roots: tuple[str, ...] = Field(default=(), max_length=32)
+
+
+class PcAccess(WireModel):
+    owner: UUID
+    grants: tuple[PcGrant, ...] = ()
+
+
+class PcAccessUpdate(WireRequest):
+    """The owner's full list of people who may use the PC (the owner always may)."""
+
+    grants: tuple[PcGrant, ...] = Field(default=(), max_length=64)
