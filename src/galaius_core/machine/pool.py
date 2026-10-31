@@ -17,7 +17,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from galaius_core.compute.cloud import ResourceRequirement, resources_fit
+from galaius_core.machine.cloud import ResourceRequirement, resources_fit
 from galaius_core.wire import WireModel, WireRequest
 from galaius_core.workflows.contracts import MachineAccelerator, MachineRef, MachineResources
 

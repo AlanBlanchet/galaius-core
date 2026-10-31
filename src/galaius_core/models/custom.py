@@ -3,7 +3,7 @@ from a Hugging Face repo, an uploaded weights file, an object-storage/SSH path, 
 Registered once (`UserModel`), runnable as a `model` node the same way a vendor's model is
 (`ModelImplementation(kind="model", provider="workspace", model=str(id))`, `placement.target ==
 "machine"`): the machine runner reads `origin` to fetch/mount the weights, `resources` to refuse
-placement on a machine that cannot meet it (`galaius_core.compute.cloud.resources_fit`, the same check a
+placement on a machine that cannot meet it (`galaius_core.machine.cloud.resources_fit`, the same check a
 cloud launch uses)."""
 
 from datetime import datetime
@@ -12,8 +12,8 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from galaius_core.compute.cloud import ResourceRequirement
-from galaius_core.compute.pool import ModelWeightFormat, SandboxTier
+from galaius_core.machine.cloud import ResourceRequirement
+from galaius_core.machine.pool import ModelWeightFormat, SandboxTier
 from galaius_core.models.task import ModelTask
 from galaius_core.workflows.contracts import ConnectionResourceRef
 from galaius_core.wire import WireModel
@@ -53,7 +53,7 @@ class UserModelOrigin(WireModel):
     #: huggingface_repo only, default False (the safe path): whether loading this repo needs its
     #: OWN custom Python (`trust_remote_code`-class execution) beyond deserializing named weight
     #: files. `True` makes `runs_bundled_code`/`sandbox_tier` below route every run of this model
-    #: through the SAME isolation a script node gets (`galaius_core.compute.pool.SandboxTier.gvisor`),
+    #: through the SAME isolation a script node gets (`galaius_core.machine.pool.SandboxTier.gvisor`),
     #: never the workspace-private `"none"` tier — the threat model's "no trust_remote_code without
     #: the same sandboxing as script nodes."
     trusts_remote_code: bool = False
@@ -114,7 +114,7 @@ class UserModelRef(WireModel):
 class UserModel(WireModel):
     """One workspace-registered model: runnable as a `model` node on any machine whose reported
     `galaius_core.MachineResources`/accelerators satisfy `resources`
-    (`galaius_core.compute.cloud.resources_fit`). Immutable per revision, like every other resource this
+    (`galaius_core.machine.cloud.resources_fit`). Immutable per revision, like every other resource this
     app saves — editing licence/resources/origin makes a new revision, never an in-place mutation
     a running placement could silently start reading differently."""
 
@@ -127,7 +127,7 @@ class UserModel(WireModel):
     licence: str = Field(min_length=1, max_length=120)
     origin: UserModelOrigin
     #: The only format `origin`'s weight-bearing branches may declare — `Literal["safetensors"]`
-    #: today (`galaius_core.compute.pool.ModelWeightFormat`): naming it as a field, not a hardcoded
+    #: today (`galaius_core.machine.pool.ModelWeightFormat`): naming it as a field, not a hardcoded
     #: constant, is where a second proven-safe format would be added, never a silent second path.
     weight_format: ModelWeightFormat = "safetensors"
     resources: ResourceRequirement

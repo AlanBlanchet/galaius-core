@@ -1,4 +1,7 @@
-"""Provider-independent prompt distribution contracts."""
+"""Provider-independent contracts shared by every Galaius surface.
+
+This root module is the published API: it names each public contract from its home module, so
+`from galaius_core import X` stays the stable import while modules move between domain folders."""
 
 from galaius_core.workflows.run_state import ENDED, RUN_STATES, RUN_WORDS, STATE_OF_STATUS, RunRow, RunState, RunTree, forest, state_of, tally
 from galaius_core.workflows.status_words import NOTIFICATION_STATUS_WORD, STATUS_TEXT, NotificationStatus, StatusPlural, StatusText, StatusWord
@@ -114,7 +117,7 @@ from galaius_core.prompts import (
     PromptSelection,
     PromptSyncStatus,
 )
-from galaius_core.models.connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart, MicrosoftOAuthStart
+from galaius_core.identity.connections import GeminiConnectionConfiguration, GoogleConnectionStatus, GoogleOAuthAuthorization, GoogleOAuthCallback, GoogleOAuthStart, MicrosoftOAuthStart
 from galaius_core.billing.cost import (
     BudgetOverrun,
     CostUnit,
@@ -132,7 +135,7 @@ from galaius_core.billing.cost import (
     USAGE_FIELD,
     priced_cost,
 )
-from galaius_core.compute.cloud import (
+from galaius_core.machine.cloud import (
     CloudInstanceType,
     CloudLaunchRequest,
     CloudMachine,
@@ -150,7 +153,7 @@ from galaius_core.compute.cloud import (
     resources_fit,
 )
 from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, CriteriaError, parse_criteria, parse_criteria_weights, format_criteria, format_criteria_weights
-from galaius_core.models.subscriptions import (
+from galaius_core.identity.subscriptions import (
     SUBSCRIPTIONS_FEATURE, SUBSCRIPTIONS_PER_PC, RUN_MOVE_LOGIN_FEATURE, RUN_MOVE_WAITS_FEATURE, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
     SubscriptionRefusal, SubscriptionRefusalReason, RunMove, LoginIdentity, LoginUsage, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName,
 )
@@ -181,10 +184,10 @@ from galaius_core.workflows.contracts import (
 )
 from galaius_core.workflows import builtin_ops  # noqa: F401 - declares every builtin op into BUILTIN_OPS
 from galaius_core.tools.machine import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolPhase, MachineToolSpec, MachineToolState
-from galaius_core.models.user_models import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
+from galaius_core.models.custom import UserModel, UserModelOrigin, UserModelOriginKind, UserModelRef
 from galaius_core.images import IMAGES_PER_REQUEST, GeneratedImage, ImageAnswer, ImageBackground, ImageQuality, ImageRequest, ImageSize
 from galaius_core.tools.files import FileTool
-from galaius_core.compute.screen import (
+from galaius_core.machine.screen import (
     SCREEN_ACTS, SCREEN_ACTS_MAX, SCREEN_CLOCK_SKEW, SCREEN_FEATURE, SCREEN_FRAME_MAX, SCREEN_INPUT_MAX, SCREEN_IV_DIRECTION,
     SCREEN_KEY_INFO, SCREEN_OFFER_MAX, SCREEN_PASSKEY_ALGORITHMS, SCREEN_PLAIN_FRAME, SCREEN_PLAIN_STATS, SCREEN_PROOF_LABEL,
     SCREEN_QUALITIES, SCREEN_SESSION_MAX, SCREEN_WIDTHS,
@@ -275,7 +278,7 @@ from galaius_core.billing.wallet import (
     micros_to_usd,
     usd_to_micros,
 )
-from galaius_core.compute.pool import (
+from galaius_core.machine.pool import (
     BLOCKED_EGRESS_HOSTS,
     POOL_SHARING_ENABLED,
     EgressAllowEntry,

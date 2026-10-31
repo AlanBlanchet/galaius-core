@@ -20,7 +20,7 @@ from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, ModelCo
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
-from galaius_core.models.subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core.identity.subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 from galaius_core.community import CommunityEntryRef
 from galaius_core.workflows.run_state import RunRow, RunState, state_of
@@ -28,7 +28,7 @@ from galaius_core.wire import Cause, Kinded, WireModel, WireRequest
 from galaius_core.tools.files import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from galaius_core.media import MEDIA_TOOLS
 from galaius_core.tools.machine import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolState
-from galaius_core.compute.screen import SCREEN_FEATURE, ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
+from galaius_core.machine.screen import SCREEN_FEATURE, ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
 
 #: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
 #: PC capability's (`MACHINE_TOOLS`).
@@ -2326,7 +2326,7 @@ class MachineCommand(WireModel):
     #: borrowing this machine, signed by the OWNER's key — the runner must route this through its
     #: gVisor sandbox (`galaius.sandbox.run_pooled`), never the direct path a same-workspace
     #: command gets. A pooled `EgressPolicy` travels inside `config["_pool_egress_allow"]` as a
-    #: plain list of `{host, port}` — not a typed field here, since `galaius_core.compute.pool` (which
+    #: plain list of `{host, port}` — not a typed field here, since `galaius_core.machine.pool` (which
     #: owns `EgressPolicy`) imports FROM this module for `MachineRef`; a typed field would cycle.
     tenancy: Literal["owner", "pooled"] = "owner"
     #: The account the run acts for (`RunInitiator.account`): the runner's local audit log names it.
@@ -4125,7 +4125,7 @@ class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
     """Open a session of this PC's screen for an offer its owner's passkey signed. The machine's
     signature on this request only says the server sent it; the PC opens nothing unless the
     PASSKEY's signature over `offer` verifies against a key it pinned itself
-    (`galaius_core.compute.screen`)."""
+    (`galaius_core.machine.screen`)."""
 
     op: Literal["screen_open"] = "screen_open"
     viewer: Annotated[str, Field(max_length=80)] = ""
