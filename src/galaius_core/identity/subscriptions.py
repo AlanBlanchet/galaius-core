@@ -12,9 +12,6 @@ from galaius_core.wire import Kinded, WireModel, WireRequest
 
 #: The coding-agent CLIs a PC runs agents through, each a vendor whose login a subscription is.
 AgentProvider = Literal["claude", "codex"]
-#: What a PC's runner says (its hello's `features`) once it takes every request below: a start carries one
-#: subscription per provider (`SubscriptionChoices`), a refusal says why typed (`SubscriptionRefusal`).
-SUBSCRIPTIONS_FEATURE = "agent_subscription_choices"
 #: How many subscriptions one account keeps on one PC (all of them a start may offer).
 SUBSCRIPTIONS_PER_PC = 8
 #: The usage periods a vendor meters a subscription over. A vendor's own token maps onto the nearest
@@ -23,10 +20,6 @@ UsageWindowName = Literal["five_hour", "weekly", "monthly"]
 #: What a run does when its subscription reaches a cap: `finish` lets the current turn end and starts
 #: no new turn or session on it until the window drops; `cut` stops the run at that reading.
 AtCap = Literal["finish", "cut"]
-#: What a PC's runner says once it takes a `RunMove` that does not resume (`resume` False).
-RUN_MOVE_WAITS_FEATURE = "agent_subscription_moves_wait"
-#: What a PC's runner says once it takes a `RunMove` from or to its own login of the run's CLI (`subscription_id` None).
-RUN_MOVE_LOGIN_FEATURE = "agent_login_moves"
 
 
 class UsageWindow(WireModel):
@@ -89,7 +82,7 @@ class SubscriptionLimits(WireModel):
 
 class Lent(WireRequest):
     """`lent`: the initiator is a member using a PC lent to him: no CLI login of that PC runs it (its owner's or a
-    subscription's); only API-key and local models do. Asked of a runner saying `SUBSCRIPTIONS_FEATURE`."""
+    subscription's); only API-key and local models do. Asked of a runner saying `PcFeature.SUBSCRIPTIONS`."""
 
     lent: bool = Field(default=False, exclude_if=lambda value: value is False)
 
@@ -185,7 +178,7 @@ class RunMove(WireRequest):
 
     `resume`: the PC resumes it there at once (his « Continuer sur … », the switch at a cap); False: it only moves, and
     its next turn runs there (his pick in a conversation, the switch before a turn). Asked False only of a runner saying
-    `RUN_MOVE_WAITS_FEATURE`; from or to the PC's own login only of one saying `RUN_MOVE_LOGIN_FEATURE`."""
+    `PcFeature.RUN_MOVE_WAITS`; from or to the PC's own login only of one saying `PcFeature.RUN_MOVE_LOGIN`."""
 
     run_id: UUID
     subscription_id: UUID | None

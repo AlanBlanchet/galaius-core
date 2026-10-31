@@ -12,6 +12,7 @@ from pydantic import Field, ValidationInfo, computed_field, field_validator, mod
 from galaius_core.models.criteria import CriteriaName, PropertyKind
 from galaius_core.wire import Cause, ProviderId
 from galaius_core.models.task import ModelTask
+from galaius_core.machine.features import UPDATE_COMMAND, PcFeature
 from galaius_core.machine.need import InstanceTypeName, MachineName, RegionName, ResourceRequirement, ScriptLanguage
 
 
@@ -328,7 +329,7 @@ class OnMachine(StepFault):
 #: owner allows), `script_unapproved` (its owner approves each script digest), `cloud_forbidden` / `pool_forbidden` (this
 #: workspace may not launch cloud machines / use pooled ones). The pool: `pool_empty` (none shared, idle and fitting),
 #: `pool_unscrubbed` (no GPU one scrubbed since its last tenant), `pool_claimed` (another run took it first).
-MachineReason = Literal["offline", "disconnected", "unanswered", "unplaced", "unsaved", "not_allowed", "script_unapproved", "cloud_forbidden",
+MachineReason = Literal["offline", "disconnected", "unanswered", "outdated", "unplaced", "unsaved", "not_allowed", "script_unapproved", "cloud_forbidden",
                         "pool_forbidden", "pool_empty", "pool_unscrubbed", "pool_claimed", "pool_failed", "declined"]
 
 
@@ -339,8 +340,11 @@ class MachineFault(OnMachine, ReasonedFault):
     code: Literal["machine_fault"] = "machine_fault"
     reason: MachineReason
     waited_s: float | None = Field(default=None, ge=0)
+    #: What an `outdated` machine's runner lacks, as its hello would name it.
+    feature: PcFeature | None = None
     SAID: ClassVar[Mapping[str, str]] = {
         "offline": "the machine is offline", "disconnected": "the machine disconnected", "unanswered": "the machine did not answer in time",
+        "outdated": f"the Galaius on this machine is too old. It updates itself; otherwise its owner runs {UPDATE_COMMAND} there",
         "unplaced": "this step is not placed on a machine",
         "unsaved": "a machine runs only workflows its owner saved: save this workflow, then run it again",
         "not_allowed": "file steps on this machine run only for people its owner allows",
@@ -355,6 +359,8 @@ class MachineFault(OnMachine, ReasonedFault):
     def _waited_offline(self) -> Self:
         if self.waited_s is not None and self.reason != "offline":
             raise ValueError("waited_s: only an offline machine was waited for")
+        if (self.feature is None) == (self.reason == "outdated"):
+            raise ValueError("feature: what an outdated machine lacks, and only then")
         return self
 
 

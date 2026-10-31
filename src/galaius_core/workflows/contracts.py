@@ -20,7 +20,7 @@ from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, Propert
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
-from galaius_core.identity.subscriptions import SUBSCRIPTIONS_FEATURE, AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core.identity.subscriptions import AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
 from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequirement, ScriptLanguage
 
 from galaius_core.community import CommunityEntryRef
@@ -28,9 +28,10 @@ from galaius_core.workflows.run_state import RunRow, RunState, state_of
 from galaius_core.wire import Cause, Kinded, WireModel, WireRequest
 from galaius_core.tools.files import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from galaius_core.media import MEDIA_TOOLS
-from galaius_core.tools.machine import MACHINE_TOOLS, MACHINE_TOOLS_FEATURE, MachineToolName, MachineToolState
-from galaius_core.machine.screen import SCREEN_FEATURE, ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
+from galaius_core.tools.machine import MACHINE_TOOLS, MachineToolName, MachineToolState
+from galaius_core.machine.screen import ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
 from galaius_core.machine.places import PlaceLevel, place_path, PlacePath, FolderPath, MachinePlaceChange, MachinePlaceEntry, MachinePlaceReview, MachinePlacesView
+from galaius_core.machine.features import PcFeature
 
 #: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
 #: PC capability's (`MACHINE_TOOLS`).
@@ -2670,32 +2671,33 @@ AGENT_IMAGE_DATA = (AGENT_IMAGE_BYTES * 4) // 3 + 8
 #: The largest message carrying them (the images, its words, the request's own fields): what a PC's channel and the
 #: server's request body take.
 AGENT_IMAGES_WIRE = AGENT_IMAGES_MAX * AGENT_IMAGE_DATA + 1024 * 1024
-#: A runner saying it takes messages showing images (`AgentMessageSpec.images`): it keeps each in the run's own folder
-#: and hands it to the agent.
-AGENT_IMAGES_FEATURE = "agent_images"
-#: A runner saying it honours `AgentMessageSpec.reasoning`: the effort a person sets on one conversation.
-AGENT_REASONING_FEATURE = "agent_reasoning"
-#: A runner saying it serves the files its file tools kept for its runs (`AgentMediaRequest` with a `FILE_KEY`), in parts
-#: from any `offset` (`AgentFile`): only then does a transcript show their cards.
-AGENT_FILES_FEATURE = "agent_file_parts"
 
 
-class AgentMessageSpec(WireRequest):
+class PcContent(WireRequest):
+    """A request part that may carry content a PC's runner needs a feature for (images, an effort): none unless it says so."""
+
+    @property
+    def content_features(self) -> frozenset[PcFeature]:
+        """The runner features what it carries needs, past its kind's."""
+        return frozenset()
+
+
+class AgentMessageSpec(PcContent):
     """What the owner says to an agent: his words and the images he attached (pasted, dropped), at least one of the two.
     `images` is left out of the message when empty, so a runner released before it still verifies an image-less request;
-    one carrying images is asked only of a runner saying `AGENT_IMAGES_FEATURE` (`MachineAgentRequestBase.needs`)."""
+    one carrying images is asked only of a runner saying `PcFeature.AGENT_IMAGES` (`MachineAgentRequestBase.needs`)."""
 
     text: str = Field(default="")
     images: tuple[AgentMedia, ...] = Field(default=(), max_length=AGENT_IMAGES_MAX, exclude_if=lambda value: not value)
     #: The effort this conversation runs at from this message on, over its role's (`AgentRevision.reasoning`); None: as it
-    #: is. Asked only of a runner saying `AGENT_REASONING_FEATURE`.
+    #: is. Asked only of a runner saying `PcFeature.AGENT_REASONING`.
     reasoning: ReasoningLevel | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @property
-    def content_features(self) -> frozenset[str]:
-        """The runner features what it carries needs: `AGENT_IMAGES_FEATURE` when it shows images, `AGENT_REASONING_FEATURE`
+    def content_features(self) -> frozenset[PcFeature]:
+        """The runner features what it carries needs: `PcFeature.AGENT_IMAGES` when it shows images, `PcFeature.AGENT_REASONING`
         when it sets its conversation's effort."""
-        return frozenset({*((AGENT_IMAGES_FEATURE,) if self.images else ()), *((AGENT_REASONING_FEATURE,) if self.reasoning else ())})
+        return frozenset({*((PcFeature.AGENT_IMAGES,) if self.images else ()), *((PcFeature.AGENT_REASONING,) if self.reasoning else ())})
 
     @model_validator(mode="after")
     def said_or_shown(self) -> Self:
@@ -2729,6 +2731,13 @@ class AgentStartSpec(AgentMessageSpec):
     #: unless asked for this start, so a run started without it has none to leak.
     with_secrets: bool = Field(default=False, exclude_if=lambda value: value is False)
 
+    @property
+    def content_features(self) -> frozenset[PcFeature]:
+        """A message's, and `PcFeature.START_PERMISSION` when it says what the run may do, `PcFeature.PROJECT_SECRETS` when it
+        names its project."""
+        return super().content_features | {feature for feature, said in ((PcFeature.START_PERMISSION, self.permission), (PcFeature.PROJECT_SECRETS, self.project))
+                                           if said is not None}
+
     @model_validator(mode="after")
     def role_for_an_agent(self) -> Self:
         if (self.kind == "agent") != (self.role is not None):
@@ -2742,14 +2751,12 @@ class AgentStartSpec(AgentMessageSpec):
 #: (`WebLimited.web_limit`, from 1 to `WEB_CONVERSATIONS_MAX`).
 WEB_CONVERSATIONS = 4
 WEB_CONVERSATIONS_MAX = 16
-#: A runner saying it honours `WebLimited.web_limit` (a runner not saying it refuses the field, and keeps `WEB_CONVERSATIONS`).
-WEB_LIMIT_FEATURE = "web_limit"
 
 
 class WebLimited(WireRequest):
     """A request whose answer hangs on how many conversations started from the web may work at once on the PC: a start,
     a continued conversation, the runs list reporting its `WebLoad`. `web_limit`: that number as its owner set it on the
-    web (absent: `WEB_CONVERSATIONS`). Asked of a runner saying `WEB_LIMIT_FEATURE`."""
+    web (absent: `WEB_CONVERSATIONS`). Asked of a runner saying `PcFeature.WEB_LIMIT`."""
 
     web_limit: Annotated[int, Field(ge=1)] | None = Field(default=None, exclude_if=lambda value: value is None)
 
@@ -2764,7 +2771,7 @@ class WebLimited(WireRequest):
         return self.in_force(self.web_limit)
 
 
-class MachineAgentRequestBase(WireRequest):
+class MachineAgentRequestBase(PcContent):
     """The machine OWNER, signed in on the web, drives coding agents on one of his computers the
     way the editor panel does. One subclass per op, chosen by `op`. Signed with the machine's key,
     short-lived, `type` inside the signed payload; the machine refuses anything outside its agent
@@ -2782,19 +2789,19 @@ class MachineAgentRequestBase(WireRequest):
     seconds: ClassVar[float] = 15
     #: What the machine's runner must say it supports (its hello's `features`) to be asked this:
     #: an older runner is told apart from a silent one.
-    feature: ClassVar[str] = "agent_control"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_CONTROL
     #: What a runner says (its hello's `features`) when it takes this request idempotently: a
     #: repeated id is never done twice, even across the runner's restart, and its answer tells of
     #: that one act (as of the repeat: `reads_at`). The server asks again, under the same id, only
     #: such a runner whose answer never came. None: never asked again.
-    idempotent_feature: ClassVar[str | None] = None
+    idempotent_feature: ClassVar[PcFeature | None] = None
     #: How long after its first delivery such a runner still knows the id: the server asks again only within it.
     idempotent_seconds: ClassVar[float] = 0.0
 
     @property
-    def needs(self) -> frozenset[str]:
+    def needs(self) -> frozenset[PcFeature]:
         """Every runner feature asking this needs: its kind's (`feature`), and a message's own (`content_features`)."""
-        return frozenset({self.feature, *(self.content_features if isinstance(self, AgentMessageSpec) else ())})
+        return frozenset({self.feature, *self.content_features})
 
 
 class AgentFoldersRequest(MachineAgentRequestBase):
@@ -2835,7 +2842,7 @@ class AgentMediaRequest(MachineAgentRequestBase):
     name: str = Field(pattern=MEDIA_NAME)
     #: A kept file's part from this byte (0: its first); an image is always whole.
     offset: int = Field(default=0, ge=0, lt=KEPT_FILE_MAX, exclude_if=lambda value: value == 0)
-    feature: ClassVar[str] = "agent_media"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_MEDIA
 
     @model_validator(mode="after")
     def parts_of_files(self) -> Self:
@@ -2942,7 +2949,7 @@ class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionCho
     seconds: ClassVar[float] = 135
     #: A start asked again under its id (its answer lost with the line, or never in time) answers the run that id
     #: started, or joins its launch still under way (`under_way` while it is): never a second agent.
-    idempotent_feature: ClassVar[str | None] = "agent_start_once"
+    idempotent_feature: ClassVar[PcFeature | None] = PcFeature.START_ONCE
     idempotent_seconds: ClassVar[float] = 3600.0
 
 
@@ -2961,7 +2968,7 @@ class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUs
     run_id: UUID
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 75
-    idempotent_feature: ClassVar[str | None] = "agent_send_once"
+    idempotent_feature: ClassVar[PcFeature | None] = PcFeature.SEND_ONCE
     idempotent_seconds: ClassVar[float] = 3600.0
 
 
@@ -3036,7 +3043,7 @@ class AgentCompactRequest(MachineAgentRequestBase):
     op: Literal["compact"] = "compact"
     run_id: UUID
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "agent_compact"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_COMPACT
 
 
 class AgentOptionsRequest(MachineAgentRequestBase):
@@ -3097,7 +3104,7 @@ class AgentSettingsRequest(MachineAgentRequestBase):
 
     op: Literal["settings"] = "settings"
     seconds: ClassVar[float] = 45
-    feature: ClassVar[str] = "agent_settings"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_SETTINGS
 
 
 #: The code a vendor's page shows once the person accepted a program's sign-in there, to paste back into that program
@@ -3111,7 +3118,7 @@ class AgentProgramsRequest(MachineAgentRequestBase):
     """Each agent program here: installed, signed in, an install or sign-in under way (`providers`)."""
 
     op: Literal["programs"] = "programs"
-    feature: ClassVar[str] = "agent_programs"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_PROGRAMS
 
 
 class AgentProgramInstallRequest(MachineAgentRequestBase):
@@ -3123,17 +3130,21 @@ class AgentProgramInstallRequest(MachineAgentRequestBase):
     op: Literal["program_install"] = "program_install"
     provider: AgentProvider
     #: Sign in inside this subscription's own folder on the PC (`~/.galaius/subscriptions/<id>/`),
-    #: never the PC's default login; asked of a runner saying `SUBSCRIPTIONS_FEATURE`. None: the default login.
+    #: never the PC's default login; asked of a runner saying `PcFeature.SUBSCRIPTIONS`. None: the default login.
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "agent_programs"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_PROGRAMS
+
+    @property
+    def content_features(self) -> frozenset[PcFeature]:
+        return frozenset() if self.subscription_id is None else frozenset({PcFeature.SUBSCRIPTIONS})
 
 
 class AgentToolsRequest(MachineAgentRequestBase):
     """Each capability's state on this PC (`MACHINE_TOOLS`, answered in `tools`)."""
 
     op: Literal["tools"] = "tools"
-    feature: ClassVar[str] = MACHINE_TOOLS_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.MACHINE_TOOLS
 
 
 class AgentToolInstallRequest(MachineAgentRequestBase):
@@ -3144,7 +3155,7 @@ class AgentToolInstallRequest(MachineAgentRequestBase):
     op: Literal["tool_install"] = "tool_install"
     tool: MachineToolName
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = MACHINE_TOOLS_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.MACHINE_TOOLS
 
 
 class AgentSignOutRequest(MachineAgentRequestBase):
@@ -3156,7 +3167,7 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     provider: AgentProvider
     subscription_id: UUID
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.SUBSCRIPTIONS
 
 
 class SealedSignInCode(WireRequest):
@@ -3178,7 +3189,7 @@ class AgentSignInCodeRequest(MachineAgentRequestBase, SealedSignInCode):
     provider: AgentProvider
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "sign_in_paste"
+    feature: ClassVar[PcFeature] = PcFeature.SIGN_IN_PASTE
 
 
 class AgentMoveRequest(MachineAgentRequestBase, RunMove):
@@ -3188,7 +3199,13 @@ class AgentMoveRequest(MachineAgentRequestBase, RunMove):
     op: Literal["move"] = "move"
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 30
-    feature: ClassVar[str] = "agent_subscription_moves"
+    feature: ClassVar[PcFeature] = PcFeature.RUN_MOVES
+
+    @property
+    def content_features(self) -> frozenset[PcFeature]:
+        """`PcFeature.RUN_MOVE_WAITS` for a move that does not resume, `PcFeature.RUN_MOVE_LOGIN` for one to the PC's own
+        login (one from it is the server's to know: it names it beside the request)."""
+        return frozenset({feature for feature, said in ((PcFeature.RUN_MOVE_WAITS, not self.resume), (PcFeature.RUN_MOVE_LOGIN, self.subscription_id is None)) if said})
 
 
 class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
@@ -3197,7 +3214,7 @@ class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
 
     op: Literal["allowance"] = "allowance"
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = SUBSCRIPTIONS_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.SUBSCRIPTIONS
 
 
 class AgentProviderSwitchRequest(MachineAgentRequestBase):
@@ -3207,7 +3224,7 @@ class AgentProviderSwitchRequest(MachineAgentRequestBase):
     provider: AgentProvider
     active: bool
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "agent_settings"
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_SETTINGS
 
 
 
@@ -3216,7 +3233,7 @@ class PlacesRequest(MachineAgentRequestBase):
     """The levels, pending widenings, browse switch and fence of this PC."""
 
     op: Literal["places"] = "places"
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 class PlaceLevelRequest(MachineAgentRequestBase):
@@ -3226,7 +3243,7 @@ class PlaceLevelRequest(MachineAgentRequestBase):
     path: PlacePath
     level: PlaceLevel
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 class PlaceCancelRequest(MachineAgentRequestBase):
@@ -3235,7 +3252,7 @@ class PlaceCancelRequest(MachineAgentRequestBase):
     op: Literal["place_cancel"] = "place_cancel"
     change_id: UUID
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 class PlaceBrowseRequest(MachineAgentRequestBase):
@@ -3245,13 +3262,13 @@ class PlaceBrowseRequest(MachineAgentRequestBase):
     op: Literal["place_browse"] = "place_browse"
     path: str = Field(default="", max_length=1024)
     cursor: int = Field(default=0, ge=0, le=100_000)
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 class PlaceReviewsRequest(MachineAgentRequestBase):
     op: Literal["place_reviews"] = "place_reviews"
     seconds: ClassVar[float] = 30
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 class PlaceReviewRequest(MachineAgentRequestBase):
@@ -3260,7 +3277,7 @@ class PlaceReviewRequest(MachineAgentRequestBase):
     op: Literal["place_review"] = "place_review"
     review_id: UUID
     seconds: ClassVar[float] = 30
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 class PlaceDiscardRequest(MachineAgentRequestBase):
@@ -3269,7 +3286,7 @@ class PlaceDiscardRequest(MachineAgentRequestBase):
     op: Literal["place_discard"] = "place_discard"
     review_id: UUID
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "places"
+    feature: ClassVar[PcFeature] = PcFeature.PLACES
 
 
 #: The scope the web may give agents on a PC: `full_access` (no sandbox) is set on the PC only.
@@ -3706,8 +3723,6 @@ class MachineWorkspaceJob(WireModel):
 PROJECTS_ROOT = "galaius:projets"
 #: Where `PROJECTS_ROOT` is on each PC: this hidden folder of its working directory (its owner's home).
 PROJECTS_DIR = ".galaius-projets"
-#: A runner holding `PROJECTS_ROOT` (a runner not saying it takes project folders under an agent root the web adds).
-PROJECTS_ROOT_FEATURE = "projects_root"
 
 
 def _agent_root(value: str) -> str:
@@ -3747,7 +3762,7 @@ class WorkspacePrepareSpec(WorkspaceSpec):
 class WorkspacePrepareRequest(MachineAgentRequestBase, WorkspacePrepareSpec):
     op: Literal["workspace_prepare"] = "workspace_prepare"
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "workspaces"
+    feature: ClassVar[PcFeature] = PcFeature.WORKSPACES
 
 
 class WorkspaceCreateSpec(WorkspaceSpec):
@@ -3764,7 +3779,7 @@ class WorkspaceCreateSpec(WorkspaceSpec):
 class WorkspaceCreateRequest(MachineAgentRequestBase, WorkspaceCreateSpec):
     op: Literal["workspace_create"] = "workspace_create"
     action: ClassVar[bool] = True
-    feature: ClassVar[str] = "workspace_copy"
+    feature: ClassVar[PcFeature] = PcFeature.WORKSPACE_COPY
 
 
 class WorkspacePackRequest(MachineAgentRequestBase):
@@ -3779,28 +3794,22 @@ class WorkspacePackRequest(MachineAgentRequestBase):
     transfer: UUID | None = None
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 60
-    feature: ClassVar[str] = "workspace_copy"
+    feature: ClassVar[PcFeature] = PcFeature.WORKSPACE_COPY
 
 
 class WorkspacesRequest(MachineAgentRequestBase):
     """The project folders this PC was asked for, newest first."""
 
     op: Literal["workspaces"] = "workspaces"
-    feature: ClassVar[str] = "workspaces"
+    feature: ClassVar[PcFeature] = PcFeature.WORKSPACES
 
 
-#: A runner showing a project folder's files to the web, read-only (`ProjectFilesBase`).
-PROJECT_FILES_FEATURE = "project_files"
 #: Most entries one folder listing carries; most paths one name search carries.
 PROJECT_FILES_MAX = 2000
 PROJECT_FOUND_MAX = 200
 #: Largest text a file answer carries (utf-8 bytes read; a longer file comes cut, `truncated`).
 PROJECT_TEXT_MAX = 1024 * 1024
-#: A runner answering a project file's raw bytes part by part (`ProjectFileBytesRequest`); most bytes one part carries.
-PROJECT_FILE_BYTES_FEATURE = "project_file_bytes"
 PROJECT_BYTES_PART = 1024 * 1024
-#: A runner reading a project file's text from a byte `offset` (`ProjectFileRequest.offset`): its later pages, its end.
-PROJECT_FILE_OFFSET_FEATURE = "project_file_offset"
 #: How a file differs from its repository's last commit, as `git status` says it.
 GitMark = Literal["modified", "added", "deleted", "renamed", "untracked", "conflict"]
 
@@ -3867,7 +3876,7 @@ class ProjectFilesBase(MachineAgentRequestBase):
 
     root: AgentRootPath
     base: FolderPath = ""
-    feature: ClassVar[str] = PROJECT_FILES_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.PROJECT_FILES
 
 
 class ProjectFolderAsk(WireRequest):
@@ -3919,7 +3928,7 @@ class ProjectFileRequest(ProjectFilesBase, ProjectTextAsk, ProjectFilePart):
     """One file: its text, its image, or its facts alone (`ProjectFileContent`). Its text from `offset` on: at most
     PROJECT_TEXT_MAX bytes, starting and ending where neither cuts a line, else a word or a secret (what such a cut
     would split is left out), so pages asked each from the `end` of the one before join whole. An offset other than 0,
-    `line_start` or `opens` False needs PROJECT_FILE_OFFSET_FEATURE."""
+    `line_start` or `opens` False needs PcFeature.PROJECT_FILE_OFFSET."""
 
     op: Literal["file"] = "file"
 
@@ -3937,7 +3946,7 @@ class ProjectFileBytesRequest(ProjectFilesBase, ProjectFileFromAsk, ProjectFileP
 
     op: Literal["bytes"] = "bytes"
     length: int = Field(default=PROJECT_BYTES_PART, ge=1, le=PROJECT_BYTES_PART)
-    feature: ClassVar[str] = PROJECT_FILE_BYTES_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.PROJECT_FILE_BYTES
 
 
 class ProjectFileBytes(MediaBytes):
@@ -3994,7 +4003,7 @@ class ScreenStatusRequest(MachineAgentRequestBase):
     """Whether this PC may be watched and what it would show (`ScreenReadiness`) — no passkey."""
 
     op: Literal["screen_status"] = "screen_status"
-    feature: ClassVar[str] = SCREEN_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.SCREEN
 
 
 class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
@@ -4007,7 +4016,7 @@ class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
     viewer: Annotated[str, Field(max_length=80)] = ""
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 20
-    feature: ClassVar[str] = SCREEN_FEATURE
+    feature: ClassVar[PcFeature] = PcFeature.SCREEN
 
 
 MachineAgentRequest = Annotated[

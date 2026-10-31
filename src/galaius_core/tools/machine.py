@@ -17,8 +17,6 @@ from galaius_core.wire import WireModel
 
 MachineToolName = Literal["video_editing"]
 MachineToolPhase = Literal["absent", "installing", "ready", "failed"]
-#: A runner saying it reports and installs `MACHINE_TOOLS` (`AgentToolsRequest`, `AgentToolInstallRequest`).
-MACHINE_TOOLS_FEATURE = "machine_tools"
 
 
 class MachineToolSpec(WireModel):

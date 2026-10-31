@@ -20,10 +20,6 @@ from pydantic import ConfigDict, Field, TypeAdapter, computed_field
 
 from galaius_core.wire import WireModel, WireRequest
 
-#: What a runner answers screen requests with (`MachineRunner.FEATURES`): without it, its PC is too
-#: old to be viewed and the web says so instead of waiting on frames that never come.
-SCREEN_FEATURE = "screen_view"
-
 #: The widths a stream steps through as the link gets worse or better, narrowest first. A phone
 #: screen is ~390 CSS px wide at 2-3x, so 1280 already over-serves it; 480 keeps a desktop readable
 #: as text blocks while a tethered link recovers.

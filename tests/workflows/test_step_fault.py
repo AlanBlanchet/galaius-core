@@ -5,6 +5,8 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from galaius_core import (
+    UPDATE_COMMAND,
+    PcFeature,
     Cause,
     ClipTooShort,
     CloudLaunch,
@@ -147,6 +149,15 @@ def test_a_machine_fault_named_after_any_machine_reads_back(name):
 def test_only_an_offline_machine_was_waited_for():
     with pytest.raises(ValidationError, match="waited_s"):
         MachineFault(reason="disconnected", waited_s=3)
+
+
+@pytest.mark.parametrize(("reason", "feature"), [("outdated", None), ("offline", PcFeature.SCREEN)])
+def test_a_machine_fault_names_what_it_lacks_exactly_when_outdated(reason, feature):
+    with pytest.raises(ValidationError, match="feature"):
+        MachineFault(reason=reason, feature=feature)
+    if feature:
+        outdated = MachineFault(reason="outdated", feature=feature).on_machine("PC")
+        assert CAUSE.validate_json(CAUSE.dump_json(outdated)) == outdated and UPDATE_COMMAND in outdated.message
 
 
 @pytest.mark.parametrize(("reason", "grant"), [("not_granted", None), ("refused", "read")])

@@ -45,8 +45,10 @@ def test_a_reader_keeps_unknown_fields_and_an_author_refuses_them(model: type[Ba
         assert parsed.model_dump()["field_from_a_newer_release"] == 1
 
 
-def test_contract_count_covers_every_module() -> None:
-    assert {model.__module__ for model in contracts()} >= MODULES - {"galaius_core.wire"}
+def test_the_contract_walk_reaches_every_module_defining_a_model() -> None:
+    defining = {name for name in MODULES for value in vars(importlib.import_module(name)).values()
+                if isinstance(value, type) and issubclass(value, BaseModel) and value.__module__ == name}
+    assert {model.__module__ for model in contracts()} >= defining - {"galaius_core.wire"}
 
 
 def agent(**fields) -> tuple[AgentRevision, PromptRevision]:
