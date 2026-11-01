@@ -8,7 +8,7 @@ import re
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import PurePosixPath
 from collections.abc import Iterable, Iterator, Mapping
-from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, get_args
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, get_args, overload
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,12 +20,12 @@ from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, Propert
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
-from galaius_core.identity.subscriptions import AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core.identity.subscriptions import AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
 from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequirement, ScriptLanguage
 
 from galaius_core.community import CommunityEntryRef
 from galaius_core.workflows.run_state import RunRow, RunState, state_of
-from galaius_core.wire import Cause, Kinded, WireModel, WireRequest
+from galaius_core.wire import Cause, Kinded, Reasoned, ReasonT, WireModel, WireRequest, members
 from galaius_core.tools.files import CREATE_FILE, CREATE_FILE_TYPES, FileTool
 from galaius_core.media import MEDIA_TOOLS
 from galaius_core.tools.machine import MACHINE_TOOLS, MachineToolName, MachineToolState
@@ -4322,18 +4322,18 @@ class WebLoad(WireModel):
 #: can be stopped).
 EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: Why a PC refused an agent request, typed for the server to word (`MachineAgentAnswer.refusal`): a project folder's failure,
-#: `web_full` its conversations started from the web work at their most (`WebLimited`; `AgentRefusal.web` says them),
+#: `web_full` its conversations started from the web work at their most (`WebLimited`; `WebFull.web` says them),
 #: `under_way` a request asked again under its id while its first delivery still works there (asked later, it answers that
 #: one), or a start still starting; its owner switched off `agents_off` its agents, `continue_off` continuing his editor
 #: conversations from the web, `approvals_off` answering a session's approvals from the web; `folder_closed` the folder is
 #: none it opens to agents (none at all, gone, hidden, a link), `folder_not_lent` its owner did not open it to the member
 #: it is lent to; `fence_closed` its agent fence gives the folder no level, `fence_broken` the fence is on and cannot be
-#: built there; `no_candidate` no (CLI, model) of the ranked list could start (`AgentRefusal.skips` says why each);
+#: built there; `no_candidate` no (CLI, model) of the ranked list could start (`NoCandidate.skips` says why each);
 #: `model_unavailable` no model its CLIs run suits the agent; `role_absent` the agent is not in its catalog yet; or a stop
 #: of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
-AgentRefusalCode = WorkspaceFailureCode | Literal[
-    "web_full", "under_way", "agents_off", "continue_off", "approvals_off", "folder_closed", "folder_not_lent", "fence_closed",
-    "fence_broken", "no_candidate", "model_unavailable", "role_absent",
+DeclinedCode = WorkspaceFailureCode | Literal[
+    "under_way", "agents_off", "continue_off", "approvals_off", "folder_closed", "folder_not_lent", "fence_closed",
+    "fence_broken", "model_unavailable", "role_absent",
 ] | EditorStopRefusal
 #: Why a PC refused a project file read (`ProjectFolder`): `secret` its bytes hold one; `unchecked` it cannot check them
 #: for one (an environment file it cannot read, a packed file damaged, too large or holding another packed file);
@@ -4342,23 +4342,66 @@ AgentRefusalCode = WorkspaceFailureCode | Literal[
 ProjectFileRefusalCode = Literal["secret", "unchecked", "sealed", "text", "busy"]
 
 
-class AgentRefusal(Kinded):
-    """A PC's refusal of an agent request, typed (`AgentRefusalCode`): one kind of `MachineRefusal`."""
+class AgentRefusal(Reasoned[ReasonT], Generic[ReasonT]):
+    """A PC's refusal of an agent request, typed: one kind of `MachineRefusal`. Each reason is one
+    leaf carrying only its own facts (`AgentDeclined`, `NoCandidate`, `WebFull`), read through `AgentRefusals`."""
 
     kind: Literal["agent"] = "agent"
-    reason: AgentRefusalCode
-    #: `no_candidate`: each candidate of the ranked list and why it did not start, in its order.
+
+    @property
+    def fenced(self) -> bool:
+        """The PC's agent fence is on and cannot be built there: no agent of it starts (« an agent that cannot be fenced never starts »)."""
+        return False
+
+    @property
+    def pending(self) -> bool:
+        """The same ask is already being answered there: asked again, it is answered once."""
+        return False
+
+
+class AgentDeclined(AgentRefusal[DeclinedCode]):
+    """An agent refusal its reason says whole."""
+
+    @property
+    def fenced(self) -> bool:
+        return self.reason == "fence_broken"
+
+    @property
+    def pending(self) -> bool:
+        return self.reason == "under_way"
+
+
+NoCandidateReason = Literal["no_candidate"]
+
+
+class NoCandidate(AgentRefusal[NoCandidateReason]):
+    """No (CLI, model) of the ranked list could start: each candidate and why it did not, in its order."""
+
+    reason: NoCandidateReason = "no_candidate"
     skips: tuple[PassedOverCandidate, ...] = Field(default=(), max_length=64)
-    #: `web_full`: its conversations started from the web working now and its maximum (None: this server's own refusal).
+
+    @property
+    def reasons(self) -> frozenset[LaunchSkipReason]:
+        """Why its candidates were passed over, each reason once."""
+        return frozenset(skip.reason for skip in self.skips)
+
+    @property
+    def fenced(self) -> bool:
+        return self.reasons == {"sandbox_unavailable"}
+
+
+WebFullReason = Literal["web_full"]
+
+
+class WebFull(AgentRefusal[WebFullReason]):
+    """Its conversations started from the web work at their most: how many and its maximum (None: this server's own refusal)."""
+
+    reason: WebFullReason = "web_full"
     web: WebLoad | None = None
 
-    @model_validator(mode="after")
-    def says_its_own(self) -> Self:
-        if self.skips and self.reason != "no_candidate":
-            raise ValueError("only a refusal for no candidate names the candidates passed over")
-        if self.web is not None and self.reason != "web_full":
-            raise ValueError("only a refusal for a full PC names its conversations from the web")
-        return self
+
+#: An agent refusal as data: the leaf its reason names.
+AgentRefusals = Annotated[AgentDeclined | NoCandidate | WebFull, Field(discriminator="reason")]
 
 
 #: What a PC was doing when its own code failed rather than the request (`OwnFault`): answering the web, starting or
@@ -4388,31 +4431,31 @@ class OwnFault(Kinded):
         return f"this computer could not build its answer while {self.DOING[self.doing]}: {self.KIND[self.fault]}"
 
 
-class ProjectFileRefusal(Kinded):
+class ProjectFileRefusal(Reasoned[ProjectFileRefusalCode]):
     """A PC's refusal of a project file read, typed (`ProjectFileRefusalCode`): one kind of `MachineRefusal`."""
 
     kind: Literal["project_file"] = "project_file"
-    reason: ProjectFileRefusalCode
 
 
-class ScreenRefusal(Kinded):
+class ScreenRefusal(Reasoned[ScreenOpenRefusal]):
     """A PC's refusal to open a view of its screen, typed (`ScreenOpenRefusal`): one kind of `MachineRefusal`."""
 
     kind: Literal["screen"] = "screen"
-    reason: ScreenOpenRefusal
 
 
 #: Why a PC refused a request, typed for the page to word from one `(kind, reason)` table in its reader's language (the PC
 #: cannot know it); `MachineAgentAnswer.error` keeps the PC's English sentence for the logs.
-MachineRefusal = Annotated[AgentRefusal | SubscriptionRefusal | ScreenRefusal | ProjectFileRefusal | OwnFault, Field(discriminator="kind")]
+MachineRefusal = Annotated[AgentRefusals | SubscriptionRefusals | ScreenRefusal | ProjectFileRefusal | OwnFault, Field(discriminator="kind")]
 
 
 #: What a party refuses, typed once (`Refused`): the reason, for its reader to word in its own language (the refusing party
 #: cannot know it), and its English sentence for the logs (`str(error)`). A PC's runtime raises it, the server raises and reads it.
 R = TypeVar("R")
+
+
 #: The kinds a machine answer carries (`MachineAgentAnswer.refusal`): an agent, a subscription, a screen or a project file
 #: refusal, or a fault of the PC's own.
-ANSWERED: tuple[type[BaseModel], ...] = get_args(get_args(MachineRefusal)[0])
+ANSWERED: tuple[type[BaseModel], ...] = members(MachineRefusal)
 #: A machine refusal as data is kept and read (`kept_refusal`; `MACHINE_REFUSAL.dump_json` to keep one).
 MACHINE_REFUSAL: TypeAdapter[MachineRefusal] = TypeAdapter(MachineRefusal)
 
@@ -4434,25 +4477,41 @@ def _restored(kind: type["Coded[Any]"], state: dict[str, Any], sentence: str) ->
 
 class Coded(Exception, Generic[R]):
     """An error carrying its reason typed `R` (`refusal`) for its reader to word in his own language, and its English sentence
-    for the logs (`str(error)`). A kind declares its type parameter alone (`class AgentRefused(Refused[AgentRefusal])`); a
+    for the logs (`str(error)`). A kind declares its type parameter alone (`class AgentRefused(Refused[AgentRefusals])`); a
     bare reason builds that kind's model, validated here (`AgentRefused("web_full", "4 conversations … stop one first")`) —
-    every reason model names its reason `reason`. A kind picks its builtin exception beside it (`Refused`: a
-    `PermissionError`; a `RuntimeError` an existing `except` already catches)."""
+    every reason model names its reason `reason`. A kind raised for one reason names it once (`class RoleAbsent(…,
+    reason="role_absent")`), then is raised with its sentence alone (`RoleAbsent(sentence=…)`). A kind picks its builtin
+    exception beside it (`Refused`: a `PermissionError`; a `RuntimeError` an existing `except` already catches)."""
 
     _reasons: ClassVar[TypeAdapter[Any]]
     _model: ClassVar[bool]
+    #: The reason a kind is raised with when its raiser names none (its `reason=` class keyword); `...`: it has none.
+    _default: ClassVar[Any] = ...
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, reason: Any = ..., **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         declared = next((get_args(base)[0] for base in cls.__dict__.get("__orig_bases__", ())
                          if isinstance(origin := getattr(base, "__origin__", None), type) and issubclass(origin, Coded)), None)
         if declared is not None and not isinstance(declared, TypeVar):
             cls._reasons = TypeAdapter(declared)
-            cls._model = isinstance(declared, type) and issubclass(declared, BaseModel)
+            cls._model = all(isinstance(leaf, type) and issubclass(leaf, Reasoned) for leaf in members(declared))
+        if reason is not ...:
+            cls._reasons.validate_python({"reason": reason} if cls._model and isinstance(reason, str) else reason)  # a reason its type lacks fails at import
+            cls._default = reason
 
-    def __init__(self, refusal: R | str | None, sentence: str) -> None:
+    @overload
+    def __init__(self, refusal: R | str | None, sentence: str) -> None: ...
+    @overload
+    def __init__(self, *, sentence: str) -> None: ...
+
+    def __init__(self, refusal: Any = ..., sentence: str | None = None) -> None:
+        kind = type(self).__name__
         if not hasattr(type(self), "_reasons"):
-            raise TypeError(f"{type(self).__name__} declares no reason type: raise a kind of it (`class AgentRefused(Refused[AgentRefusal])`)")
+            raise TypeError(f"{kind} declares no reason type: raise a kind of it (`class AgentRefused(Refused[AgentRefusals])`)")
+        if sentence is None:
+            raise TypeError(f"{kind} is raised with its sentence, its English for the logs")
+        if (refusal := self._default if refusal is ... else refusal) is ...:
+            raise TypeError(f"{kind} is raised for no one reason (no `reason=` class keyword): name its reason")
         super().__init__(sentence)
         self.refusal: R = self._reasons.validate_python({"reason": refusal} if self._model and isinstance(refusal, str) else refusal)
 
@@ -4495,8 +4554,8 @@ class ProjectFileRefused(Refused[ProjectFileRefusal]):
     """A project file read a PC refuses, its reason a `ProjectFileRefusalCode`."""
 
 
-class AgentRefused(Refused[AgentRefusal]):
-    """An agent request a PC refuses (or this server for it), its reason an `AgentRefusalCode`."""
+class AgentRefused(Refused[AgentRefusals]):
+    """An agent request a PC refuses (or this server for it), its reason one of `AgentRefusals`."""
 
 
 class MachineAgentAnswer(WireModel):

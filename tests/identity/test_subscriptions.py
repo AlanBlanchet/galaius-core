@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import AGENT_PROGRAMS, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core import AGENT_PROGRAMS, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -51,8 +51,7 @@ TWICE = _choice("claude")
 
 @pytest.mark.parametrize(("model", "fields"), [(SubscriptionChoices, {"subscriptions": (TWICE, TWICE)}),  # each subscription once
                                              (SubscriptionChoices, {"lent": True, "subscriptions": (_choice("codex"),)}),
-                                             (SubscriptionRefusal, {"reason": "capped"}), (SubscriptionRefusal, {"reason": "lent", "cap": SubscriptionCap(
-                                                 window="weekly", used_percent=81, cap_percent=80, at_cap="cut")})])
+                                             (CapReached, {})])
 def test_choices_and_refusals_refuse_incoherent_shapes(model, fields) -> None:
     with pytest.raises(ValidationError):
         model(**fields)

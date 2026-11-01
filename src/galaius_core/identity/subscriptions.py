@@ -6,13 +6,13 @@ import re
 from collections.abc import Mapping
 from datetime import datetime
 from types import MappingProxyType
-from typing import Annotated, ClassVar, Literal, Self
+from typing import Annotated, ClassVar, Generic, Literal, Self
 from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID
 
 from pydantic import Field, field_serializer, model_validator
 
-from galaius_core.wire import Kinded, WireModel, WireRequest
+from galaius_core.wire import Reasoned, ReasonT, WireModel, WireRequest
 
 #: The coding-agent CLIs a PC runs agents through, each a vendor whose login a subscription is (`AGENT_PROGRAMS`).
 AgentProvider = Literal["claude", "codex"]
@@ -259,25 +259,64 @@ class SubscriptionChoices(Lent):
 #: conversation (the default login's only), a turn of a run whose subscription was removed (or is not the sender's).
 #: `usage_limit`: the vendor's own usage limit stopped the run and its window has not reopened yet (`resets_at`); `session_missing`:
 #: the session to continue elsewhere is not in its subscription's folder.
-SubscriptionRefusalReason = Literal["capped", "lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed", "usage_limit", "session_missing"]
+SubscriptionDeclinedReason = Literal["lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed", "session_missing"]
 
 
-class SubscriptionRefusal(Kinded):
-    """A PC's refusal about a subscription, typed: the server words it (`reason`, `cap` when `capped`, `resets_at` when
-    the vendor's `usage_limit` window reopens). One kind of `MachineRefusal`."""
+class SubscriptionRefusal(Reasoned[ReasonT], Generic[ReasonT]):
+    """A PC's refusal about a subscription, typed: one kind of `MachineRefusal`. Each reason is one leaf carrying only
+    its own facts (`SubscriptionDeclined`, `CapReached`, `UsageLimited`), read through `SubscriptionRefusals`."""
 
     kind: Literal["subscription"] = "subscription"
-    reason: SubscriptionRefusalReason
-    cap: SubscriptionCap | None = None
+
+    @property
+    def signed_out(self) -> bool:
+        """The PC holds no sign-in of this subscription: a sign-out finds it done already."""
+        return False
+
+    @property
+    def spent(self) -> bool:
+        """No run fits in it now: at the cap he set, or at its vendor's usage limit (signing in again fixes neither)."""
+        return False
+
+
+class SubscriptionDeclined(SubscriptionRefusal[SubscriptionDeclinedReason]):
+    """A subscription refusal its reason says whole."""
+
+    @property
+    def signed_out(self) -> bool:
+        return self.reason == "not_signed_in"
+
+
+CapReachedReason = Literal["capped"]
+
+
+class CapReached(SubscriptionRefusal[CapReachedReason]):
+    """At a cap of his: the one it reached."""
+
+    reason: CapReachedReason = "capped"
+    cap: SubscriptionCap
+
+    @property
+    def spent(self) -> bool:
+        return True
+
+
+UsageLimitedReason = Literal["usage_limit"]
+
+
+class UsageLimited(SubscriptionRefusal[UsageLimitedReason]):
+    """The vendor's own usage limit stopped it: when its window reopens (None: the vendor did not say)."""
+
+    reason: UsageLimitedReason = "usage_limit"
     resets_at: datetime | None = Field(default=None, exclude_if=lambda value: value is None)
 
-    @model_validator(mode="after")
-    def cap_of_capped(self) -> Self:
-        if (self.reason == "capped") != (self.cap is not None):
-            raise ValueError("a cap refusal names its cap, and only it does")
-        if self.resets_at is not None and self.reason != "usage_limit":
-            raise ValueError("only a usage limit refusal names when its window reopens apart from a cap")
-        return self
+    @property
+    def spent(self) -> bool:
+        return True
+
+
+#: A subscription refusal as data: the leaf its reason names.
+SubscriptionRefusals = Annotated[SubscriptionDeclined | CapReached | UsageLimited, Field(discriminator="reason")]
 
 
 class RunMove(WireRequest):

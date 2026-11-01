@@ -16,7 +16,8 @@ import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Annotated, Any, ClassVar, Self, TypeVar
+from types import UnionType
+from typing import Annotated, Any, ClassVar, Generic, Self, TypeVar, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, computed_field, model_validator
 from pydantic_core import to_jsonable_python
@@ -282,6 +283,25 @@ class Kinded(WireModel):
     tag), so a member kept before it joined a union gets its tag backfilled then."""
 
     model_config = ConfigDict(json_schema_extra=_constants_required)
+
+
+#: A refusal's reason type: one `Literal` (or a union of them) its kind narrows to.
+ReasonT = TypeVar("ReasonT", bound=str)
+
+
+class Reasoned(Kinded, Generic[ReasonT]):
+    """A member of a union saying WHY in one `reason` of its own type: a kind binds the reasons it can give
+    (`AgentDeclined(AgentRefusal[DeclinedCode])`, `NoCandidate(AgentRefusal[Literal["no_candidate"]])`), so a leaf
+    carrying its own facts narrows the reason without restating a field, and a union of leaves is discriminated on it."""
+
+    reason: ReasonT
+
+
+def members(union: Any) -> tuple[Any, ...]:
+    """The leaves of a union, nested and annotated ones flattened (`MachineRefusal`: each kind's models); a lone type is its own leaf."""
+    if get_origin(union) is Annotated:
+        return members(get_args(union)[0])
+    return tuple(leaf for arg in get_args(union) for leaf in members(arg)) if get_origin(union) in (Union, UnionType) else (union,)
 
 
 #: A model provider's id (`openai`, `anthropic`, …), as every cause naming one carries it.
