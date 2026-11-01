@@ -4333,13 +4333,13 @@ EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: agent's model, so a start naming one is refused rather than run on another; `role_absent` the agent is not in its catalog
 #: yet; `fence_agents_only` its fence is on and wraps agents only (a session or a continued editor conversation would run
 #: unfenced); `not_here` what the request names (a run, a conversation, an approval, a file, a cap) is not, or no longer,
-#: there as the page read it; `answering` a continued conversation's turn still runs; `in_editor` its editor does that (a
+#: there as the page read it; `sessions_unavailable` no conversation program can run a session there now; `in_editor` its editor does that (a
 #: file change accepted, an effort set, a compaction); `cannot_compact` its program has no compaction; `too_large` a file
 #: or folder past what it sends or checks; `secrets_refused` project secrets it cannot open (sealed to another PC); or a
 #: stop of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
 DeclinedCode = WorkspaceFailureCode | Literal[
     "under_way", "agents_off", "continue_off", "approvals_off", "folder_closed", "folder_not_lent", "fence_closed",
-    "fence_broken", "fence_agents_only", "model_unavailable", "model_by_policy", "role_absent", "not_here", "answering",
+    "fence_broken", "fence_agents_only", "model_unavailable", "model_by_policy", "role_absent", "not_here", "sessions_unavailable",
     "in_editor", "cannot_compact", "too_large", "secrets_refused",
 ] | EditorStopRefusal
 #: Why a PC refused a project file read (`ProjectFolder`): `secret` its bytes hold one; `unchecked` it cannot check them
