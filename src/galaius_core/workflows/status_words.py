@@ -8,6 +8,8 @@ from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict
 
+from galaius_core.locale import Locale, Said
+
 StatusWord = Literal["working", "at-work", "working-again", "pc-away", "silent", "resuming", "sign-in", "limit-paused",
                      "limit-held", "limit-over", "cap-held", "cap-cut", "on-agents", "waiting", "awaiting", "needs-you",
                      "done", "finished", "failed", "stopped", "lost", "relaunched", "retrying", "skipped", "not-run", "pinned",
@@ -17,10 +19,6 @@ StatusWord = Literal["working", "at-work", "working-again", "pc-away", "silent",
                      "connected", "reconnect", "error", "not-tested", "needs-access", "active", "trial", "payment-due", "held",
                      "cancelled", "suspended", "not-subscribed", "verified", "not-verified", "saved", "revoked", "linked",
                      "on", "off", "to-install", "on-pc", "cannot", "installed", "unknown"]
-
-#: English, then French.
-Said = tuple[str, str]
-
 
 class StatusPlural(BaseModel):
     """A word said about a number of things, lower case as it follows the number: (one, many) per language."""
@@ -41,9 +39,9 @@ class StatusText(BaseModel):
     next: Said | None
     plural: StatusPlural | None = None
 
-    def say(self, locale: str) -> str:
-        """Its label in `locale`: English for "en", French for every other (the app's own default)."""
-        return self.label[0 if locale == "en" else 1]
+    def say(self, locale: Locale) -> str:
+        """Its label in `locale`."""
+        return locale.pick(*self.label)
 
 
 STATUS_TEXT: dict[StatusWord, StatusText] = {
@@ -131,4 +129,4 @@ NotificationStatus = Literal["done", "failed", "stopped", "waiting", "working"]
 NOTIFICATION_STATUS_WORD: dict[NotificationStatus, StatusWord] = {"done": "done", "failed": "failed", "stopped": "stopped", "waiting": "needs-you",
                                                                   "working": "working-again"}
 
-__all__ = ["NOTIFICATION_STATUS_WORD", "STATUS_TEXT", "NotificationStatus", "Said", "StatusPlural", "StatusText", "StatusWord"]
+__all__ = ["NOTIFICATION_STATUS_WORD", "STATUS_TEXT", "NotificationStatus", "StatusPlural", "StatusText", "StatusWord"]

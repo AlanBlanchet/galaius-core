@@ -8,6 +8,7 @@ from pydantic import Field, SecretStr
 from pydantic.experimental.missing_sentinel import MISSING
 
 from galaius_core.identity.permissions import Permission
+from galaius_core.locale import Locale
 from galaius_core.wire import WireModel, WireRequest
 
 WorkspaceRole = Literal["owner", "admin", "member", "viewer"]
@@ -22,13 +23,13 @@ class Account(WireModel):
     account_id: UUID
     email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
-    locale: Literal["en", "fr"]
+    locale: Locale
     verified: bool
 
 
 class AccountUpdate(WireRequest):
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
-    locale: Literal["en", "fr"] | MISSING = MISSING
+    locale: Locale | MISSING = MISSING
 
 
 class Bootstrap(WireModel):
@@ -42,7 +43,7 @@ class Bootstrap(WireModel):
 class SignupRequest(WireRequest):
     email: str = Field(pattern=EMAIL_PATTERN, max_length=320)
     password: SecretStr = Field(min_length=12, max_length=1024)
-    locale: Literal["en", "fr"] = "en"
+    locale: Locale = Locale.FALLBACK
     #: "For yourself / For a company" — the kind of the workspace made with the account.
     kind: WorkspaceKind = "personal"
 

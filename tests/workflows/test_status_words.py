@@ -5,7 +5,7 @@ from typing import get_args
 
 import pytest
 
-from galaius_core import STATUS_TEXT, StatusWord
+from galaius_core import STATUS_TEXT, Locale, StatusWord
 
 
 def test_every_word_has_its_text_in_both_languages() -> None:
@@ -14,6 +14,6 @@ def test_every_word_has_its_text_in_both_languages() -> None:
     assert blank == []
 
 
-@pytest.mark.parametrize(("word", "locale", "said"), [("stopped", "fr", "Arrêtée"), ("stopped", "en", "Stopped"), ("needs-you", "de", "Vous attend")])
-def test_a_word_is_said_in_its_reader_language_french_by_default(word: StatusWord, locale: str, said: str) -> None:
+@pytest.mark.parametrize(("word", "locale", "said"), [("stopped", Locale.FR, "Arrêtée"), ("stopped", Locale.EN, "Stopped"), ("needs-you", Locale.FR, "Vous attend")])
+def test_a_word_is_said_in_its_reader_language(word: StatusWord, locale: Locale, said: str) -> None:
     assert STATUS_TEXT[word].say(locale) == said

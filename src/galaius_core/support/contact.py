@@ -10,9 +10,9 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, model_validator
 
+from galaius_core.locale import Locale
 from galaius_core.wire import WireModel, WireRequest
 
-ContactLocale = Literal["en", "fr"]
 ContactKind = Literal["contact", "poc"]
 """What the visitor asks for: a plain message, or a free proof of concept on a subject of theirs."""
 
@@ -43,7 +43,7 @@ class ContactSubmission(WireRequest):
     sector: str | None = Field(default=None, max_length=80, pattern=_LINE)
     subject: str | None = Field(default=None, max_length=200, pattern=_LINE)
     message: str = Field(min_length=1, max_length=4000, pattern=_TEXT)
-    locale: ContactLocale
+    locale: Locale
     website: str = Field(default="", max_length=0)
 
     @model_validator(mode="after")
@@ -92,7 +92,7 @@ class ContactMessage(WireModel):
     sector: str | None = None
     subject: str | None = None
     message: str
-    locale: ContactLocale
+    locale: Locale
     read_at: datetime | None = None
 
 

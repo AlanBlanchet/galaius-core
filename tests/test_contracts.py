@@ -84,7 +84,7 @@ def test_account_update_distinguishes_omitted_locale_from_invalid_null() -> None
     schema = AccountUpdate.model_json_schema()
     assert "locale" not in schema.get("required", ())
     assert "default" not in schema["properties"]["locale"]
-    assert schema["properties"]["locale"]["type"] == "string"
+    assert schema["properties"]["locale"] == {"$ref": "#/$defs/Locale"} and schema["$defs"]["Locale"]["enum"] == ["en", "fr"]
 
 
 def test_prompt_revision_rejects_content_digest_mismatch() -> None:
