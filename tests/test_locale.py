@@ -38,3 +38,16 @@ def test_the_defaults_are_names_for_languages_never_languages_of_their_own() -> 
 def test_a_phrase_missing_a_language_fails_where_it_is_read() -> None:
     with pytest.raises(ValueError, match="1 sentences for 2 languages"):
         Locale.FR.pick("hello")
+
+
+@pytest.mark.parametrize(("value", "english", "french"), [
+    (20_000, "20,000", "20 000"),
+    (3 * 1024**3 // 2, "1.5 GB", "1,5 Go"),
+    (1024**3, "1 GB", "1 Go"),
+    (25 * 1024**2, "25 MB", "25 Mo"),
+    (100, "1 kB", "1 ko"),
+], ids=["count", "fraction-of-gb", "whole-gb", "mb", "under-a-kb"])
+def test_a_number_and_a_size_read_as_each_language_writes_them(value: int, english: str, french: str) -> None:
+    """A refusal names its limit as its reader writes it (« 20 000 », « 1,5 Go »), never the English digits on his French screen."""
+    said = Locale.number if value == 20_000 else Locale.size
+    assert (said(Locale.EN, value), said(Locale.FR, value)) == (english, french)

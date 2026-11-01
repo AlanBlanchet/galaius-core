@@ -58,9 +58,12 @@ class Locale(StrEnum):
         return self.pick(f"{value:,}", f"{value:,}".replace(",", "\u202f"))
 
     def size(self, size: int) -> str:
-        """`size` bytes in this language's units, rounded (« 1.5 GB », « 25 Mo », « 1 ko »)."""
+        """`size` bytes in this language's units, rounded (« 1.5 GB », « 1,5 Go », « 1 GB », « 25 Mo », « 1 ko »)."""
         unit = self.pick(("GB", "MB", "kB"), ("Go", "Mo", "ko"))
-        return f"{size / 1024**3:.1f} {unit[0]}" if size >= 1024**3 else f"{max(1, round(size / 1024**2))} {unit[1]}" if size >= 1024**2 else f"{max(1, round(size / 1024))} {unit[2]}"
+        if size >= 1024**3:
+            shown = f"{size / 1024**3:.1f}".removesuffix(".0")
+            return f"{self.pick(shown, shown.replace('.', ','))} {unit[0]}"
+        return f"{max(1, round(size / 1024**2))} {unit[1]}" if size >= 1024**2 else f"{max(1, round(size / 1024))} {unit[2]}"
 
 
 # Set past the class: an alias assigned in its body would be one more value on the wire (a JSON schema `enum`).

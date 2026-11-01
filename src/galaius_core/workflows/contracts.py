@@ -3168,6 +3168,12 @@ class AgentSignOutRequest(MachineAgentRequestBase):
     subscription_id: UUID
     action: ClassVar[bool] = True
     feature: ClassVar[PcFeature] = PcFeature.SUBSCRIPTIONS
+    #: The PC's waits, in order: an install or a sign-in still starting in that folder (waited for, never refused at once),
+    #: a sign-in it ended stopping, the program's own sign-out run. The server waits for all three and a margin.
+    settle_seconds: ClassVar[float] = 45
+    stop_seconds: ClassVar[float] = 16
+    logout_seconds: ClassVar[float] = 60
+    seconds: ClassVar[float] = settle_seconds + stop_seconds + logout_seconds + 10
 
 
 class SealedSignInCode(WireRequest):
@@ -4332,7 +4338,7 @@ EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: `model_unavailable` no model its CLIs run suits the agent (or the session); `model_by_policy` its launch policy picks an
 #: agent's model, so a start naming one is refused rather than run on another; `role_absent` the agent is not in its catalog
 #: yet; `fence_agents_only` its fence is on and wraps agents only (a session or a continued editor conversation would run
-#: unfenced); `not_here` what the request names (a run, a conversation, an approval, a file, a cap) is not, or no longer,
+#: unfenced); `not_here` what the request names (a run, a conversation, an approval, a file, a session model) is not, or no longer,
 #: there as the page read it; `sessions_unavailable` no conversation program can run a session there now; `in_editor` its editor does that (a
 #: file change accepted, an effort set, a compaction); `cannot_compact` its program has no compaction; `secrets_refused`
 #: project secrets it cannot open (sealed to another PC). These are its own agent reasons (`AgentDeclinedCode`), each worded
