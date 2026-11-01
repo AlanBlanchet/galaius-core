@@ -4329,11 +4329,18 @@ EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: none it opens to agents (none at all, gone, hidden, a link), `folder_not_lent` its owner did not open it to the member
 #: it is lent to; `fence_closed` its agent fence gives the folder no level, `fence_broken` the fence is on and cannot be
 #: built there; `no_candidate` no (CLI, model) of the ranked list could start (`NoCandidate.skips` says why each);
-#: `model_unavailable` no model its CLIs run suits the agent; `role_absent` the agent is not in its catalog yet; or a stop
-#: of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
+#: `model_unavailable` no model its CLIs run suits the agent (or the session); `model_by_policy` its launch policy picks an
+#: agent's model, so a start naming one is refused rather than run on another; `role_absent` the agent is not in its catalog
+#: yet; `fence_agents_only` its fence is on and wraps agents only (a session or a continued editor conversation would run
+#: unfenced); `not_here` what the request names (a run, a conversation, an approval, a file, a cap) is not, or no longer,
+#: there as the page read it; `answering` a continued conversation's turn still runs; `in_editor` its editor does that (a
+#: file change accepted, an effort set, a compaction); `cannot_compact` its program has no compaction; `too_large` a file
+#: or folder past what it sends or checks; `secrets_refused` project secrets it cannot open (sealed to another PC); or a
+#: stop of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
 DeclinedCode = WorkspaceFailureCode | Literal[
     "under_way", "agents_off", "continue_off", "approvals_off", "folder_closed", "folder_not_lent", "fence_closed",
-    "fence_broken", "model_unavailable", "role_absent",
+    "fence_broken", "fence_agents_only", "model_unavailable", "model_by_policy", "role_absent", "not_here", "answering",
+    "in_editor", "cannot_compact", "too_large", "secrets_refused",
 ] | EditorStopRefusal
 #: Why a PC refused a project file read (`ProjectFolder`): `secret` its bytes hold one; `unchecked` it cannot check them
 #: for one (an environment file it cannot read, a packed file damaged, too large or holding another packed file);

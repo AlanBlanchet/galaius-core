@@ -258,8 +258,11 @@ class SubscriptionChoices(Lent):
 #: PC, a subscription it holds no folder of, a turn or child naming another than its run's, a session or continued editor
 #: conversation (the default login's only), a turn of a run whose subscription was removed (or is not the sender's).
 #: `usage_limit`: the vendor's own usage limit stopped the run and its window has not reopened yet (`resets_at`); `session_missing`:
-#: the session to continue elsewhere is not in its subscription's folder.
-SubscriptionDeclinedReason = Literal["lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed", "session_missing"]
+#: the session to continue elsewhere is not in its subscription's folder; `sign_in_over` the sign-in a code was pasted to
+#: ended (or took a code already), `code_invalid` the code is not the whole one its vendor's page shows, `sign_in_busy` its
+#: program installs or its sign-in starts: a sign-out waits for either.
+SubscriptionDeclinedReason = Literal["lent", "not_signed_in", "pinned_elsewhere", "default_login_only", "subscription_removed", "session_missing",
+                                     "sign_in_over", "code_invalid", "sign_in_busy"]
 
 
 class SubscriptionRefusal(Reasoned[ReasonT], Generic[ReasonT]):
