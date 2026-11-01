@@ -42,12 +42,22 @@ def test_a_phrase_missing_a_language_fails_where_it_is_read() -> None:
 
 @pytest.mark.parametrize(("value", "english", "french"), [
     (20_000, "20,000", "20 000"),
-    (3 * 1024**3 // 2, "1.5 GB", "1,5 Go"),
-    (1024**3, "1 GB", "1 Go"),
-    (25 * 1024**2, "25 MB", "25 Mo"),
-    (100, "1 kB", "1 ko"),
+    (3 * 1024**3 // 2, "1.5\u00a0GB", "1,5\u00a0Go"),
+    (1024**3, "1\u00a0GB", "1\u00a0Go"),
+    (25 * 1024**2, "25\u00a0MB", "25\u00a0Mo"),
+    (100, "1\u00a0kB", "1\u00a0ko"),
 ], ids=["count", "fraction-of-gb", "whole-gb", "mb", "under-a-kb"])
 def test_a_number_and_a_size_read_as_each_language_writes_them(value: int, english: str, french: str) -> None:
     """A refusal names its limit as its reader writes it (« 20 000 », « 1,5 Go »), never the English digits on his French screen."""
     said = Locale.number if value == 20_000 else Locale.size
     assert (said(Locale.EN, value), said(Locale.FR, value)) == (english, french)
+
+
+@pytest.mark.parametrize(("english", "french", "written"), [
+    ("Cut: start again", "Coupé : relancez ; ou pas ?", "Coupé\u202f: relancez\u202f; ou pas\u202f?"),
+    ("it's « here »", "c'est « ici » aujourd'hui", "c\u2019est «\u202fici\u202f» aujourd\u2019hui"),
+    ("run `galaius machine agents --continue on`", "lancez `galaius machine agents --continue on`", "lancez `galaius machine agents --continue on`"),
+], ids=["before-a-mark", "quotes-and-apostrophes", "a-command-untouched"])
+def test_a_sentence_reads_as_its_language_writes_it(english: str, french: str, written: str) -> None:
+    """French never breaks a line before its « : » (the run page, 2026-11-01), and English is left as written."""
+    assert (Locale.EN.say(english, french), Locale.FR.say(english, french)) == (english, written)

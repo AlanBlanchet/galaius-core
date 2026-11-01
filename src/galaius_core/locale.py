@@ -1,5 +1,6 @@
 """The languages Galaius speaks (`Locale`): the one closed set every account, page, mail and message is written in."""
 
+import re
 from collections.abc import Mapping
 from enum import StrEnum
 from typing import ClassVar, Protocol, TypeVar
@@ -53,17 +54,34 @@ class Locale(StrEnum):
             raise ValueError(f"{len(sentences)} sentences for {len(_ORDER)} languages: {sentences!r}")
         return sentences[_ORDER[self]]
 
+    def say(self, *sentences: str) -> str:
+        """`pick`, set as this language writes: French puts a narrow no-break space before « : ; ? ! » and inside « »,
+        where a line never breaks, and its own apostrophe (owner's pages, 2026-11-01)."""
+        return self.pick(_as_written, _as_french_writes)(self.pick(*sentences))
+
     def number(self, value: int) -> str:
         """`value` with this language's thousands separator (« 20,000 », « 20 000 »)."""
         return self.pick(f"{value:,}", f"{value:,}".replace(",", "\u202f"))
 
     def size(self, size: int) -> str:
-        """`size` bytes in this language's units, rounded (« 1.5 GB », « 1,5 Go », « 1 GB », « 25 Mo », « 1 ko »)."""
+        """`size` bytes in this language's units, rounded, never broken from its unit (« 1.5 GB », « 1,5 Go », « 25 Mo », « 1 ko »)."""
         unit = self.pick(("GB", "MB", "kB"), ("Go", "Mo", "ko"))
         if size >= 1024**3:
             shown = f"{size / 1024**3:.1f}".removesuffix(".0")
-            return f"{self.pick(shown, shown.replace('.', ','))} {unit[0]}"
-        return f"{max(1, round(size / 1024**2))} {unit[1]}" if size >= 1024**2 else f"{max(1, round(size / 1024))} {unit[2]}"
+            return f"{self.pick(shown, shown.replace('.', ','))}\u00a0{unit[0]}"
+        return f"{max(1, round(size / 1024**2))}\u00a0{unit[1]}" if size >= 1024**2 else f"{max(1, round(size / 1024))}\u00a0{unit[2]}"
+
+
+def _as_written(sentence: str) -> str:
+    return sentence
+
+
+#: A plain space French puts before « : ; ? ! » or after « / before », and the straight apostrophe between two letters.
+_FRENCH_MARKS = re.compile(r" (?=[:;?!»])|(?<=«) |(?<=\w)'(?=\w)")
+
+
+def _as_french_writes(sentence: str) -> str:
+    return _FRENCH_MARKS.sub(lambda mark: "\u2019" if mark.group() == "'" else "\u202f", sentence)
 
 
 # Set past the class: an alias assigned in its body would be one more value on the wire (a JSON schema `enum`).
