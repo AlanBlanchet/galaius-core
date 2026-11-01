@@ -53,6 +53,15 @@ class Locale(StrEnum):
             raise ValueError(f"{len(sentences)} sentences for {len(_ORDER)} languages: {sentences!r}")
         return sentences[_ORDER[self]]
 
+    def number(self, value: int) -> str:
+        """`value` with this language's thousands separator (« 20,000 », « 20 000 »)."""
+        return self.pick(f"{value:,}", f"{value:,}".replace(",", "\u202f"))
+
+    def size(self, size: int) -> str:
+        """`size` bytes in this language's units, rounded (« 1.5 GB », « 25 Mo », « 1 ko »)."""
+        unit = self.pick(("GB", "MB", "kB"), ("Go", "Mo", "ko"))
+        return f"{size / 1024**3:.1f} {unit[0]}" if size >= 1024**3 else f"{max(1, round(size / 1024**2))} {unit[1]}" if size >= 1024**2 else f"{max(1, round(size / 1024))} {unit[2]}"
+
 
 # Set past the class: an alias assigned in its body would be one more value on the wire (a JSON schema `enum`).
 Locale.UNSAID, Locale.FALLBACK = Locale.FR, Locale.EN

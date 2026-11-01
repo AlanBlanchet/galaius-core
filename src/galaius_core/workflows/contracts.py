@@ -4334,14 +4334,16 @@ EditorStopRefusal = Literal["hook_missing", "opened_before"]
 #: yet; `fence_agents_only` its fence is on and wraps agents only (a session or a continued editor conversation would run
 #: unfenced); `not_here` what the request names (a run, a conversation, an approval, a file, a cap) is not, or no longer,
 #: there as the page read it; `sessions_unavailable` no conversation program can run a session there now; `in_editor` its editor does that (a
-#: file change accepted, an effort set, a compaction); `cannot_compact` its program has no compaction; `too_large` a file
-#: or folder past what it sends or checks; `secrets_refused` project secrets it cannot open (sealed to another PC); or a
-#: stop of the owner's own editor session that PC cannot make (`EditorStopRefusal`).
-DeclinedCode = WorkspaceFailureCode | Literal[
+#: file change accepted, an effort set, a compaction); `cannot_compact` its program has no compaction; `secrets_refused`
+#: project secrets it cannot open (sealed to another PC). These are its own agent reasons (`AgentDeclinedCode`), each worded
+#: by the server; a declined request may also carry a project folder's failure or a stop of the owner's own editor session
+#: that PC cannot make (`EditorStopRefusal`), each worded by its own page.
+AgentDeclinedCode = Literal[
     "under_way", "agents_off", "continue_off", "approvals_off", "folder_closed", "folder_not_lent", "fence_closed",
     "fence_broken", "fence_agents_only", "model_unavailable", "model_by_policy", "role_absent", "not_here", "sessions_unavailable",
-    "in_editor", "cannot_compact", "too_large", "secrets_refused",
-] | EditorStopRefusal
+    "in_editor", "cannot_compact", "secrets_refused",
+]
+DeclinedCode = WorkspaceFailureCode | AgentDeclinedCode | EditorStopRefusal
 #: Why a PC refused a project file read (`ProjectFolder`): `secret` its bytes hold one; `unchecked` it cannot check them
 #: for one (an environment file it cannot read, a packed file damaged, too large or holding another packed file);
 #: `sealed` packed in a format it cannot open, or encrypted; `text` it shows the file as text, redacted, never raw;
@@ -4407,8 +4409,21 @@ class WebFull(AgentRefusal[WebFullReason]):
     web: WebLoad | None = None
 
 
+TooLargeReason = Literal["too_large"]
+#: What a PC counts a size limit in: a folder's `entries` (its files and folders), a file's `bytes`.
+SizeUnit = Literal["entries", "bytes"]
+
+
+class TooLarge(AgentRefusal[TooLargeReason]):
+    """A file or folder past what the PC sends or checks: the limit and what it counts."""
+
+    reason: TooLargeReason = "too_large"
+    limit: int = Field(ge=1)
+    unit: SizeUnit
+
+
 #: An agent refusal as data: the leaf its reason names.
-AgentRefusals = Annotated[AgentDeclined | NoCandidate | WebFull, Field(discriminator="reason")]
+AgentRefusals = Annotated[AgentDeclined | NoCandidate | WebFull | TooLarge, Field(discriminator="reason")]
 
 
 #: What a PC was doing when its own code failed rather than the request (`OwnFault`): answering the web, starting or
