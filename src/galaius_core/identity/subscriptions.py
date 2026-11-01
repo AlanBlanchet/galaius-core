@@ -2,16 +2,125 @@
 caps, its usage windows, a run's allowance past a cap. The credential itself never crosses the wire:
 it stays in the subscription's own folder on the PC that signed it in."""
 
+import re
+from collections.abc import Mapping
 from datetime import datetime
-from typing import ClassVar, Literal, Self
+from types import MappingProxyType
+from typing import Annotated, ClassVar, Literal, Self
+from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_serializer, model_validator
 
 from galaius_core.wire import Kinded, WireModel, WireRequest
 
-#: The coding-agent CLIs a PC runs agents through, each a vendor whose login a subscription is.
+#: The coding-agent CLIs a PC runs agents through, each a vendor whose login a subscription is (`AGENT_PROGRAMS`).
 AgentProvider = Literal["claude", "codex"]
+#: The callback of a sign-in opened on the PC itself: it returns to the program there.
+LOCAL_CALLBACK = re.compile(r"^http://localhost:[0-9]{1,5}/callback$")
+
+
+class ProgramSignIn(WireModel):
+    """How one program's login is signed in from the web: the page a code is typed at, or the PC's address shown."""
+
+    def code_page(self) -> str | None:
+        """The vendor's page he types this page's code at; None: he signs in at the address the PC shows."""
+        return None
+
+    def shows(self, address: str, paste: bool) -> bool:
+        """`address`, reported by the PC, is exactly this vendor's sign-in and may be shown to him."""
+        return False
+
+
+class DeviceCodeSignIn(ProgramSignIn):
+    """The program's login signed in by the code this page shows, entered on the vendor's `page`."""
+
+    flow: Literal["device_code"] = "device_code"
+    page: str
+
+    def code_page(self) -> str:
+        return self.page
+
+
+class PasteCodeSignIn(ProgramSignIn):
+    """The program's login signed in at an address the PC shows, the code the vendor's `callback` page then shows pasted
+    back. Only an address that is exactly the vendor's sign-in is ever shown (`shows`): its host, path, client and scopes."""
+
+    flow: Literal["paste_code"] = "paste_code"
+    hosts: frozenset[str]
+    path: str
+    #: Parameters every sign-in carries with this value.
+    fixed: dict[str, str]
+    #: Parameters every sign-in carries with its own value (its PKCE challenge, its state).
+    own: frozenset[str]
+    scopes: frozenset[str]
+    #: The callback of an address any browser signs in at: the vendor's page showing the code.
+    callback: str
+
+    @field_serializer("hosts", "own", "scopes")
+    def _sorted(self, values: frozenset[str]) -> list[str]:
+        """A set written in one order, whatever this process hashes strings with."""
+        return sorted(values)
+
+    def shows(self, address: str, paste: bool) -> bool:
+        """Https on one of `hosts` at `path`, each query parameter once, `fixed` ones equal, every scope one of `scopes`,
+        ending on its code page (`paste`) or on the PC (`LOCAL_CALLBACK`): anything a compromised PC could plant to have
+        him consent elsewhere is refused."""
+        parts = urlsplit(address)
+        if (parts.scheme != "https" or parts.hostname not in self.hosts or parts.netloc.lower() != parts.hostname or parts.path != self.path or parts.fragment
+                or any(character == "\\" or character.isspace() for character in address)):
+            return False
+        query = parse_qsl(parts.query, keep_blank_values=True)
+        values = dict(query)
+        callback = values.get("redirect_uri", "")
+        return (len(values) == len(query) and values.keys() == {*self.fixed, *self.own, "scope", "redirect_uri"}
+                and all(values[name] == value for name, value in self.fixed.items()) and all(values[name] for name in self.own)
+                and set(values["scope"].split()) <= self.scopes and (callback == self.callback if paste else LOCAL_CALLBACK.fullmatch(callback) is not None))
+
+
+#: How a CLI's login is signed in from the web.
+SignIn = Annotated[DeviceCodeSignIn | PasteCodeSignIn, Field(discriminator="flow")]
+
+
+class AgentProgram(WireModel):
+    """One coding-agent CLI as the PC, the server and the web all name it. A new CLI is one more `AgentProvider` and
+    its entry in `AGENT_PROGRAMS`; nothing else lists them."""
+
+    provider: AgentProvider
+    #: Its product name, on every page listing it (« Claude Code »).
+    name: str
+    #: Its name inside a sentence (« Claude indisponible jusqu’à 22:01 »).
+    short: str
+    sign_in: SignIn
+    #: What its own terminal session switches login with, None when it has none.
+    login_command: str | None = None
+
+
+#: Every `AgentProvider`'s program, in the order every page lists them. Sign-ins as read at their source: Codex
+#: `DEFAULT_ISSUER` + `/codex/device` (openai/codex codex-rs/login, 2026-10-09); Claude Code 2.1.288 (2026-10-13)
+#: `https://claude.com/cai/oauth/authorize?code=true&client_id=…&response_type=code&redirect_uri=<callback printed for any
+#: browser | http://localhost:<port>/callback handed to BROWSER>&scope=<these>&code_challenge=…&code_challenge_method=S256&state=…`.
+#: A newer Claude Code asking another scope or client reads « preparing its sign-in » until this list knows it.
+AGENT_PROGRAMS: Mapping[AgentProvider, AgentProgram] = MappingProxyType({program.provider: program for program in (
+    AgentProgram(provider="claude", name="Claude Code", short="Claude", login_command="/login", sign_in=PasteCodeSignIn(
+        hosts=frozenset({"claude.com", "claude.ai"}), path="/cai/oauth/authorize",
+        fixed={"code": "true", "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e", "response_type": "code", "code_challenge_method": "S256"},
+        own=frozenset({"code_challenge", "state"}),
+        scopes=frozenset({"org:create_api_key", "user:profile", "user:inference", "user:sessions:claude_code", "user:mcp_servers", "user:file_upload", "user:plugins"}),
+        callback="https://platform.claude.com/oauth/code/callback")),
+    AgentProgram(provider="codex", name="Codex", short="Codex", sign_in=DeviceCodeSignIn(page="https://auth.openai.com/codex/device")),
+)})
+
+
+#: The program a choice nobody made falls to: the first one.
+DEFAULT_PROGRAM: AgentProvider = next(iter(AGENT_PROGRAMS))
+
+
+def program_name(provider: str) -> str:
+    """`provider`'s product name (« Claude Code »); a provider no program is (an API vendor), as written."""
+    return AGENT_PROGRAMS[provider].name if provider in AGENT_PROGRAMS else provider
+
+
 #: How many subscriptions one account keeps on one PC (all of them a start may offer).
 SUBSCRIPTIONS_PER_PC = 8
 #: The usage periods a vendor meters a subscription over. A vendor's own token maps onto the nearest

@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
+from typing import get_args
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import RunMove, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, SubscriptionRefusal, SubscriptionUse, UsageWindow
+from galaius_core import AGENT_PROGRAMS, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, SubscriptionRefusal, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -71,3 +72,11 @@ def test_run_move_says_resume_only_when_it_waits(resume: bool, on_wire: bool) ->
     dumped = move.model_dump(mode="json")
     assert ("resume" in dumped) is on_wire
     assert RunMove.model_validate(dumped).resume is resume
+
+
+def test_every_agent_provider_is_one_program_in_its_order_named_by_its_product() -> None:
+    """A new CLI is one more `AgentProvider` and its `AGENT_PROGRAMS` entry: none missing, none extra, the order every page
+    lists them in; a name no program has (an API vendor) stays as written."""
+    assert tuple(AGENT_PROGRAMS) == get_args(AgentProvider)
+    assert all(program.provider == provider for provider, program in AGENT_PROGRAMS.items())
+    assert [program_name(name) for name in ("claude", "codex", "anthropic")] == ["Claude Code", "Codex", "anthropic"]

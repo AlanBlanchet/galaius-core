@@ -154,7 +154,7 @@ from galaius_core.machine.cloud import (
 )
 from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, CriteriaError, parse_criteria, parse_criteria_weights, format_criteria, format_criteria_weights
 from galaius_core.identity.subscriptions import (
-    SUBSCRIPTIONS_PER_PC, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
+    AGENT_PROGRAMS, DEFAULT_PROGRAM, AgentProgram, DeviceCodeSignIn, PasteCodeSignIn, SignIn, program_name, SUBSCRIPTIONS_PER_PC, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
     SubscriptionRefusal, SubscriptionRefusalReason, RunMove, LoginIdentity, LoginUsage, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName,
 )
 from galaius_core.billing.tokens import TokenCounts
@@ -329,7 +329,7 @@ __all__ = [
     "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
     "CommunityAuthor", "CommunityEntryRef", "CommunityKind", "CommunityRunKind", "plain_line", "visible", "PlainLine", "Licence", "HttpsLink", "TITLE_MAX", "AUTHOR_MAX", "LICENCE_MAX", "CommunityLicenceClass", "CommunityPage", "CommunityPrompt", "CommunityQuery", "CommunitySort", "CommunitySource", "CommunitySources",
     "MEDIA_INPUT_BYTES", "MEDIA_TOOLS", "MediaAnswer", "MediaFile", "MediaImage", "MediaKind", "MediaQuote", "MediaRequest", "MediaSpec", "Model3DSpec", "MusicSpec", "SoundSpec", "SpeechSpec", "TranslationSpec",
-    "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
+    "AGENT_PROGRAMS", "DEFAULT_PROGRAM", "AgentProgram", "DeviceCodeSignIn", "PasteCodeSignIn", "SignIn", "program_name", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionRefusalReason", "RunMove", "LoginIdentity", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
     "UsageWindow", "UsageWindowName",
     "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "Cause", "Caused", "FailureCause", "ClipTooShort", "CriteriaInvalid", "CriteriaMiswritten", "CriteriaReason", "EndpointReason", "EndpointRefused", "InputEmpty", "InputFault", "InputReason", "JobTimeout", "ModelRetired", "NoKey", "NoModelPasses", "NoRunner", "MachineFault", "MachineReason", "MachineUnfit", "OnMachine", "CloudLaunch", "CloudRefusal", "PoolBudget", "TimedOut", "StepTimedOut", "ServerFault", "ServerReason", "StorageFault", "StorageGrant", "StorageReason", "NoSpeech", "NothingReturned", "OutputLimit", "PlatformUnpriced", "ProviderInvalid", "ProviderSilent", "ReasonedFault", "Returned", "StepFault", "StepFaultCause", "VendorReason", "VendorRefused", "CapRefused", "MonthlyCapReached", "PaidUseOff", "PaidUseReason", "PaidUseRefused", "PaidUseRefusal", "PaidUseSpend", "TurnCapReached", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",

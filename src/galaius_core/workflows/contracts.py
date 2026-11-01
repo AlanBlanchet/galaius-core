@@ -234,7 +234,7 @@ def model_task_ports(task: ModelTask, placement: Literal["server", "machine"] = 
 
 
 class MachineRuntime(WireModel):
-    provider: Literal["claude", "codex"]
+    provider: AgentProvider
     version: str | None = Field(default=None, max_length=80)
 
 
