@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import AGENT_PROGRAMS, SUBSCRIPTION_PROVIDERS, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
+from galaius_core import AGENT_PROGRAMS, SUBSCRIPTION_PROVIDERS, SubscriptionProvider, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -83,10 +83,12 @@ def test_every_agent_provider_is_one_program_in_its_order_named_by_its_product()
 
 def test_every_program_is_one_subscription_provider_and_those_a_pc_runs_come_first() -> None:
     """2026-11-02 « there are lots of other provider ; more than just openai and anthropic... Handle them all ! »: the
-    subscriptions page lists every vendor from `SUBSCRIPTION_PROVIDERS`; each program a PC runs is exactly one of them,
-    listed before those no PC runs yet; a vendor with no CLI of its own has no login command either."""
+    subscriptions page lists every provider from `SUBSCRIPTION_PROVIDERS`; each program a PC runs is exactly one of them,
+    under its own id and name, listed before those no PC runs yet."""
     ids = [provider.id for provider in SUBSCRIPTION_PROVIDERS]
-    runs = [provider.program for provider in SUBSCRIPTION_PROVIDERS if provider.program]
-    assert len(set(ids)) == len(ids) and sorted(runs) == sorted(AGENT_PROGRAMS)
-    assert runs == [provider.program for provider in SUBSCRIPTION_PROVIDERS[:len(runs)]]
-    assert all((provider.cli is None) == (provider.login_command is None) for provider in SUBSCRIPTION_PROVIDERS)
+    assert len(set(ids)) == len(ids) and ids[:len(AGENT_PROGRAMS)] == list(AGENT_PROGRAMS)
+
+
+def test_a_provider_named_otherwise_than_its_program_is_refused() -> None:
+    with pytest.raises(ValidationError, match="named 'Claude Code' by its program"):
+        SubscriptionProvider(id="claude", label="Claude", plans="Pro", cli=None, limit="readable", terms=None)
