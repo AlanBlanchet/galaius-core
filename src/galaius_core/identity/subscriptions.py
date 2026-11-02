@@ -112,6 +112,77 @@ AGENT_PROGRAMS: Mapping[AgentProvider, AgentProgram] = MappingProxyType({program
 )})
 
 
+#: How much of a subscription's allowance its CLI lets a program read: `readable` (used share and reset, read while it
+#: runs: the automatic switch works on it), `partial` (only once reached, in an interactive command, or on the
+#: vendor's page), `none` (nothing found).
+LimitSignal = Literal["readable", "partial", "none"]
+#: What the vendor's terms say of a program driving its CLI with the subscriber's own login: `unverified` = terms not read.
+TermsVerdict = Literal["allowed", "unclear", "forbidden", "unverified"]
+
+
+class SubscriptionProvider(WireModel):
+    """One vendor whose subscription signs a coding-agent CLI in, as its subscriptions page lists it. `program` is the
+    `AGENT_PROGRAMS` entry a PC runs it through; None while no PC can (adding one is a CLI adapter on the PC, then this
+    field). Galaius never holds its credential: each PC signs in through the vendor's own flow."""
+
+    id: str
+    #: The product, as the vendor names it.
+    label: str
+    #: Its plans, as the vendor sells them.
+    plans: str
+    #: Its own command; None when it has none and runs inside another program's CLI.
+    cli: str | None
+    #: What signs that command in on a PC; None with no CLI of its own.
+    login_command: str | None
+    limit: LimitSignal
+    terms: TermsVerdict
+    #: Where `terms` was read; None while unverified.
+    terms_url: str | None = None
+    program: AgentProvider | None = None
+
+
+#: Every vendor whose subscription a coding-agent CLI signs in with (read at each vendor's docs 2026-11-02), in the
+#: order the subscriptions page lists them: those a PC runs first.
+SUBSCRIPTION_PROVIDERS: tuple[SubscriptionProvider, ...] = (
+    SubscriptionProvider(id="claude", label="Claude Code", plans="Pro / Max / Team / Enterprise", cli="claude", login_command="claude auth login",
+                         limit="readable", terms="allowed", terms_url="https://code.claude.com/docs/en/legal-and-compliance", program="claude"),
+    SubscriptionProvider(id="codex", label="Codex", plans="ChatGPT Plus / Pro / Business / Enterprise", cli="codex", login_command="codex login",
+                         limit="readable", terms="unclear", terms_url="https://openai.com/policies/terms-of-use", program="codex"),
+    SubscriptionProvider(id="gemini", label="Gemini CLI", plans="Google AI Pro / Ultra / Code Assist", cli="gemini", login_command="gemini",
+                         limit="partial", terms="unclear", terms_url="https://geminicli.com/docs/resources/tos-privacy"),
+    SubscriptionProvider(id="copilot", label="GitHub Copilot CLI", plans="Copilot Pro / Pro+ / Business / Enterprise", cli="copilot", login_command="copilot",
+                         limit="partial", terms="unclear", terms_url="https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features"),
+    SubscriptionProvider(id="cursor", label="Cursor CLI", plans="Pro / Pro+ / Ultra / Teams", cli="agent", login_command="agent login",
+                         limit="none", terms="unclear", terms_url="https://cursor.com/terms-of-service"),
+    SubscriptionProvider(id="mistral", label="Mistral Vibe", plans="Le Chat Pro / Team", cli="vibe", login_command="vibe",
+                         limit="partial", terms="unverified"),
+    SubscriptionProvider(id="grok", label="Grok Build", plans="SuperGrok / SuperGrok Heavy", cli="grok", login_command="grok login",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="qwen", label="Qwen Code", plans="Alibaba Cloud Coding Plan", cli="qwen", login_command="qwen",
+                         limit="none", terms="forbidden", terms_url="https://www.alibabacloud.com/help/en/model-studio/coding-plan"),
+    SubscriptionProvider(id="kimi", label="Kimi Code", plans="Kimi membership", cli="kimi", login_command="kimi login",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="zai", label="Z.ai GLM Coding Plan", plans="Lite / Pro / Max", cli=None, login_command=None,
+                         limit="partial", terms="forbidden", terms_url="https://docs.z.ai/legal-agreement/subscription-terms"),
+    SubscriptionProvider(id="amp", label="Amp", plans="Amp Free / credits", cli="amp", login_command="amp login",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="opencode", label="OpenCode", plans="OpenCode Go / Zen", cli="opencode", login_command="opencode auth login",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="droid", label="Factory Droid", plans="Pro / Plus / Max / Teams", cli="droid", login_command="droid",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="auggie", label="Augment Auggie", plans="Standard / Business / Enterprise", cli="auggie", login_command="auggie auth login",
+                         limit="partial", terms="unclear", terms_url="https://docs.augmentcode.com/cli/automation"),
+    SubscriptionProvider(id="cline", label="Cline CLI", plans="ClinePass / credits", cli="cline", login_command="cline auth",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="kilo", label="Kilo Code CLI", plans="Kilo Pass / credits", cli="kilo", login_command="kilo auth",
+                         limit="none", terms="unverified"),
+    SubscriptionProvider(id="kiro", label="Kiro CLI", plans="Pro / Pro+ / Pro Max / Power", cli="kiro-cli", login_command="kiro-cli login",
+                         limit="partial", terms="unclear", terms_url="https://kiro.dev/license/"),
+    SubscriptionProvider(id="openrouter", label="OpenRouter", plans="prepaid credits", cli=None, login_command=None,
+                         limit="readable", terms="unverified"),
+)
+
+
 #: The program a choice nobody made falls to: the first one.
 DEFAULT_PROGRAM: AgentProvider = next(iter(AGENT_PROGRAMS))
 

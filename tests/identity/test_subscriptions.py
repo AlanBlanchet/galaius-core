@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import AGENT_PROGRAMS, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
+from galaius_core import AGENT_PROGRAMS, SUBSCRIPTION_PROVIDERS, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -79,3 +79,14 @@ def test_every_agent_provider_is_one_program_in_its_order_named_by_its_product()
     assert tuple(AGENT_PROGRAMS) == get_args(AgentProvider)
     assert all(program.provider == provider for provider, program in AGENT_PROGRAMS.items())
     assert [program_name(name) for name in ("claude", "codex", "anthropic")] == ["Claude Code", "Codex", "anthropic"]
+
+
+def test_every_program_is_one_subscription_provider_and_those_a_pc_runs_come_first() -> None:
+    """2026-11-02 « there are lots of other provider ; more than just openai and anthropic... Handle them all ! »: the
+    subscriptions page lists every vendor from `SUBSCRIPTION_PROVIDERS`; each program a PC runs is exactly one of them,
+    listed before those no PC runs yet; a vendor with no CLI of its own has no login command either."""
+    ids = [provider.id for provider in SUBSCRIPTION_PROVIDERS]
+    runs = [provider.program for provider in SUBSCRIPTION_PROVIDERS if provider.program]
+    assert len(set(ids)) == len(ids) and sorted(runs) == sorted(AGENT_PROGRAMS)
+    assert runs == [provider.program for provider in SUBSCRIPTION_PROVIDERS[:len(runs)]]
+    assert all((provider.cli is None) == (provider.login_command is None) for provider in SUBSCRIPTION_PROVIDERS)
