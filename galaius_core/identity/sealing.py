@@ -29,7 +29,7 @@ class SecretsSeal(BaseModel):
         return cls(signing_key=sha256(token.encode()).digest())
 
     def _cipher(self) -> AESGCM:
-        return AESGCM(HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"interact project secrets v1").derive(self.signing_key))
+        return AESGCM(HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"galaius project secrets v1").derive(self.signing_key))
 
     @staticmethod
     def _bound(request: UUID, project: UUID, origin: str) -> bytes:

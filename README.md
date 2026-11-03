@@ -4,7 +4,7 @@
 clients and services. It is a standalone Python package with the `galaius_core` import namespace.
 
 The package includes the generated JSON Schemas under `galaius_core/schema/`. These files are
-release artifacts for consumers that cannot import Python; the Pydantic models in `src/galaius_core`
+release artifacts for consumers that cannot import Python; the Pydantic models in `galaius_core`
 remain their source of truth.
 
 ## Development

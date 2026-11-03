@@ -1396,7 +1396,7 @@ AgentCapability = Annotated[HttpAgentTool | DelegatedAgentTool | GmailAgentTool 
 
 #: A server an agent's MCP binding names: the tools shipped with galaius (`galaius`), a remote
 #: server this company added (its UUID), or one a PC declared (`pc:<machine UUID>:<name>`).
-MCP_SERVER_ID = r"^(interact|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|pc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9_.-]{1,64})$"
+MCP_SERVER_ID = r"^(galaius|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|pc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9_.-]{1,64})$"
 #: An MCP tool's name, as the protocol allows it.
 MCP_TOOL_NAME = r"^[A-Za-z0-9_.-]{1,128}$"
 McpToolName = Annotated[str, Field(pattern=MCP_TOOL_NAME)]
@@ -2000,7 +2000,7 @@ class ScriptFile(WireRequest):
 
     #: Starts every hashed invocation: its NUL keeps file digests apart from inline source digests
     #: (inline source never holds NUL), so approving some inline text never approves a file run.
-    DIGEST_TAG: ClassVar[str] = "interact.script.machine_file.v1\x00"
+    DIGEST_TAG: ClassVar[str] = "galaius.script.machine_file.v1\x00"
 
     def invocation_digest(self, language: str) -> str:
         """What a machine owner approves: the file's content AND how it is started (path, folder,
@@ -2033,7 +2033,7 @@ class ScriptImplementation(_Implementation):
     placements: ClassVar[frozenset[str]] = frozenset({"machine"})
     #: Starts every hashed inline payload: its NUL keeps inline digests apart from the bare sha256
     #: of any source (source never holds NUL) and from `ScriptFile.DIGEST_TAG` digests.
-    INLINE_DIGEST_TAG: ClassVar[str] = "interact.script.inline.v1\x00"
+    INLINE_DIGEST_TAG: ClassVar[str] = "galaius.script.inline.v1\x00"
 
     @classmethod
     def inline_digest(cls, language: str, source: str) -> str:
@@ -2880,7 +2880,7 @@ _RESERVED_SECRET = re.compile("^(" + "|".join((
     r"PIP_.*", r"UV_.*", r"NPM_CONFIG_.*", r"CARGO_.*", r"RUSTC_WRAPPER", r"GOPROXY", r"GOFLAGS", r"EDITOR", r"VISUAL", r"PAGER", r"LESSOPEN",
     r"SUDO_ASKPASS", r"GNUPGHOME", r"DOCKER_.*", r"KUBECONFIG", r"GIT_.*", r"SSH_.*", r"GPG_.*",
     # galaius itself and every agent CLI it drives
-    r"INTERACT_.*", r"GALAIUS_.*", r"ANTHROPIC_.*", r"OPENAI_.*", r"CLAUDE_.*", r"CODEX_.*", r"GEMINI_.*", r"GOOGLE_GENAI_.*", r"MISTRAL_.*",
+    r"GALAIUS_.*", r"ANTHROPIC_.*", r"OPENAI_.*", r"CLAUDE_.*", r"CODEX_.*", r"GEMINI_.*", r"GOOGLE_GENAI_.*", r"MISTRAL_.*",
     r"OPENROUTER_.*", r"GH_.*", r"GITHUB_TOKEN", r"MCP_.*", r"BUN_.*", r"NODE_.*", r"VIRTUAL_ENV", r"CONDA_.*",
 )) + ")$")
 
