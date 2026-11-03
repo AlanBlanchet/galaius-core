@@ -4,6 +4,7 @@ This root module is the published API: it names each public contract from its ho
 
 from galaius_core.workflows.run_state import ENDED, RUN_STATES, RUN_WORDS, STATE_OF_STATUS, RunRow, RunState, RunTree, forest, state_of, tally
 from galaius_core.workflows.status_words import NOTIFICATION_STATUS_WORD, STATUS_TEXT, NotificationStatus, StatusPlural, StatusText, StatusWord
+from galaius_core.workflows.questions import CRITICALITIES, OPEN_MAX, QUESTION_LETTERS, Criticality, OwnerQuestion, QuestionAnswer, QuestionOption
 from galaius_core.tools.settings import PortableToolSettings, PortableToolSettingsUpdate, PortableToolSettingsValues
 from galaius_core.billing.usage import (
     ToolUsageIngestRecord,
@@ -326,6 +327,7 @@ __all__ = [
     "TokenCounts",
     "MACHINE_TOOLS", "MachineToolName", "MachineToolPhase", "MachineToolSpec", "MachineToolState",
     "NOTIFICATION_STATUS_WORD", "STATUS_TEXT", "NotificationStatus", "StatusPlural", "StatusText", "StatusWord",
+    "CRITICALITIES", "OPEN_MAX", "QUESTION_LETTERS", "Criticality", "OwnerQuestion", "QuestionAnswer", "QuestionOption",
     "ENDED", "RUN_STATES", "RUN_WORDS", "STATE_OF_STATUS", "RunRow", "RunState", "RunTree", "forest", "state_of", "tally",
     "IMAGES_PER_REQUEST", "GeneratedImage", "ImageAnswer", "ImageBackground", "ImageQuality", "ImageRequest", "ImageSize",
     "CommunityAuthor", "CommunityEntryRef", "CommunityKind", "CommunityRunKind", "plain_line", "visible", "PlainLine", "Licence", "HttpsLink", "TITLE_MAX", "AUTHOR_MAX", "LICENCE_MAX", "CommunityLicenceClass", "CommunityPage", "CommunityPrompt", "CommunityQuery", "CommunitySort", "CommunitySource", "CommunitySources",
