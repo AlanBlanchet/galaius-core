@@ -654,6 +654,21 @@ def test_an_agent_with_no_tool_list_has_every_tool_and_an_empty_list_has_none(to
     assert AgentRevision.model_validate_json(agent.model_dump_json()).harness_tools == tools
 
 
+@pytest.mark.parametrize("stored, read", [(None, "many"), ("one", "one"), ("per_project", "per_project"), ("many", "many"), ("global", None)])
+def test_an_agent_stored_before_its_instances_setting_runs_as_many(stored, read) -> None:
+    """A revision stored before `instances` existed reads as `many` (every task its own run); each setting reads back
+    as written; a word outside the three is refused at the edge, never guessed."""
+    content = "Answer only."
+    reference = PromptExecutionRef(key=PromptKey(namespace="paradigms", slug="answer"), revision=uuid4(), digest=hashlib.sha256(content.encode()).hexdigest(), channel="draft")
+    agent = AgentRevision(id=uuid4(), revision=uuid4(), name="Lead", role_key="lead", prompt=reference, resources=(), created_at=datetime.now(UTC))
+    payload = {key: value for key, value in agent.model_dump(mode="json").items() if key != "instances"} | ({} if stored is None else {"instances": stored})
+    if read is None:
+        with pytest.raises(ValidationError):
+            AgentRevision.model_validate(payload)
+        return
+    assert AgentRevision.model_validate(payload).instances == read
+
+
 def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_bytes() -> None:
     """Threat-modeler W2 r1: a key derived from a step's INPUT made even a refused `create_file(path=".env")` name his
     real `.env`. The answer names the file kept, by the hash of its bytes; a step's input names none."""

@@ -1438,6 +1438,12 @@ RecordedReasoning = Annotated[ReasoningLevel | None, BeforeValidator(lambda valu
 #: the ceiling is a 1M-token window less the 33k Claude Code keeps free below its compaction window.
 CompactAt = Annotated[int, Field(ge=100_000, le=967_000)]
 
+#: How many runs of a role work at once, and which one a new task goes to (`AgentRevision.instances`; owner 2026-11-03
+#: « "global" agent, "as many" agent, "project global" agent »): `one` — one run on the PC takes every task, queued behind
+#: its turn while it works; `per_project` — one run per project does; `many` — every task starts its own run, the PC's
+#: place count its only limit.
+AgentInstances = Literal["one", "per_project", "many"]
+
 
 class AgentRevision(WireModel):
     id: UUID
@@ -1469,6 +1475,8 @@ class AgentRevision(WireModel):
     capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=1000)
     #: The MCP servers this agent is connected to, each with its tool switches (`McpBinding`).
     mcp: tuple[McpBinding, ...] = Field(default=(), max_length=32)
+    #: How many of its runs work at once and which takes a new task (`AgentInstances`).
+    instances: AgentInstances = "many"
     created_at: datetime
 
     @property
