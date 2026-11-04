@@ -107,6 +107,8 @@
             "machine_agent.workspace_prepared",
             "machine_agent.program_installed",
             "machine_agent.sign_in_code_handed",
+            "machine_agent.held_taken",
+            "machine_agent.held_put",
             "machine_agent.subscription_signed_out",
             "machine_agent.allowance_given",
             "machine_agent.moved",
