@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from galaius_core.workflows.contracts import SECRETS_TOTAL, ProjectSecretName, ProjectSecretText, SealedSecrets
+from galaius_core.workflows.contracts import SECRETS_TOTAL, ProjectSecretName, ProjectSecretText, SealedLogin, SealedSecrets
 
 _SECRETS: TypeAdapter[dict[ProjectSecretName, ProjectSecretText]] = TypeAdapter(dict[ProjectSecretName, ProjectSecretText], config=ConfigDict(hide_input_in_errors=True))
 
@@ -56,3 +56,30 @@ class SecretsSeal(BaseModel):
         """The secrets, each name and value re-checked (`ProjectSecretName`, `ProjectSecretText`)."""
         plain = self._cipher().decrypt(bytes.fromhex(sealed.nonce), bytes.fromhex(sealed.ciphertext), self._bound(request, sealed.project, sealed.origin))
         return _SECRETS.validate_json(plain)
+
+
+class LoginSeal(BaseModel):
+    """Seals / opens a subscription's held login (`SealedLogin`) for the machine whose signing key this is: the same
+    derivation as `SecretsSeal`, its own label, bound to the request, the subscription and its provider."""
+
+    model_config = ConfigDict(frozen=True)
+    signing_key: bytes = Field(repr=False)
+
+    @classmethod
+    def for_token(cls, token: str) -> "LoginSeal":
+        """The PC's side: its signing key is SHA-256 of its token (as the server stores it)."""
+        return cls(signing_key=sha256(token.encode()).digest())
+
+    def _cipher(self) -> AESGCM:
+        return AESGCM(HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"galaius held login v1").derive(self.signing_key))
+
+    @staticmethod
+    def _bound(request: UUID, subscription: UUID, provider: str) -> bytes:
+        return f"{request}:{subscription}:{provider}".encode()
+
+    def seal(self, login: str, *, request: UUID, subscription: UUID, provider: str) -> SealedLogin:
+        nonce = os.urandom(12)
+        return SealedLogin(nonce=nonce.hex(), ciphertext=self._cipher().encrypt(nonce, login.encode(), self._bound(request, subscription, provider)).hex())
+
+    def open(self, sealed: SealedLogin, *, request: UUID, subscription: UUID, provider: str) -> str:
+        return self._cipher().decrypt(bytes.fromhex(sealed.nonce), bytes.fromhex(sealed.ciphertext), self._bound(request, subscription, provider)).decode()

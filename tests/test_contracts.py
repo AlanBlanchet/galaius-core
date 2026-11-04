@@ -545,6 +545,34 @@ def test_project_secrets_travel_sealed_and_only_as_safe_dotenv_lines(name: str, 
         seal.open(sealed.model_copy(update={"origin": "github.com/o/other"}), request=request)  # pointed at another repository: refused
 
 
+@pytest.mark.parametrize("other", ["request", "subscription", "provider", "machine"])
+def test_a_held_login_opens_only_for_its_request_subscription_provider_and_machine(other: str) -> None:
+    from galaius_core.identity.sealing import LoginSeal
+
+    seal, request, subscription, token = LoginSeal.for_token("t" * 40), uuid4(), uuid4(), "sk-ant-oat01-" + "x" * 95
+    sealed = seal.seal(token, request=request, subscription=subscription, provider="claude")
+    assert token not in sealed.model_dump_json() and token not in repr(sealed)
+    assert seal.open(sealed, request=request, subscription=subscription, provider="claude") == token
+    bound = {"request": request, "subscription": subscription, "provider": "claude"}
+    opener = LoginSeal.for_token("u" * 40) if other == "machine" else seal
+    if other != "machine":
+        bound[other] = "codex" if other == "provider" else uuid4()
+    with pytest.raises(InvalidTag):
+        opener.open(sealed, **bound)
+
+
+def test_a_held_sign_in_names_its_subscription_and_asks_a_pc_that_holds_logins() -> None:
+    from galaius_core import AgentProgramInstallRequest, PcFeature
+
+    base = {"id": uuid4(), "machine": {"id": str(uuid4())}, "workspace_id": uuid4(), "initiator_account": uuid4(),
+            "expires_at": "2030-01-01T00:00:00Z", "signature": "0" * 64, "provider": "claude"}
+    with pytest.raises(ValidationError):
+        AgentProgramInstallRequest.model_validate({**base, "held": True})
+    held = AgentProgramInstallRequest.model_validate({**base, "held": True, "subscription_id": str(uuid4())})
+    assert PcFeature.HELD_LOGINS in held.content_features
+    assert "held" not in AgentProgramInstallRequest.model_validate({**base, "subscription_id": str(uuid4())}).model_dump()
+
+
 @pytest.mark.parametrize("name", ["aino", "a" * 64, "x." + "b" * 62])
 def test_every_name_a_taken_project_folder_tries_is_a_folder_name(name: str) -> None:
     tried = list(WorkspaceSpec.candidates(name))

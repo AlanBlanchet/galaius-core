@@ -83,6 +83,10 @@ class PcFeature(StrEnum):
     PROJECT_FILE_BYTES = "project_file_bytes"
     #: A file's text is read from a byte offset, page by page (`ProjectFileRequest.offset`).
     PROJECT_FILE_OFFSET = "project_file_offset"
+    #: A subscription's login is held by the platform: signed in once with its CLI's long-lived token command
+    #: (`AgentProgramInstallRequest.held`), handed back sealed (`AgentHeldTakeRequest`), put on each of his PCs
+    #: (`AgentHeldPutRequest`).
+    HELD_LOGINS = "held_logins"
 
 
 @dataclass(frozen=True, slots=True)

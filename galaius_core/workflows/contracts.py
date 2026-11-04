@@ -3148,12 +3148,23 @@ class AgentProgramInstallRequest(MachineAgentRequestBase):
     #: Sign in inside this subscription's own folder on the PC (`~/.galaius/subscriptions/<id>/`),
     #: never the PC's default login; asked of a runner saying `PcFeature.SUBSCRIPTIONS`. None: the default login.
     subscription_id: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: With `subscription_id`: sign in with the program's long-lived token command (Claude Code: `setup-token`) instead of
+    #: its login, the token kept in that folder for the platform to take (`AgentHeldTakeRequest`) and put on his other PCs.
+    held: bool = Field(default=False, exclude_if=lambda value: not value)
     action: ClassVar[bool] = True
     feature: ClassVar[PcFeature] = PcFeature.AGENT_PROGRAMS
 
+    @model_validator(mode="after")
+    def _held_in_a_folder(self) -> Self:
+        if self.held and self.subscription_id is None:
+            raise ValueError("a held sign-in is a subscription's: name its subscription_id")
+        return self
+
     @property
     def content_features(self) -> frozenset[PcFeature]:
-        return frozenset() if self.subscription_id is None else frozenset({PcFeature.SUBSCRIPTIONS})
+        if self.subscription_id is None:
+            return frozenset()
+        return frozenset({PcFeature.SUBSCRIPTIONS, PcFeature.HELD_LOGINS} if self.held else {PcFeature.SUBSCRIPTIONS})
 
 
 class AgentToolsRequest(MachineAgentRequestBase):
@@ -3200,6 +3211,46 @@ class SealedSignInCode(WireRequest):
     attempt: UUID
     #: The code, RSA-OAEP (SHA-256) encrypted to `PasteSignIn.seal_key`, base64; never in a repr or a log.
     sealed: str = Field(pattern=SEALED_CODE, repr=False)
+
+
+#: A held login's token sealed to the server's one-request key (`AgentHeldTakeRequest.seal_key`): one RSA-OAEP block, base64.
+SEALED_HELD = r"^[A-Za-z0-9+/]{300,700}={0,2}$"
+#: A subscription's held login on its way to one PC (`SealedLogin.ciphertext`): the token and the GCM tag, hex.
+HELD_LOGIN_MAX = 4096
+
+
+class SealedLogin(WireModel):
+    """A subscription's held login (its CLI's long-lived token) sealed FOR ONE MACHINE (`galaius_core.identity.sealing.LoginSeal`):
+    AES-256-GCM under a key derived from that machine's signing key, the request, the subscription and its provider as
+    associated data. Keeps the token out of any frame log or proxy capture; no boundary against the server, which holds it."""
+
+    nonce: str = Field(pattern=r"^[0-9a-f]{24}$")
+    ciphertext: str = Field(min_length=64, max_length=HELD_LOGIN_MAX, pattern=r"^[0-9a-f]+$", repr=False)
+
+
+class AgentHeldTakeRequest(MachineAgentRequestBase):
+    """The login `subscription_id`'s held sign-in (`AgentProgramInstallRequest.held`) made in its folder here, sealed to
+    `seal_key` (made by the server for this request alone), answered in `held` (None: no held login there)."""
+
+    op: Literal["held_take"] = "held_take"
+    provider: AgentProvider
+    subscription_id: UUID
+    #: RSA-OAEP (SHA-256) public key, SubjectPublicKeyInfo DER, base64.
+    seal_key: str = Field(max_length=1024, pattern=r"^[A-Za-z0-9+/]+={0,2}$")
+    action: ClassVar[bool] = True
+    feature: ClassVar[PcFeature] = PcFeature.HELD_LOGINS
+
+
+class AgentHeldPutRequest(MachineAgentRequestBase):
+    """`subscription_id`'s held login put in its folder here (made when absent), its CLI then signed in with it in every
+    run of that subscription. The same login again changes nothing. Answered with that folder's state (`providers`)."""
+
+    op: Literal["held_put"] = "held_put"
+    provider: AgentProvider
+    subscription_id: UUID
+    login: SealedLogin
+    action: ClassVar[bool] = True
+    feature: ClassVar[PcFeature] = PcFeature.HELD_LOGINS
 
 
 class AgentSignInCodeRequest(MachineAgentRequestBase, SealedSignInCode):
@@ -4048,6 +4099,7 @@ MachineAgentRequest = Annotated[
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
+    | AgentHeldTakeRequest | AgentHeldPutRequest
     | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest | ProjectFilesRequest | ProjectFileRequest | ProjectFindRequest | ProjectFileBytesRequest,
     Field(discriminator="op"),
 ]
@@ -4102,7 +4154,7 @@ AgentProgramStep = Literal["missing", "installing", "signed_out", "signing_in", 
 #: Why an install or a sign-in from the web stopped, worded by the server for the owner: the sign-in
 #: waited its whole time (`sign_in_expired`), or the program's sign-in ended without signing in.
 #: The program's sign-in ended right after the code the person pasted (`code_refused`: its vendor refused it).
-AgentProgramFailure = Literal["download_failed", "install_failed", "unsupported_system", "sign_in_expired", "sign_in_failed", "code_refused"]
+AgentProgramFailure = Literal["download_failed", "install_failed", "unsupported_system", "sign_in_expired", "sign_in_failed", "code_refused", "held_unsupported"]
 #: A one-time code a program signs in with on its vendor's page (Codex: `N5ST-Z1ZME`).
 DEVICE_CODE = r"^[A-Z0-9]{4,12}(-[A-Z0-9]{4,12})?$"
 
@@ -4642,6 +4694,8 @@ class MachineAgentAnswer(WireModel):
     #: `settings` / `programs` / `program_install`: the CLIs agents may run through here (and, for
     #: `settings`, each tool's model here).
     providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
+    #: `held_take`: the held login, sealed to the request's `seal_key` (None: none held there).
+    held: str | None = Field(default=None, pattern=SEALED_HELD, repr=False, exclude_if=lambda value: value is None)
     tool_models: tuple[ToolRoleModels, ...] = Field(default=(), max_length=16)
     #: `places` / `place_level` / `place_cancel`: the PC's levels after the request; `change`: the
     #: widening now waiting on the PC (None: applied at once).
