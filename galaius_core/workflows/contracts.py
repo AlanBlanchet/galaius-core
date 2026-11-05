@@ -21,7 +21,8 @@ from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, Propert
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
-from galaius_core.identity.subscriptions import AgentProvider, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
+from galaius_core.identity.providers import AgentProvider, MODEL_APIS
+from galaius_core.identity.subscriptions import LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
 from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequirement, ScriptLanguage
 
 from galaius_core.community import CommunityEntryRef
@@ -5097,7 +5098,7 @@ class ConnectionResource(WireModel):
             raise ValueError("provider connection requires a credential reference")
         if self.kind not in {"provider_api", "service_connector", "object_storage", "webhook"} and self.provider is not None:
             raise ValueError("provider kind is required only for provider, service, object-storage and webhook connections")
-        if self.kind == "provider_api" and self.provider not in {"openai", "anthropic", "gemini", "fal", "replicate", "roboflow", "mistral", "elevenlabs", "self_hosted", "openai_compatible"}:
+        if self.kind == "provider_api" and self.provider not in MODEL_APIS:
             raise ValueError("provider API kind requires a model provider")
         if self.kind not in {"service_connector", "ssh_server", "object_storage"} and self.credential_expires_at is not None:
             raise ValueError("credential expiry belongs only to connections with vendor-issued expiry")

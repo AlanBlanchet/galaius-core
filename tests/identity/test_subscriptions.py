@@ -1,11 +1,10 @@
 from datetime import UTC, datetime
-from typing import get_args
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import AGENT_PROGRAMS, SUBSCRIPTION_PROVIDERS, SubscriptionProvider, AgentProvider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
+from galaius_core import AGENT_PROGRAMS, PROVIDERS, Provider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -73,22 +72,34 @@ def test_run_move_says_resume_only_when_it_waits(resume: bool, on_wire: bool) ->
     assert RunMove.model_validate(dumped).resume is resume
 
 
-def test_every_agent_provider_is_one_program_in_its_order_named_by_its_product() -> None:
-    """A new CLI is one more `AgentProvider` and its `AGENT_PROGRAMS` entry: none missing, none extra, the order every page
-    lists them in; a name no program has (an API vendor) stays as written."""
-    assert tuple(AGENT_PROGRAMS) == get_args(AgentProvider)
-    assert all(program.provider == provider for provider, program in AGENT_PROGRAMS.items())
+def test_every_provider_is_a_row_and_a_program_is_one_of_them() -> None:
+    """2026-11-05 « I want to act generically … you only propose Codex and Cloud Code »: providers are rows of
+    `providers.json`, ids once each; a program a PC runs is one row's `program`; a name no program has stays as written."""
+    ids = [row.id for row in PROVIDERS]
+    assert len(set(ids)) == len(ids) and {"mistral", "gemini", "openrouter", "groq"} <= set(ids)
+    assert list(AGENT_PROGRAMS) == [row.program.provider for row in PROVIDERS if row.program]
     assert [program_name(name) for name in ("claude", "codex", "anthropic")] == ["Claude Code", "Codex", "anthropic"]
 
 
-def test_every_program_is_one_subscription_provider_and_those_a_pc_runs_come_first() -> None:
-    """2026-11-02 « there are lots of other provider ; more than just openai and anthropic... Handle them all ! »: the
-    subscriptions page lists every provider from `SUBSCRIPTION_PROVIDERS`; each program a PC runs is exactly one of them,
-    under its own id and name, listed before those no PC runs yet."""
-    ids = [provider.id for provider in SUBSCRIPTION_PROVIDERS]
-    assert len(set(ids)) == len(ids) and ids[:len(AGENT_PROGRAMS)] == list(AGENT_PROGRAMS)
+@pytest.mark.parametrize(("row", "refused"), [
+    ({"id": "acme", "label": "Acme", "api": {"connection": "openai_compatible", "endpoint": "https://api.acme.test/v1", "console": "https://acme.test/keys", "model": "acme-1"}}, None),
+    ({"id": "acme", "label": "Acme", "api": {"connection": "openai_compatible", "endpoint": "https://api.acme.test/v1", "console": "https://acme.test/keys"}}, "name its model"),
+    ({"id": "acme", "label": "Acme", "api": {"connection": "openai_compatible", "endpoint": "http://api.acme.test/v1", "console": "https://acme.test/keys", "model": "a"}}, "pattern"),
+    ({"id": "acme", "label": "Acme"}, "signs in through"),
+    ({"id": "Acme", "label": "Acme", "cli": {"command": "acme", "sign_in": "acme login"}}, "pattern"),
+])
+def test_a_new_provider_is_one_row(row: dict, refused: str | None) -> None:
+    """Adding a vendor is a row: one with a way to sign in parses; a key checked by nothing, a plain-http endpoint, a
+    row with no way in or an id outside the id shape is refused."""
+    if refused is None:
+        assert Provider.model_validate(row).api.model == "acme-1"
+        return
+    with pytest.raises(ValidationError, match=refused):
+        Provider.model_validate(row)
 
 
-def test_a_provider_named_otherwise_than_its_program_is_refused() -> None:
-    with pytest.raises(ValidationError, match="named 'Claude Code' by its program"):
-        SubscriptionProvider(id="claude", label="Claude", plans="Pro", cli=None, limit="readable", terms=None)
+def test_a_run_names_only_a_program_some_row_holds() -> None:
+    choice = {"subscription_id": str(uuid4()), "limits": {}}
+    assert SubscriptionChoice.model_validate({**choice, "provider": "codex"}).provider == "codex"
+    with pytest.raises(ValidationError, match="no agent program"):
+        SubscriptionChoice.model_validate({**choice, "provider": "mistral"})
