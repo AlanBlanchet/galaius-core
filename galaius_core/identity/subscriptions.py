@@ -82,6 +82,27 @@ class PasteCodeSignIn(ProgramSignIn):
 SignIn = Annotated[DeviceCodeSignIn | PasteCodeSignIn, Field(discriminator="flow")]
 
 
+class HeldLoginForm(WireModel):
+    """How a program's login is held by the platform (signed in ONCE from the web, put on each of the owner's PCs): the
+    CLI command that signs in and makes the credential, and where the CLI reads it back on a PC — an environment
+    variable (`variable`) or a file in its login folder (`file`), exactly one. A program without one signs in per PC."""
+
+    #: Its CLI's arguments that sign in once and leave the credential to hold (Claude Code `setup-token`: a 1-year token).
+    command: tuple[str, ...] = Field(min_length=1)
+    #: The command needs a terminal (Claude Code's sign-in screens draw only on one).
+    terminal: bool = False
+    #: The variable its CLI reads the credential from (Claude Code `CLAUDE_CODE_OAUTH_TOKEN`).
+    variable: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,63}$")
+    #: The file its CLI keeps the credential in, inside its login folder (Codex `auth.json`).
+    file: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
+
+    @model_validator(mode="after")
+    def _one_place(self) -> Self:
+        if (self.variable is None) == (self.file is None):
+            raise ValueError("a held login lives in exactly one of a variable or a file")
+        return self
+
+
 class AgentProgram(WireModel):
     """One coding-agent CLI as the PC, the server and the web all name it. A new CLI is one more `AgentProvider` and
     its entry in `AGENT_PROGRAMS`; nothing else lists them."""
@@ -94,6 +115,8 @@ class AgentProgram(WireModel):
     sign_in: SignIn
     #: What its own terminal session switches login with, None when it has none.
     login_command: str | None = None
+    #: How its login is held by the platform (`HeldLoginForm`); None: it signs in on each PC.
+    held: HeldLoginForm | None = None
 
 
 #: Every `AgentProvider`'s program, in the order every page lists them. Sign-ins as read at their source: Codex
@@ -107,8 +130,10 @@ AGENT_PROGRAMS: Mapping[AgentProvider, AgentProgram] = MappingProxyType({program
         fixed={"code": "true", "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e", "response_type": "code", "code_challenge_method": "S256"},
         own=frozenset({"code_challenge", "state"}),
         scopes=frozenset({"org:create_api_key", "user:profile", "user:inference", "user:sessions:claude_code", "user:mcp_servers", "user:file_upload", "user:plugins"}),
-        callback="https://platform.claude.com/oauth/code/callback")),
-    AgentProgram(provider="codex", name="Codex", short="Codex", sign_in=DeviceCodeSignIn(page="https://auth.openai.com/codex/device")),
+        callback="https://platform.claude.com/oauth/code/callback"),
+        held=HeldLoginForm(command=("setup-token",), terminal=True, variable="CLAUDE_CODE_OAUTH_TOKEN")),
+    AgentProgram(provider="codex", name="Codex", short="Codex", sign_in=DeviceCodeSignIn(page="https://auth.openai.com/codex/device"),
+                 held=HeldLoginForm(command=("login", "--device-auth"), file="auth.json")),
 )})
 
 

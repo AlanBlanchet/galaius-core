@@ -561,6 +561,35 @@ def test_a_held_login_opens_only_for_its_request_subscription_provider_and_machi
         opener.open(sealed, **bound)
 
 
+@pytest.mark.parametrize("size", [108, 4096, 12000])
+def test_a_held_login_comes_back_sealed_to_the_one_key_that_asked_whatever_its_size(size: int) -> None:
+    """A token or a CLI's whole login file (Codex `auth.json`, a few KB) is sealed to the server's one-request key; any other key opens nothing."""
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from galaius_core.identity.sealing import open_with, seal_to
+
+    mine, other = (rsa.generate_private_key(public_exponent=65537, key_size=2048) for _ in range(2))
+    public = base64.b64encode(mine.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)).decode()
+    plain = ("{\"tokens\":\"" + "x" * size)[:size]
+    sealed = seal_to(public, plain)
+    assert plain[:40] not in sealed.model_dump_json() and open_with(mine, sealed) == plain
+    with pytest.raises(ValueError):
+        open_with(other, sealed)
+
+
+def test_every_held_login_form_names_one_place_its_cli_reads_it() -> None:
+    from galaius_core import AGENT_PROGRAMS, HeldLoginForm
+
+    assert {name: (program.held.variable, program.held.file) for name, program in AGENT_PROGRAMS.items() if program.held} == {
+        "claude": ("CLAUDE_CODE_OAUTH_TOKEN", None), "codex": (None, "auth.json")}
+    for both in ({"variable": "X_TOKEN", "file": "auth.json"}, {}):
+        with pytest.raises(ValidationError):
+            HeldLoginForm(command=("login",), **both)
+
+
 def test_a_held_sign_in_names_its_subscription_and_asks_a_pc_that_holds_logins() -> None:
     from galaius_core import AgentProgramInstallRequest, PcFeature
 

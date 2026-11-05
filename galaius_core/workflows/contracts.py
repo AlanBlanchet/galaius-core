@@ -3215,8 +3215,18 @@ class SealedSignInCode(WireRequest):
 
 #: A held login's token sealed to the server's one-request key (`AgentHeldTakeRequest.seal_key`): one RSA-OAEP block, base64.
 SEALED_HELD = r"^[A-Za-z0-9+/]{300,700}={0,2}$"
-#: A subscription's held login on its way to one PC (`SealedLogin.ciphertext`): the token and the GCM tag, hex.
-HELD_LOGIN_MAX = 4096
+#: A subscription's held login sealed (`SealedLogin.ciphertext`, `SealedHeld.ciphertext`): the credential (a token, a
+#: CLI's login file of a few KB) and the GCM tag, hex.
+HELD_LOGIN_MAX = 32768
+
+
+class SealedHeld(WireModel):
+    """A held login sealed by the PC to the server's one-request key (`AgentHeldTakeRequest.seal_key`): an AES-256-GCM key
+    wrapped by that RSA-OAEP (SHA-256) key, the credential under it (`galaius_core.identity.sealing.seal_to`)."""
+
+    key: str = Field(pattern=SEALED_HELD, repr=False)
+    nonce: str = Field(pattern=r"^[0-9a-f]{24}$")
+    ciphertext: str = Field(min_length=34, max_length=HELD_LOGIN_MAX, pattern=r"^[0-9a-f]+$", repr=False)
 
 
 class SealedLogin(WireModel):
@@ -4695,7 +4705,7 @@ class MachineAgentAnswer(WireModel):
     #: `settings`, each tool's model here).
     providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
     #: `held_take`: the held login, sealed to the request's `seal_key` (None: none held there).
-    held: str | None = Field(default=None, pattern=SEALED_HELD, repr=False, exclude_if=lambda value: value is None)
+    held: SealedHeld | None = Field(default=None, repr=False, exclude_if=lambda value: value is None)
     tool_models: tuple[ToolRoleModels, ...] = Field(default=(), max_length=16)
     #: `places` / `place_level` / `place_cancel`: the PC's levels after the request; `change`: the
     #: widening now waiting on the PC (None: applied at once).
