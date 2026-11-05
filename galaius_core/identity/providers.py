@@ -176,7 +176,10 @@ class TermsRead(WireModel):
 
 class Provider(WireModel):
     """One vendor a person signs in to: its program's held login, its API key, its own CLI, or several of them.
-    Rows live in `providers.json` (`registry`), in the order every page lists them."""
+    Rows live in `providers.json` (`registry`), in the order every page lists them. Their API endpoints, key pages and
+    check models were read at each vendor's own docs on 2026-11-05 (OpenRouter's model at its public model list), and
+    every endpoint answered a wrong key with its refusal that day; a model a vendor drops reads « provider_refused » on
+    the next key until its row names another."""
 
     id: ProviderId
     #: The vendor, as it names itself.
