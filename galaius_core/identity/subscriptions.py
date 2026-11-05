@@ -97,7 +97,7 @@ class HeldLoginForm(WireModel):
     file: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
     #: The credential may be on several PCs at once (a token that never refreshes). False: its CLI refreshes and rotates
     #: it (Codex: « Do not share the same file across concurrent jobs or multiple machines », learn.chatgpt.com
-    #: ci-cd-auth, read 2026-11-05): it lives on ONE PC at a time and moves, fresh from that PC, to the PC a run starts on.
+    #: ci-cd-auth, read 2026-11-05): it lives on ONE PC at a time, put on the PC a run starts on only while no other holds it.
     shared: bool = True
 
     @model_validator(mode="after")
