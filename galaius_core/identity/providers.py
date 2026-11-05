@@ -89,6 +89,21 @@ class PasteCodeSignIn(ProgramSignIn):
 SignIn = Annotated[DeviceCodeSignIn | PasteCodeSignIn, Field(discriminator="flow")]
 
 
+class OnlineSignIn(WireModel):
+    """A held login signed in by the platform itself, no PC involved: the vendor's OAuth authorization code with PKCE,
+    exchanged at `token` (owner 2026-11-05 « What I want is to be able to place the subscription online on Galaius »). The
+    client id and the callback whose page shows the code are its program's `PasteCodeSignIn` (`fixed["client_id"]`,
+    `callback`); read from Claude Code 2.1.288's own `setup-token` exchange."""
+
+    #: Where he approves the sign-in.
+    authorize: HttpsUrl
+    #: Where the code is exchanged for the credential (JSON body: grant, code, verifier, state, client, callback).
+    token: HttpsUrl
+    scopes: tuple[str, ...] = Field(min_length=1)
+    #: The credential's asked lifetime in seconds (Claude Code `setup-token`: one year); None: the vendor's own.
+    expires_in: int | None = Field(default=None, ge=60)
+
+
 class HeldLoginForm(WireModel):
     """How a program's login is held by the platform (signed in ONCE from the web, put on each of the owner's PCs): the
     CLI command that signs in and makes the credential, and where the CLI reads it back on a PC — an environment
@@ -106,6 +121,8 @@ class HeldLoginForm(WireModel):
     #: it (Codex: « Do not share the same file across concurrent jobs or multiple machines », learn.chatgpt.com
     #: ci-cd-auth, read 2026-11-05): it lives on ONE PC at a time, put on the PC a run starts on only while no other holds it.
     shared: bool = True
+    #: Signed in by the platform, never on a PC (`OnlineSignIn`); None: its CLI's `command` signs it in.
+    online: OnlineSignIn | None = None
 
     @model_validator(mode="after")
     def _one_place(self) -> Self:
@@ -128,6 +145,12 @@ class AgentProgram(WireModel):
     login_command: str | None = None
     #: How its login is held by the platform (`HeldLoginForm`); None: it signs in on each PC.
     held: HeldLoginForm | None = None
+
+    @model_validator(mode="after")
+    def _online_from_its_code_page(self) -> Self:
+        if self.held is not None and self.held.online is not None and not (isinstance(self.sign_in, PasteCodeSignIn) and "client_id" in self.sign_in.fixed):
+            raise ValueError(f"{self.provider}: an online sign-in takes its client id and callback from a paste-code sign-in")
+        return self
 
 
 class ApiKeyLogin(WireModel):
