@@ -148,9 +148,20 @@ class AgentProgram(WireModel):
 
     @model_validator(mode="after")
     def _online_from_its_code_page(self) -> Self:
-        if self.held is not None and self.held.online is not None and not (isinstance(self.sign_in, PasteCodeSignIn) and "client_id" in self.sign_in.fixed):
-            raise ValueError(f"{self.provider}: an online sign-in takes its client id and callback from a paste-code sign-in")
+        online = self.held.online if self.held is not None else None
+        if online is None:
+            return self
+        parts = urlsplit(online.authorize)
+        if not (isinstance(self.sign_in, PasteCodeSignIn) and "client_id" in self.sign_in.fixed and parts.hostname in self.sign_in.hosts
+                and parts.path == self.sign_in.path and not parts.query):
+            raise ValueError(f"{self.provider}: an online sign-in is its paste-code sign-in's own page, client id and callback")
         return self
+
+    def online(self) -> tuple[PasteCodeSignIn, OnlineSignIn] | None:
+        """Its paste-code sign-in and the platform's own exchange of it, when the platform signs its login in itself."""
+        if self.held is None or self.held.online is None or not isinstance(self.sign_in, PasteCodeSignIn):
+            return None
+        return self.sign_in, self.held.online
 
 
 class ApiKeyLogin(WireModel):
