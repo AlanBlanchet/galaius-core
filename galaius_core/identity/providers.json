@@ -21,8 +21,5 @@
 {"id": "cline", "label": "Cline", "plans": "ClinePass / credits", "cli": {"command": "cline", "sign_in": "cline auth"}},
 {"id": "kilo", "label": "Kilo Code", "plans": "Kilo Pass / credits", "cli": {"command": "kilo", "sign_in": "kilo auth"}},
 {"id": "kiro", "label": "Kiro", "plans": "Pro / Pro+ / Pro Max / Power", "cli": {"command": "kiro-cli", "sign_in": "kiro-cli login"}, "limit": "partial", "terms": {"verdict": "unclear", "url": "https://kiro.dev/license/"}},
-{"id": "fal", "label": "fal.ai", "api": {"connection": "fal", "endpoint": "https://queue.fal.run", "console": "https://fal.ai/dashboard/keys"}},
-{"id": "replicate", "label": "Replicate", "api": {"connection": "replicate", "endpoint": "https://api.replicate.com", "console": "https://replicate.com/account/api-tokens"}},
-{"id": "roboflow", "label": "Roboflow", "api": {"connection": "roboflow", "endpoint": "https://serverless.roboflow.com", "console": "https://app.roboflow.com/settings/api"}},
 {"id": "elevenlabs", "label": "ElevenLabs", "api": {"connection": "elevenlabs", "endpoint": "https://api.elevenlabs.io", "console": "https://elevenlabs.io/app/settings/api-keys"}}
 ]
