@@ -95,6 +95,10 @@ class HeldLoginForm(WireModel):
     variable: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,63}$")
     #: The file its CLI keeps the credential in, inside its login folder (Codex `auth.json`).
     file: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    #: The credential may be on several PCs at once (a token that never refreshes). False: its CLI refreshes and rotates
+    #: it (Codex: « Do not share the same file across concurrent jobs or multiple machines », learn.chatgpt.com
+    #: ci-cd-auth, read 2026-11-05): it lives on ONE PC at a time and moves, fresh from that PC, to the PC a run starts on.
+    shared: bool = True
 
     @model_validator(mode="after")
     def _one_place(self) -> Self:
@@ -133,7 +137,7 @@ AGENT_PROGRAMS: Mapping[AgentProvider, AgentProgram] = MappingProxyType({program
         callback="https://platform.claude.com/oauth/code/callback"),
         held=HeldLoginForm(command=("setup-token",), terminal=True, variable="CLAUDE_CODE_OAUTH_TOKEN")),
     AgentProgram(provider="codex", name="Codex", short="Codex", sign_in=DeviceCodeSignIn(page="https://auth.openai.com/codex/device"),
-                 held=HeldLoginForm(command=("login", "--device-auth"), file="auth.json")),
+                 held=HeldLoginForm(command=("login", "--device-auth"), file="auth.json", shared=False)),
 )})
 
 

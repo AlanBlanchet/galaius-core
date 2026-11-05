@@ -583,8 +583,8 @@ def test_a_held_login_comes_back_sealed_to_the_one_key_that_asked_whatever_its_s
 def test_every_held_login_form_names_one_place_its_cli_reads_it() -> None:
     from galaius_core import AGENT_PROGRAMS, HeldLoginForm
 
-    assert {name: (program.held.variable, program.held.file) for name, program in AGENT_PROGRAMS.items() if program.held} == {
-        "claude": ("CLAUDE_CODE_OAUTH_TOKEN", None), "codex": (None, "auth.json")}
+    assert {name: (program.held.variable, program.held.file, program.held.shared) for name, program in AGENT_PROGRAMS.items() if program.held} == {
+        "claude": ("CLAUDE_CODE_OAUTH_TOKEN", None, True), "codex": (None, "auth.json", False)}
     for both in ({"variable": "X_TOKEN", "file": "auth.json"}, {}):
         with pytest.raises(ValidationError):
             HeldLoginForm(command=("login",), **both)
