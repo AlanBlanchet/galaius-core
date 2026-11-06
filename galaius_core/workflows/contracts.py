@@ -3016,9 +3016,9 @@ RetractOutcome = Literal["unread", "stopped", "after", "unknown"]
 
 class AgentRetractRequest(MachineAgentRequestBase):
     """Take back message `message_id` (its `AgentSendRequest.id`) its person sent run `run_id` (owner 2026-11-04 « i wanted
-    to stop / remove that message »): still waiting → removed, never read; read by a turn still running → that turn and the
-    agents it started since stop, the run held as by his stop; either way once read, the run's next turn is told it was
-    withdrawn. Asked again: the same outcome, nothing done twice. Answered in `retracted`."""
+    to stop / remove that message »): still waiting → removed, never read; the one that opened the turn at work → that turn
+    and the agents it started on it stop, what waits behind it stays queued; read otherwise → nothing stops. Once read,
+    the run is told at its next step or turn. Asked again: the same outcome, nothing done twice. Answered in `retracted`."""
 
     op: Literal["retract"] = "retract"
     run_id: UUID
