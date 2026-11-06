@@ -87,6 +87,9 @@ class PcFeature(StrEnum):
     #: (`AgentProgramInstallRequest.held`), handed back sealed (`AgentHeldTakeRequest`), put on each of his PCs
     #: (`AgentHeldPutRequest`).
     HELD_LOGINS = "held_logins"
+    #: A message its person sent is taken back (`AgentRetractRequest`): never read when still waiting, its turn stopped
+    #: when read, the run's next turn told.
+    MESSAGE_RETRACT = "agent_message_retract"
 
 
 @dataclass(frozen=True, slots=True)

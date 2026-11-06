@@ -3008,6 +3008,27 @@ class AgentStopRequest(MachineAgentRequestBase):
     action: ClassVar[bool] = True
 
 
+#: How far a message its person took back had got (`AgentRetractRequest`): `unread` removed before its agent read it, never
+#: delivered; `stopped` its agent had it and the turn reading it stopped; `after` its turn had already ended. Both of the last
+#: two: the run's next turn is told it was withdrawn. `unknown`: no message of that id reached the run here.
+RetractOutcome = Literal["unread", "stopped", "after", "unknown"]
+
+
+class AgentRetractRequest(MachineAgentRequestBase):
+    """Take back message `message_id` (its `AgentSendRequest.id`) its person sent run `run_id` (owner 2026-11-04 « i wanted
+    to stop / remove that message »): still waiting → removed, never read; read by a turn still running → that turn and the
+    agents it started since stop, the run held as by his stop; either way once read, the run's next turn is told it was
+    withdrawn. Asked again: the same outcome, nothing done twice. Answered in `retracted`."""
+
+    op: Literal["retract"] = "retract"
+    run_id: UUID
+    message_id: UUID
+    #: Who took it back (the person): the stop it makes records him.
+    by: StopActor | None = None
+    action: ClassVar[bool] = True
+    feature: ClassVar[PcFeature] = PcFeature.MESSAGE_RETRACT
+
+
 #: Who started a compaction: the provider on its own as the context filled (`auto`), or a request (`manual`).
 CompactionTrigger = Literal["auto", "manual"]
 
@@ -4110,7 +4131,7 @@ MachineAgentRequest = Annotated[
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
-    | AgentHeldTakeRequest | AgentHeldPutRequest
+    | AgentHeldTakeRequest | AgentHeldPutRequest | AgentRetractRequest
     | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest | ProjectFilesRequest | ProjectFileRequest | ProjectFindRequest | ProjectFileBytesRequest,
     Field(discriminator="op"),
 ]
@@ -4702,6 +4723,8 @@ class MachineAgentAnswer(WireModel):
     detail: str = Field(default="", max_length=400)
     #: `send`: when the agent reads it (None: a PC too old to say).
     reads_at: ReadsAt | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: `retract`: how far the message had got (None: not a retract).
+    retracted: RetractOutcome | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `settings` / `programs` / `program_install`: the CLIs agents may run through here (and, for
     #: `settings`, each tool's model here).
     providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
