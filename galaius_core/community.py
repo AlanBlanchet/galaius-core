@@ -284,6 +284,12 @@ class CommunityLaunch(WireModel):
     runnable: bool
     how: Literal["spawn", "mcp", "skill-load"] | None = None
 
+    @classmethod
+    def of(cls, kind: CommunityKind, reviewed: bool, listed: bool) -> "CommunityLaunch":
+        """The one rule of what starts: an agent or a skill whose text is in the library, screened safe."""
+        runnable = reviewed and not listed and kind in ("agent", "skill")
+        return cls(runnable=runnable, how={"agent": "spawn", "skill": "skill-load"}[kind] if runnable else "mcp" if kind == "mcp" else None)
+
 
 class CommunityEntry(WireModel):
     """One entry of the community library as the platform shows and compares it (`CommunityPrompt`: the same entry as
@@ -318,20 +324,23 @@ class CommunityEntryDetail(WireModel):
 
 class CommunityEntriesQuery(WireRequest):
     """`q`: words, as `CommunityQuery.q`; the library holding few for them asks its public sources now. `offset`: entries
-    skipped, a page being `LIMIT` of them."""
+    skipped, a page being `LIMIT` of them, `MAX_OFFSET` at most (past it, words narrow the list)."""
 
     LIMIT: ClassVar[int] = 60
+    MAX_OFFSET: ClassVar[int] = 3_000
     q: str = Field(default="", max_length=200)
     kind: CommunityKind | None = None
     sort: CommunityEntrySort = "popularity"
-    offset: int = Field(default=0, ge=0, le=CommunityQuery.MAX_OFFSET)
+    offset: int = Field(default=0, ge=0, le=MAX_OFFSET)
 
 
 class CommunityLaunchRequest(WireRequest):
-    """Start entry `{id}` in conversation `conversation_id` (its coordinator's run) for `task`."""
+    """Start entry `{id}` in conversation `conversation_id` (its coordinator's run, `ProjectConversation.run_id`) for `task`;
+    `machine_id`: the PC it runs on (`ProjectConversation.machine_id`), else the one the server recorded for it."""
 
     conversation_id: UUID
     task: str = Field(min_length=1, max_length=2000)
+    machine_id: UUID | None = None
 
 
 class CommunityLaunchResult(WireModel):
