@@ -31,6 +31,7 @@ from galaius_core import (
     WorkflowKey,
     WorkspaceSubscription,
     SubscriptionPlanRef,
+    AgentRelation,
     AgentRevision,
     AgentCatalogSnapshot,
     AgentGraph,
@@ -711,19 +712,52 @@ def test_an_agent_with_no_tool_list_has_every_tool_and_an_empty_list_has_none(to
     assert AgentRevision.model_validate_json(agent.model_dump_json()).harness_tools == tools
 
 
-@pytest.mark.parametrize("stored, read", [(None, "many"), ("one", "one"), ("per_project", "per_project"), ("many", "many"), ("global", None)])
-def test_an_agent_stored_before_its_instances_setting_runs_as_many(stored, read) -> None:
-    """A revision stored before `instances` existed reads as `many` (every task its own run); each setting reads back
-    as written; a word outside the three is refused at the edge, never guessed."""
+#: (relations written on the called role, caller role asking, the relation read or None refused, its kind). Owner 2026-11-08
+#: « the deployer is unique … one to many, many to one, et cetera, many to many ».
+RELATIONS = [
+    (None, "main", {}, "1-N"),                                                        # stored before relations: every caller, a run per task
+    (None, None, {}, "1-N"),                                                          # the person
+    ([{"callees": "one"}], "backend-engineer", {"callees": "one", "callers": "many"}, "N-1"),   # the deployer
+    ([{"callees": "per_project"}], None, {"callees": "per_project", "callers": "many"}, "N-1"),
+    ([{"callers": "many"}], "app-engineer", {"callers": "many"}, "N-N"),              # a critic shared by makers
+    ([{"caller": "main", "max_live": 1}], "main", {"caller": "main", "max_live": 1}, "1-1"),
+    ([{"caller": "main", "max_live": 3}], "tester", None, None),                     # main only: another role is refused
+    ([{"caller": "main", "max_live": 3}], None, {}, "1-N"),                          # the person never is
+    ([{"caller": "main", "max_live": 3}, {"callees": "one"}], "main", {"caller": "main", "max_live": 3}, "1-N"),
+    ([{"caller": "main", "max_live": 3}, {"callees": "one"}], "tester", {"callees": "one", "callers": "many"}, "N-1"),
+]
+
+
+@pytest.mark.parametrize("written, caller, read, kind", RELATIONS)
+def test_a_call_runs_under_the_relation_naming_its_caller_else_every_callers(written, caller, read, kind) -> None:
+    """A role's `relations` say who may call it and how many of its runs answer (`AgentRelation`): the one naming the
+    caller's role, else the `*` one, else refused; the person at a terminal is never refused. A revision stored before
+    relations existed reads one `*` relation, a run per task. Each reads back as written, through the wire."""
     content = "Answer only."
     reference = PromptExecutionRef(key=PromptKey(namespace="paradigms", slug="answer"), revision=uuid4(), digest=hashlib.sha256(content.encode()).hexdigest(), channel="draft")
     agent = AgentRevision(id=uuid4(), revision=uuid4(), name="Lead", role_key="lead", prompt=reference, resources=(), created_at=datetime.now(UTC))
-    payload = {key: value for key, value in agent.model_dump(mode="json").items() if key != "instances"} | ({} if stored is None else {"instances": stored})
-    if read is None:
-        with pytest.raises(ValidationError):
-            AgentRevision.model_validate(payload)
-        return
-    assert AgentRevision.model_validate(payload).instances == read
+    payload = {key: value for key, value in agent.model_dump(mode="json").items() if key != "relations"} | ({} if written is None else {"relations": written})
+    agent = AgentRevision.model_validate_json(AgentRevision.model_validate(payload).model_dump_json())
+    relation = AgentRelation.answering(agent.relations, caller)
+    assert (relation is None) == (read is None)
+    if relation is not None:
+        assert relation == AgentRelation(**read) and relation.kind == kind
+
+
+@pytest.mark.parametrize("written", [
+    [{"callees": "one", "callers": "one"}],             # a singleton serves every caller
+    [{"callees": "one", "max_live": 2}],                # a singleton counts no live runs
+    [{"callees": "global"}],                            # outside the three words
+    [{"max_live": 0}],
+    [{"caller": "main"}, {"caller": "main", "callers": "many"}],   # one relation per caller
+    [],                                                 # nobody at all: refused, the person included
+])
+def test_an_incoherent_relation_is_refused_at_the_edge(written) -> None:
+    content = "Answer only."
+    reference = PromptExecutionRef(key=PromptKey(namespace="paradigms", slug="answer"), revision=uuid4(), digest=hashlib.sha256(content.encode()).hexdigest(), channel="draft")
+    payload = AgentRevision(id=uuid4(), revision=uuid4(), name="Lead", role_key="lead", prompt=reference, resources=(), created_at=datetime.now(UTC)).model_dump(mode="json")
+    with pytest.raises(ValidationError):
+        AgentRevision.model_validate(payload | {"relations": written})
 
 
 def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_bytes() -> None:

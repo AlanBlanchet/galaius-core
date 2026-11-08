@@ -13,7 +13,7 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, ge
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, FiniteFloat, HttpUrl, PlainSerializer, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, TypeAdapter, ValidationError, field_validator, model_serializer, model_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, FiniteFloat, HttpUrl, PlainSerializer, SecretStr, SerializationInfo, SerializerFunctionWrapHandler, TypeAdapter, ValidationError, computed_field, field_validator, model_serializer, model_validator
 
 from galaius_core.billing.cost import NodeCostActual, RunCostActual
 from galaius_core.billing.tokens import TokenCounts
@@ -1439,11 +1439,79 @@ RecordedReasoning = Annotated[ReasoningLevel | None, BeforeValidator(lambda valu
 #: the ceiling is a 1M-token window less the 33k Claude Code keeps free below its compaction window.
 CompactAt = Annotated[int, Field(ge=100_000, le=967_000)]
 
-#: How many runs of a role work at once, and which one a new task goes to (`AgentRevision.instances`; owner 2026-11-03
-#: « "global" agent, "as many" agent, "project global" agent »): `one` — one run on the PC takes every task, queued behind
-#: its turn while it works; `per_project` — one run per project does; `many` — every task starts its own run, the PC's
-#: place count its only limit.
+#: How many runs of a called role answer its callers (`AgentRelation.callees`; owner 2026-11-03 « "global" agent, "as many"
+#: agent, "project global" agent »): `one` — one run on the PC takes every task, queued behind its turn while it works, and
+#: never a second beside it; `per_project` — one run per project does; `many` — every task starts its own run.
 AgentInstances = Literal["one", "per_project", "many"]
+
+#: How many caller runs one run of a called role serves (`AgentRelation.callers`): `one` — a run works for the run that
+#: started it, every task its own run; `many` — a run of the role takes the tasks of several callers, an idle one of the
+#: conversation reused before a new one starts.
+AgentCallers = Literal["one", "many"]
+
+#: Each side of a relation as a database relationship names it (`AgentRelation.kind`): caller runs, then called runs.
+RelationKind = Literal["1-1", "1-N", "N-1", "N-N"]
+
+
+class AgentRelation(WireModel):
+    """Who may call a role and how many of its runs answer, read as a database relationship (owner 2026-11-08 « A bit like a
+    database relationship, right? Where you have, uh, one to many, many to one, et cetera, many to many. Can we have this
+    sort of thing for agents? We need to actually control them correctly. »). Written on the CALLED role's revision
+    (`AgentRevision.relations`) and checked where a spawn starts a run, nowhere else.
+
+    `caller`: the calling role, `*` every caller (the person at a terminal included). `callees`: how many runs of the role
+    answer (`AgentInstances`); `callers`: how many caller runs one of them serves (`AgentCallers`) — a role keeping one run
+    (`one`, `per_project`) serves every caller by definition. `max_live`: at most this many runs of the role at work or
+    waiting to start for one caller run at once (None: only the PC's places count)."""
+
+    caller: str = Field(default="*", pattern=r"^(\*|[a-z0-9]+(?:-[a-z0-9]+)*)$", max_length=120)
+    callers: AgentCallers = "one"
+    callees: AgentInstances = "many"
+    max_live: int | None = Field(default=None, ge=1, le=64, exclude_if=lambda value: value is None)
+
+    #: The caller key naming every caller.
+    EVERY: ClassVar[str] = "*"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _shared_singleton(cls, data: Any) -> Any:
+        """A role keeping one run serves every caller: `callers` reads `many` there unless written, and `one` written is refused."""
+        if isinstance(data, dict) and data.get("callees", "many") != "many" and "callers" not in data:
+            return {**data, "callers": "many"}
+        return data
+
+    @model_validator(mode="after")
+    def _coherent(self) -> Self:
+        if self.callees != "many" and self.callers == "one":
+            raise ValueError("a role keeping one run serves every caller: callers is many")
+        if self.callees != "many" and self.max_live is not None:
+            raise ValueError("a role keeping one run counts no live runs: max_live is for callees many")
+        return self
+
+    @computed_field
+    @property
+    def kind(self) -> RelationKind:
+        """`N-1` one run shared by every caller; `N-N` many runs, each serving several callers; `1-1` one run at once per
+        caller run; `1-N` a run per task."""
+        if self.callees != "many":
+            return "N-1"
+        if self.callers == "many":
+            return "N-N"
+        return "1-1" if self.max_live == 1 else "1-N"
+
+    @classmethod
+    def answering(cls, relations: tuple[Self, ...], caller: str | None) -> Self | None:
+        """The relation of a role's `relations` a call from role `caller` runs under: the one naming it, else the `*` one;
+        None when the role takes no call from that role. The person at a terminal, or a run of no role (`caller` None),
+        calls as the `*` one, else as `AgentRelation()`: never refused."""
+        named = {relation.caller: relation for relation in relations}
+        found = (named.get(caller) if caller is not None else None) or named.get(cls.EVERY)
+        return found if found is not None or caller is not None else cls()
+
+    @property
+    def keeps_one(self) -> bool:
+        """One run of the role takes every task (on the PC, or of a project): a second never starts beside a live one."""
+        return self.callees != "many"
 
 
 class AgentRevision(WireModel):
@@ -1476,8 +1544,9 @@ class AgentRevision(WireModel):
     capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=1000)
     #: The MCP servers this agent is connected to, each with its tool switches (`McpBinding`).
     mcp: tuple[McpBinding, ...] = Field(default=(), max_length=32)
-    #: How many of its runs work at once and which takes a new task (`AgentInstances`).
-    instances: AgentInstances = "many"
+    #: Who may call it and how many of its runs answer (`AgentRelation`), one per caller role; a caller none names is
+    #: refused, the person at a terminal calls as the `*` one (`AgentRelation.answering`).
+    relations: tuple[AgentRelation, ...] = Field(default=(AgentRelation(),), min_length=1, max_length=64)
     created_at: datetime
 
     @property
@@ -1497,6 +1566,8 @@ class AgentRevision(WireModel):
             raise ValueError("connector agent tools must use an explicitly connected resource")
         if self.reports_to == self.id:
             raise ValueError("an agent cannot report to itself")
+        if len({relation.caller for relation in self.relations}) != len(self.relations):
+            raise ValueError("an agent names each caller in one relation")
         if len({binding.server_id for binding in self.mcp}) != len(self.mcp):
             raise ValueError("an agent binds each MCP server once")
         tools = self.harness_tools or ()
