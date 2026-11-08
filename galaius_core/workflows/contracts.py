@@ -1442,7 +1442,7 @@ CompactAt = Annotated[int, Field(ge=100_000, le=967_000)]
 #: How many runs of a called role answer its callers (`AgentRelation.callees`; owner 2026-11-03 « "global" agent, "as many"
 #: agent, "project global" agent »): `one` — one run on the PC takes every task, queued behind its turn while it works, and
 #: never a second beside it; `per_project` — one run per project does; `many` — every task starts its own run.
-AgentInstances = Literal["one", "per_project", "many"]
+AgentCallees = Literal["one", "per_project", "many"]
 
 #: How many caller runs one run of a called role serves (`AgentRelation.callers`): `one` — a run works for the run that
 #: started it, every task its own run; `many` — a run of the role takes the tasks of several callers, an idle one of the
@@ -1460,13 +1460,13 @@ class AgentRelation(WireModel):
     (`AgentRevision.relations`) and checked where a spawn starts a run, nowhere else.
 
     `caller`: the calling role, `*` every caller (the person at a terminal included). `callees`: how many runs of the role
-    answer (`AgentInstances`); `callers`: how many caller runs one of them serves (`AgentCallers`) — a role keeping one run
+    answer (`AgentCallees`); `callers`: how many caller runs one of them serves (`AgentCallers`) — a role keeping one run
     (`one`, `per_project`) serves every caller by definition. `max_live`: at most this many runs of the role at work or
     waiting to start for one caller run at once (None: only the PC's places count)."""
 
     caller: str = Field(default="*", pattern=r"^(\*|[a-z0-9]+(?:-[a-z0-9]+)*)$", max_length=120)
     callers: AgentCallers = "one"
-    callees: AgentInstances = "many"
+    callees: AgentCallees = "many"
     max_live: int | None = Field(default=None, ge=1, le=64, exclude_if=lambda value: value is None)
 
     #: The caller key naming every caller.
@@ -1500,13 +1500,16 @@ class AgentRelation(WireModel):
         return "1-1" if self.max_live == 1 else "1-N"
 
     @classmethod
-    def answering(cls, relations: tuple[Self, ...], caller: str | None) -> Self | None:
-        """The relation of a role's `relations` a call from role `caller` runs under: the one naming it, else the `*` one;
-        None when the role takes no call from that role. The person at a terminal, or a run of no role (`caller` None),
-        calls as the `*` one, else as `AgentRelation()`: never refused."""
+    def answering(cls, relations: tuple[Self, ...], caller: str | None, *, person: bool = False) -> Self | None:
+        """The relation of a role's `relations` a call runs under: from a run of role `caller`, the one naming it, else the
+        `*` one; from a run of no role (`caller` None: a community entry, an agent outside galaius's runs), the `*` one
+        only; None when the role takes no such call. The `person` at a terminal calls as the `*` one, else as the role's
+        own count of runs (`callees`, one for every relation): never refused."""
         named = {relation.caller: relation for relation in relations}
         found = (named.get(caller) if caller is not None else None) or named.get(cls.EVERY)
-        return found if found is not None or caller is not None else cls()
+        if found is not None or not person:
+            return found
+        return cls(callees=relations[0].callees) if relations else cls()
 
     @property
     def keeps_one(self) -> bool:
@@ -1544,8 +1547,8 @@ class AgentRevision(WireModel):
     capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=1000)
     #: The MCP servers this agent is connected to, each with its tool switches (`McpBinding`).
     mcp: tuple[McpBinding, ...] = Field(default=(), max_length=32)
-    #: Who may call it and how many of its runs answer (`AgentRelation`), one per caller role; a caller none names is
-    #: refused, the person at a terminal calls as the `*` one (`AgentRelation.answering`).
+    #: Who may call it and how many of its runs answer (`AgentRelation`), one per caller role, every one keeping the same
+    #: count of runs (`callees`); a caller none names is refused, the person never (`AgentRelation.answering`).
     relations: tuple[AgentRelation, ...] = Field(default=(AgentRelation(),), min_length=1, max_length=64)
     created_at: datetime
 
@@ -1568,6 +1571,8 @@ class AgentRevision(WireModel):
             raise ValueError("an agent cannot report to itself")
         if len({relation.caller for relation in self.relations}) != len(self.relations):
             raise ValueError("an agent names each caller in one relation")
+        if len({relation.callees for relation in self.relations}) > 1:
+            raise ValueError("an agent keeps one count of runs for every caller: its relations share callees")
         if len({binding.server_id for binding in self.mcp}) != len(self.mcp):
             raise ValueError("an agent binds each MCP server once")
         tools = self.harness_tools or ()

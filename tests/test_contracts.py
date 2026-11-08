@@ -712,33 +712,39 @@ def test_an_agent_with_no_tool_list_has_every_tool_and_an_empty_list_has_none(to
     assert AgentRevision.model_validate_json(agent.model_dump_json()).harness_tools == tools
 
 
-#: (relations written on the called role, caller role asking, the relation read or None refused, its kind). Owner 2026-11-08
-#: « the deployer is unique … one to many, many to one, et cetera, many to many ».
+#: (relations written on the called role, who asks: a role, "person" or None for a run of no role, the relation read or None
+#: refused, its kind). Owner 2026-11-08 « the deployer is unique … one to many, many to one, et cetera, many to many ».
 RELATIONS = [
     (None, "main", {}, "1-N"),                                                        # stored before relations: every caller, a run per task
-    (None, None, {}, "1-N"),                                                          # the person
+    (None, "person", {}, "1-N"),
+    (None, None, {}, "1-N"),                                                          # a run of no role reaches the * one
     ([{"callees": "one"}], "backend-engineer", {"callees": "one", "callers": "many"}, "N-1"),   # the deployer
-    ([{"callees": "per_project"}], None, {"callees": "per_project", "callers": "many"}, "N-1"),
+    ([{"callees": "per_project"}], "person", {"callees": "per_project", "callers": "many"}, "N-1"),
     ([{"callers": "many"}], "app-engineer", {"callers": "many"}, "N-N"),              # a critic shared by makers
     ([{"caller": "main", "max_live": 1}], "main", {"caller": "main", "max_live": 1}, "1-1"),
     ([{"caller": "main", "max_live": 3}], "tester", None, None),                     # main only: another role is refused
-    ([{"caller": "main", "max_live": 3}], None, {}, "1-N"),                          # the person never is
-    ([{"caller": "main", "max_live": 3}, {"callees": "one"}], "main", {"caller": "main", "max_live": 3}, "1-N"),
-    ([{"caller": "main", "max_live": 3}, {"callees": "one"}], "tester", {"callees": "one", "callers": "many"}, "N-1"),
+    ([{"caller": "main", "max_live": 3}], None, None, None),                         # and so is a run of no role
+    ([{"caller": "main", "max_live": 3}], "person", {}, "1-N"),                      # the person never is
+    ([{"caller": "main", "callees": "one"}], "person", {"callees": "one", "callers": "many"}, "N-1"),   # nor gets a second singleton run
+    ([{"caller": "main", "max_live": 3}, {"callers": "many"}], "main", {"caller": "main", "max_live": 3}, "1-N"),
+    ([{"caller": "main", "max_live": 3}, {"callers": "many"}], "tester", {"callers": "many"}, "N-N"),
+    ([{"caller": "main", "max_live": 3}, {"callers": "many"}], None, {"callers": "many"}, "N-N"),
 ]
 
 
 @pytest.mark.parametrize("written, caller, read, kind", RELATIONS)
 def test_a_call_runs_under_the_relation_naming_its_caller_else_every_callers(written, caller, read, kind) -> None:
     """A role's `relations` say who may call it and how many of its runs answer (`AgentRelation`): the one naming the
-    caller's role, else the `*` one, else refused; the person at a terminal is never refused. A revision stored before
-    relations existed reads one `*` relation, a run per task. Each reads back as written, through the wire."""
+    caller's role, else the `*` one, else refused; a run of no role reaches the `*` one only; the person at a terminal is
+    never refused and keeps the role's count of runs. A revision stored before relations existed reads one `*` relation,
+    a run per task. Each reads back as written, through the wire."""
     content = "Answer only."
     reference = PromptExecutionRef(key=PromptKey(namespace="paradigms", slug="answer"), revision=uuid4(), digest=hashlib.sha256(content.encode()).hexdigest(), channel="draft")
     agent = AgentRevision(id=uuid4(), revision=uuid4(), name="Lead", role_key="lead", prompt=reference, resources=(), created_at=datetime.now(UTC))
     payload = {key: value for key, value in agent.model_dump(mode="json").items() if key != "relations"} | ({} if written is None else {"relations": written})
     agent = AgentRevision.model_validate_json(AgentRevision.model_validate(payload).model_dump_json())
-    relation = AgentRelation.answering(agent.relations, caller)
+    person = caller == "person"
+    relation = AgentRelation.answering(agent.relations, None if person else caller, person=person)
     assert (relation is None) == (read is None)
     if relation is not None:
         assert relation == AgentRelation(**read) and relation.kind == kind
@@ -750,6 +756,7 @@ def test_a_call_runs_under_the_relation_naming_its_caller_else_every_callers(wri
     [{"callees": "global"}],                            # outside the three words
     [{"max_live": 0}],
     [{"caller": "main"}, {"caller": "main", "callers": "many"}],   # one relation per caller
+    [{"caller": "main"}, {"callees": "one"}],           # one count of runs for every caller: never N-1 and 1-N at once
     [],                                                 # nobody at all: refused, the person included
 ])
 def test_an_incoherent_relation_is_refused_at_the_edge(written) -> None:

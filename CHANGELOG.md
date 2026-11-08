@@ -4,7 +4,8 @@
 
 - `AgentRevision.relations` (`AgentRelation`: caller role or `*`, callers one / many, callees one / per_project / many,
   `max_live`, derived `kind` 1-1 / 1-N / N-1 / N-N) replaces `AgentRevision.instances`: who may call a role and how many
-  of its runs answer; `AgentRelation.answering` picks the relation a caller's role runs under.
+  of its runs answer, every relation of a role keeping the same `callees`; `AgentRelation.answering` picks the relation a
+  call runs under (a run of no role reaches `*` only, the person is never refused). `AgentInstances` is `AgentCallees`.
 - The package sits at the repository root (`galaius_core/`), no `src/` folder.
 - The built-in MCP server's id is `galaius`; script approval digests and the sealed project-secrets key
   derive from `galaius.*` tags (saved script approvals are asked again once).
