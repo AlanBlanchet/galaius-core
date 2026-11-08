@@ -177,6 +177,9 @@ class ApiKeyLogin(WireModel):
     #: A chat model the connection enables at once, the one its first call answers with; None: the key is checked by
     #: listing the vendor's models, which a server of OpenAI's API may list without one (`openai_compatible` names one).
     model: str | None = Field(default=None, min_length=1, max_length=160)
+    #: True: a key made at `console` spends the included usage of the row's `plans` (the vendor's docs say so), so joining
+    #: with it IS joining his subscription; False: the key is billed per token, apart from any plan.
+    plan: bool = False
 
     @model_validator(mode="after")
     def _checked_by_a_call(self) -> Self:
@@ -212,7 +215,8 @@ class Provider(WireModel):
     """One vendor a person signs in to: its program's held login, its API key, its own CLI, or several of them.
     Rows live in `providers.json` (`registry`), in the order every page lists them. Their API endpoints, key pages and
     check models were read at each vendor's own docs on 2026-11-05 (OpenRouter's model at its public model list), and
-    every endpoint answered a wrong key with its refusal that day; a model a vendor drops reads « provider_refused » on
+    every endpoint answered a wrong key with its refusal that day (Mistral's plan key page and model: its docs and Vibe CLI
+    3.1.0, 2026-11-08); a model a vendor drops reads « provider_refused » on
     the next key until its row names another."""
 
     id: ProviderId
@@ -232,6 +236,8 @@ class Provider(WireModel):
     def _signs_in_somehow(self) -> Self:
         if self.program is None and self.api is None and self.cli is None:
             raise ValueError(f"{self.id}: a provider signs in through a program, an API key or a CLI")
+        if self.api is not None and self.api.plan and self.plans is None:
+            raise ValueError(f"{self.id}: a key drawing on a plan needs the row's plans")
         return self
 
     @classmethod

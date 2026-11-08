@@ -87,6 +87,7 @@ def test_every_provider_is_a_row_and_a_program_is_one_of_them() -> None:
     ({"id": "acme", "label": "Acme", "api": {"connection": "openai_compatible", "endpoint": "http://api.acme.test/v1", "console": "https://acme.test/keys", "model": "a"}}, "pattern"),
     ({"id": "acme", "label": "Acme"}, "signs in through"),
     ({"id": "Acme", "label": "Acme", "cli": {"command": "acme", "sign_in": "acme login"}}, "pattern"),
+    ({"id": "acme", "label": "Acme", "api": {"connection": "openai_compatible", "endpoint": "https://api.acme.test/v1", "console": "https://acme.test/keys", "model": "acme-1", "plan": True}}, "needs the row's plans"),
 ])
 def test_a_new_provider_is_one_row(row: dict, refused: str | None) -> None:
     """Adding a vendor is a row: one with a way to sign in parses; a key checked by nothing, a plain-http endpoint, a
