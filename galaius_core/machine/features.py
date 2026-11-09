@@ -92,6 +92,9 @@ class PcFeature(StrEnum):
     #: A message its person sent is taken back (`AgentRetractRequest`): never read when still waiting, its turn stopped
     #: when read, the run's next turn told.
     MESSAGE_RETRACT = "agent_message_retract"
+    #: A conversation started here moves to another of its owner's PCs and stays the same one (`AgentExportRequest`,
+    #: `AgentImportRequest`, `AgentReleaseRequest`).
+    RUN_CARRY = "agent_run_carry"
 
 
 @dataclass(frozen=True, slots=True)

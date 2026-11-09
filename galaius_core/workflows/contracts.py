@@ -1433,6 +1433,8 @@ ReasoningLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max", "ul
 #: The level a run RECORDS it ran at, read from the other side: a word outside the levels (a newer side's level, a record
 #: written by hand) reads as not known, never guessed, and never fails the message carrying it.
 RecordedReasoning = Annotated[ReasoningLevel | None, BeforeValidator(lambda value: next((level for level in get_args(ReasoningLevel) if level == value), None))]
+#: The longest model id a machine reports for a run (its launcher clips to it).
+MODEL_ID_MAX = 120
 
 #: The context, in tokens, an agent's conversation is compacted at (`AgentRevision.compact_at`): every model call re-reads the
 #: whole conversation, so this bounds what each call of a long run costs. Below the floor a run would compact every few turns;
@@ -3986,6 +3988,84 @@ class WorkspacesRequest(MachineAgentRequestBase):
     feature: ClassVar[PcFeature] = PcFeature.WORKSPACES
 
 
+#: The most one conversation carried to another of its owner's PCs holds once unpacked (its record, streams, images and
+#: CLI session), and its most files: its own bounds, never a project copy's (threat-modeler 2026-11-09 Q4).
+RUN_PACK_MAX_BYTES = 256 * 1024**2
+RUN_PACK_MAX_FILES = 2000
+
+
+class RunPack(WireModel):
+    """What carrying one conversation to another PC sends, measured before anything is sent: its files, their bytes,
+    and the id of its CLI session (the one its next turn there resumes)."""
+
+    files: int = Field(ge=1, le=RUN_PACK_MAX_FILES)
+    size: int = Field(ge=0, le=RUN_PACK_MAX_BYTES)
+    session: UUID
+
+
+class CarriedRun(WireModel):
+    """A conversation as the SERVER knows it, handed to the PC receiving it (`AgentImportRequest`): that PC builds its
+    record from this and its own settings, taking from the archive only what is shown (status, times, last words,
+    cost, usage), never the sending PC's permission, fence or tools (threat-modeler 2026-11-09 Q1). `session` is the
+    one `RunPack` named; `moved_from` / `moved_at` what its conversation shows of the move."""
+
+    role: str | None = Field(default=None, max_length=80)
+    name: str = Field(max_length=120)
+    task: str = Field(default="", max_length=8000)
+    provider: str = Field(min_length=1, max_length=40)
+    model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
+    reasoning: RecordedReasoning = None
+    session: UUID
+    moved_from: str = Field(min_length=1, max_length=80)
+    moved_at: datetime
+
+
+class AgentExportRequest(MachineAgentRequestBase):
+    """Run `run_id`, started here and between turns, packed for another of its owner's PCs: answered at once with its
+    measure (`MachineAgentAnswer.carried`), its archive uploaded in the background under `transfer` as a folder copy's
+    is (`WorkspaceArchive`, ending with a `WorkspaceUpload`). The archive is a gzip'd tar of plain files: `run/<id>.*`
+    (its record, streams, messages and images) and `session/<path>` (its CLI session's files below that CLI's session
+    folder); never a credential, never a link. From then on no turn of it starts here until `AgentReleaseRequest`
+    says where it went. Refused `under_way` while it works or waits for its owner."""
+
+    op: Literal["agent_export"] = "agent_export"
+    run_id: UUID
+    transfer: UUID
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 60
+    feature: ClassVar[PcFeature] = PcFeature.RUN_CARRY
+
+
+class AgentImportRequest(MachineAgentRequestBase):
+    """Conversation `run_id` taken from another PC's `AgentExportRequest` archive into the project folder `path`
+    beneath agent root `root` here, on this PC's own login of its CLI, its record built from `run` (`CarriedRun`),
+    listed here from then on, ended as it was; its next message resumes its CLI session. The archive is downloaded,
+    its digest checked, and refused `unsafe_archive` at any file outside `run/<run_id>.*` and the session `run` names,
+    or past `RUN_PACK_MAX_BYTES` / `_FILES`; nothing it holds is ever written over a file here. Refused `exists` when
+    this PC holds that run already, but as a carried copy it took before (taken again, replaced)."""
+
+    op: Literal["agent_import"] = "agent_import"
+    run_id: UUID
+    root: AgentRootPath
+    path: FolderPath = ""
+    archive: WorkspaceArchive
+    run: CarriedRun
+    action: ClassVar[bool] = True
+    seconds: ClassVar[float] = 120
+    feature: ClassVar[PcFeature] = PcFeature.RUN_CARRY
+
+
+class AgentReleaseRequest(MachineAgentRequestBase):
+    """How the move `AgentExportRequest` began ended: `to` took conversation `run_id` (it is no longer listed here, its
+    files kept), or None: it did not, its turns start here again."""
+
+    op: Literal["agent_release"] = "agent_release"
+    run_id: UUID
+    to: MachineRef | None = None
+    action: ClassVar[bool] = True
+    feature: ClassVar[PcFeature] = PcFeature.RUN_CARRY
+
+
 #: Most entries one folder listing carries; most paths one name search carries.
 PROJECT_FILES_MAX = 2000
 PROJECT_FOUND_MAX = 200
@@ -4206,6 +4286,7 @@ MachineAgentRequest = Annotated[
     | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
     | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
+    | AgentExportRequest | AgentImportRequest | AgentReleaseRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
     | AgentHeldTakeRequest | AgentHeldPutRequest | AgentRetractRequest
     | AgentToolsRequest | AgentToolInstallRequest | ScreenStatusRequest | ScreenOpenRequest | ProjectFilesRequest | ProjectFileRequest | ProjectFindRequest | ProjectFileBytesRequest,
@@ -4370,8 +4451,6 @@ class MachineAgentSession(WireModel):
     live: bool = False
 
 
-#: The longest model id a machine reports for a run (its launcher clips to it).
-MODEL_ID_MAX = 120
 #: How many runs a run says it works for (`MachineAgentRun.asked_by`): its first askers.
 ASKED_BY_MAX = 32
 
@@ -4821,6 +4900,8 @@ class MachineAgentAnswer(WireModel):
     origin: GitRemote | None = None
     #: `workspace_pack`: what copying the folder sends.
     pack: WorkspacePack | None = None
+    #: `agent_export`: what carrying the conversation sends.
+    carried: RunPack | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `start` in a project folder the PC cloned from the web: whether it was fast-forwarded to its
     #: remote first (`WorkspaceRefresh`; None: not such a folder).
     refresh: WorkspaceRefresh | None = None
