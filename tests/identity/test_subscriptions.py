@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from galaius_core import AGENT_PROGRAMS, PROVIDERS, Provider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
+from galaius_core import AGENT_PROGRAMS, PROVIDERS, key_held, Provider, RunMove, program_name, RunSubscription, SubscriptionAllowance, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits, CapReached, SubscriptionUse, UsageWindow
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
 
@@ -77,8 +77,24 @@ def test_every_provider_is_a_row_and_a_program_is_one_of_them() -> None:
     `providers.json`, ids once each; a program a PC runs is one row's `program`; a name no program has stays as written."""
     ids = [row.id for row in PROVIDERS]
     assert len(set(ids)) == len(ids) and {"mistral", "gemini", "openrouter", "groq"} <= set(ids)
-    assert list(AGENT_PROGRAMS) == [row.program.provider for row in PROVIDERS if row.program]
-    assert [program_name(name) for name in ("claude", "codex", "anthropic")] == ["Claude Code", "Codex", "anthropic"]
+    assert list(AGENT_PROGRAMS) == [row.agent_program().provider for row in PROVIDERS if row.agent_program()]
+    assert [program_name(name) for name in ("claude", "codex", "mistral", "anthropic")] == ["Claude Code", "Codex", "Mistral", "anthropic"]
+
+
+def test_every_provider_row_whose_login_reaches_a_chat_api_runs_agents() -> None:
+    """Owner 2026-11-08 « Why can't I, uh, still add a Mistral subscription »: a row runs agents through its own program,
+    or its key through the key harness at its Chat Completions base, held in one variable on any number of PCs. Not
+    launchable: only a row with neither (a CLI Galaius does not run, a voice API)."""
+    for row in PROVIDERS:
+        program = AGENT_PROGRAMS.get(row.agent_program().provider) if row.agent_program() else None
+        reaches_chat = row.api is not None and row.api.chat_base() is not None
+        assert (program is not None) == (row.program is not None or reaches_chat), row.id
+        if row.program is None and program is not None:
+            assert program.keyed and program.held == key_held(row.id) and program.name == row.label and program.held.shared
+    assert {"mistral", "gemini", "openrouter", "groq", "deepseek"} <= {name for name, program in AGENT_PROGRAMS.items() if program.keyed}
+    assert not AGENT_PROGRAMS["claude"].keyed and not AGENT_PROGRAMS["codex"].keyed
+    keys = [program.held.variable for program in AGENT_PROGRAMS.values() if program.keyed]
+    assert len(set(keys)) == len(keys)  # one program's key never reaches another's API
 
 
 @pytest.mark.parametrize(("row", "refused"), [
@@ -103,4 +119,5 @@ def test_a_run_names_only_a_program_some_row_holds() -> None:
     choice = {"subscription_id": str(uuid4()), "limits": {}}
     assert SubscriptionChoice.model_validate({**choice, "provider": "codex"}).provider == "codex"
     with pytest.raises(ValidationError, match="no agent program"):
-        SubscriptionChoice.model_validate({**choice, "provider": "mistral"})
+        SubscriptionChoice.model_validate({**choice, "provider": "copilot"})
+    assert SubscriptionChoice.model_validate({**choice, "provider": "mistral"}).provider == "mistral"

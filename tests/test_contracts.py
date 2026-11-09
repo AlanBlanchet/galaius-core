@@ -584,11 +584,17 @@ def test_a_held_login_comes_back_sealed_to_the_one_key_that_asked_whatever_its_s
 def test_every_held_login_form_names_one_place_its_cli_reads_it() -> None:
     from galaius_core import AGENT_PROGRAMS, HeldLoginForm
 
-    assert {name: (program.held.variable, program.held.file, program.held.shared) for name, program in AGENT_PROGRAMS.items() if program.held} == {
-        "claude": ("CLAUDE_CODE_OAUTH_TOKEN", None, True), "codex": (None, "auth.json", False)}
+    from galaius_core import key_held
+
+    assert {name: (program.held.variable, program.held.file, program.held.shared) for name, program in AGENT_PROGRAMS.items()
+            if program.held and not program.keyed} == {"claude": ("CLAUDE_CODE_OAUTH_TOKEN", None, True), "codex": (None, "auth.json", False)}
+    assert all(program.held == key_held(name) for name, program in AGENT_PROGRAMS.items() if program.keyed)
     for both in ({"variable": "X_TOKEN", "file": "auth.json"}, {}):
         with pytest.raises(ValidationError):
             HeldLoginForm(command=("login",), **both)
+    for pasted in ({"file": "auth.json"}, {"variable": "X_KEY", "shared": False}):  # a pasted key: one variable, any PC
+        with pytest.raises(ValidationError):
+            HeldLoginForm(**pasted)
 
 
 def test_a_held_sign_in_names_its_subscription_and_asks_a_pc_that_holds_logins() -> None:

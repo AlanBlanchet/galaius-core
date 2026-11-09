@@ -295,7 +295,8 @@ class SubscriptionUsageReport(WireModel):
 
     type: Literal["subscription_usage"] = "subscription_usage"
     usage: tuple[SubscriptionUsage, ...] = Field(default=(), max_length=64)
-    logins: tuple[LoginUsage, ...] = Field(default=(), max_length=8)
+    #: One per agent program at most (`AGENT_PROGRAMS`: every provider row that runs agents, its key's included).
+    logins: tuple[LoginUsage, ...] = Field(default=(), max_length=64)
 
     REPORT_POINTS: ClassVar[float] = 1.0
     REPORT_SECONDS: ClassVar[float] = 60.0

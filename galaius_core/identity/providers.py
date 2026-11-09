@@ -1,7 +1,12 @@
 """Every provider a person signs in to in Galaius, as data: `providers.json` beside this module holds one row per
 vendor, and adding a vendor is adding a row. A row says how he signs in — a coding-agent CLI's login the platform holds
 (`program`), an API key (`api`), or a CLI of its own Galaius does not run yet (`cli`) — and what its terms and limits
-are. The sign-in KINDS are the classes below (a device code, a pasted code, an API key); the vendors are data."""
+are. The sign-in KINDS are the classes below (a device code, a pasted code, an API key); the vendors are data.
+
+Every row runs agents (owner 2026-11-05 « I want to log in with any other provider in Galaius and use them in any projects
+on any PCs »): through its own `program`, or — a row whose key reaches a Chat Completions API (`ApiKeyLogin.chat_base`) —
+as a KEY PROGRAM (`Provider.key_program`): the one key-route harness (`KEY_HARNESS`) pointed at that API, its key held
+like a CLI's token (`key_held`). No vendor has code of its own: its row is the whole of it."""
 
 import json
 import re
@@ -85,8 +90,14 @@ class PasteCodeSignIn(ProgramSignIn):
                 and set(values["scope"].split()) <= self.scopes and (callback == self.callback if paste else LOCAL_CALLBACK.fullmatch(callback) is not None))
 
 
+class KeySignIn(ProgramSignIn):
+    """A key program's login: the provider's API key he pastes once on the web (`ApiKeyLogin`), nothing shown on a PC."""
+
+    flow: Literal["api_key"] = "api_key"
+
+
 #: How a CLI's login is signed in from the web.
-SignIn = Annotated[DeviceCodeSignIn | PasteCodeSignIn, Field(discriminator="flow")]
+SignIn = Annotated[DeviceCodeSignIn | PasteCodeSignIn | KeySignIn, Field(discriminator="flow")]
 
 
 class OnlineSignIn(WireModel):
@@ -109,8 +120,9 @@ class HeldLoginForm(WireModel):
     CLI command that signs in and makes the credential, and where the CLI reads it back on a PC — an environment
     variable (`variable`) or a file in its login folder (`file`), exactly one. A program without one signs in per PC."""
 
-    #: Its CLI's arguments that sign in once and leave the credential to hold (Claude Code `setup-token`: a 1-year token).
-    command: tuple[str, ...] = Field(min_length=1)
+    #: Its CLI's arguments that sign in once and leave the credential to hold (Claude Code `setup-token`: a 1-year token);
+    #: None: the credential is an API key pasted on the web (`KeySignIn`), no CLI signs it in.
+    command: tuple[str, ...] | None = Field(default=None, min_length=1)
     #: The command needs a terminal (Claude Code's sign-in screens draw only on one).
     terminal: bool = False
     #: The variable its CLI reads the credential from (Claude Code `CLAUDE_CODE_OAUTH_TOKEN`).
@@ -128,6 +140,8 @@ class HeldLoginForm(WireModel):
     def _one_place(self) -> Self:
         if (self.variable is None) == (self.file is None):
             raise ValueError("a held login lives in exactly one of a variable or a file")
+        if self.command is None and (self.variable is None or not self.shared or self.online is not None):
+            raise ValueError("a pasted key is held in a variable, on any number of PCs, signed in by no one")
         return self
 
 
@@ -145,6 +159,17 @@ class AgentProgram(WireModel):
     login_command: str | None = None
     #: How its login is held by the platform (`HeldLoginForm`); None: it signs in on each PC.
     held: HeldLoginForm | None = None
+
+    @model_validator(mode="after")
+    def _key_signs_in_by_key(self) -> Self:
+        if isinstance(self.sign_in, KeySignIn) != (self.held is not None and self.held.command is None):
+            raise ValueError(f"{self.provider}: a program signed in by a pasted key holds exactly that key")
+        return self
+
+    @property
+    def keyed(self) -> bool:
+        """Its login is a provider's API key pasted on the web (a key program, `Provider.key_program`)."""
+        return isinstance(self.sign_in, KeySignIn)
 
     @model_validator(mode="after")
     def _online_from_its_code_page(self) -> Self:
@@ -180,6 +205,14 @@ class ApiKeyLogin(WireModel):
     #: True: a key made at `console` spends the included usage of the row's `plans` (the vendor's docs say so), so joining
     #: with it IS joining his subscription; False: the key is billed per token, apart from any plan.
     plan: bool = False
+    #: The vendor's OpenAI-compatible Chat Completions base beside its own API (Gemini's `/v1beta/openai`), when its
+    #: `connection` speaks another; an `openai_compatible` key's is `endpoint` itself (`chat_base`).
+    chat: HttpsUrl | None = None
+
+    def chat_base(self) -> str | None:
+        """Where this key's Chat Completions calls go (an agent's turns on it, `Provider.key_program`); None: it reaches
+        no chat API (a voice vendor)."""
+        return self.chat or (self.endpoint if self.connection == "openai_compatible" else None)
 
     @model_validator(mode="after")
     def _checked_by_a_call(self) -> Self:
@@ -202,6 +235,16 @@ class ProviderCli(WireModel):
     command: str
     #: What its owner types on the PC to sign it in: a shell command, or the CLI then its own command inside.
     sign_in: str
+
+
+def key_held(provider: str) -> HeldLoginForm:
+    """How key program `provider`'s key is held: in a variable of its own its harness reads (`KEY_HARNESS`), on any number
+    of PCs. One per program: a launch walking several programs never hands one's key to another's API."""
+    return HeldLoginForm(variable=f"GALAIUS_KEY_{provider.upper()}")
+
+#: The coding-agent CLI every key program runs on: Mistral's Vibe (Apache-2.0), which drives any Chat Completions API by
+#: its config (`[[providers]]` api_base, api_key_env_var, api_style « openai »), headless (`-p`), resumable, MCP client.
+KEY_HARNESS = "vibe"
 
 
 class TermsRead(WireModel):
@@ -232,6 +275,17 @@ class Provider(WireModel):
     #: None: its terms not read.
     terms: TermsRead | None = None
 
+    def key_program(self) -> AgentProgram | None:
+        """The agent program its API key runs (`KEY_HARNESS` at `api.chat_base()` on `api.model`), named as the row:
+        a row with a program of its own runs that one; None too for a key reaching no chat API."""
+        if self.program is not None or self.api is None or self.api.chat_base() is None or self.api.model is None:
+            return None
+        return AgentProgram(provider=self.id, name=self.label, short=self.label, sign_in=KeySignIn(), held=key_held(self.id))
+
+    def agent_program(self) -> AgentProgram | None:
+        """What runs its agents: its own program, else its key's (`key_program`)."""
+        return self.program or self.key_program()
+
     @model_validator(mode="after")
     def _signs_in_somehow(self) -> Self:
         if self.program is None and self.api is None and self.cli is None:
@@ -245,7 +299,7 @@ class Provider(WireModel):
     def registry(cls) -> tuple["Provider", ...]:
         """Every row of `providers.json`, ids and program ids each once."""
         rows = tuple(cls.model_validate(row) for row in json.loads(Path(__file__).with_name("providers.json").read_text(encoding="utf-8")))
-        for name, ids in (("provider", [row.id for row in rows]), ("program", [row.program.provider for row in rows if row.program])):
+        for name, ids in (("provider", [row.id for row in rows]), ("program", [program.provider for row in rows if (program := row.agent_program())])):
             if len(ids) != len(set(ids)):
                 raise ValueError(f"providers.json lists a {name} id twice")
         return rows
@@ -257,8 +311,8 @@ class Provider(WireModel):
 
 #: Every provider, in the order every page lists them.
 PROVIDERS: tuple[Provider, ...] = Provider.registry()
-#: Each program a PC runs agents through, by its id, in `PROVIDERS` order.
-AGENT_PROGRAMS: Mapping[str, AgentProgram] = MappingProxyType({row.program.provider: row.program for row in PROVIDERS if row.program})
+#: Each program a PC runs agents through, by its id, in `PROVIDERS` order: each row's own program, else its key's.
+AGENT_PROGRAMS: Mapping[str, AgentProgram] = MappingProxyType({program.provider: program for row in PROVIDERS if (program := row.agent_program())})
 
 
 def _a_program(value: str) -> str:
