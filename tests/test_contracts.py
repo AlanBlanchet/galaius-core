@@ -599,7 +599,7 @@ def test_a_held_sign_in_names_its_subscription_and_asks_a_pc_that_holds_logins()
     with pytest.raises(ValidationError):
         AgentProgramInstallRequest.model_validate({**base, "held": True})
     held = AgentProgramInstallRequest.model_validate({**base, "held": True, "subscription_id": str(uuid4())})
-    assert PcFeature.HELD_LOGINS in held.content_features
+    assert PcFeature.HELD_SIGN_IN in held.content_features and PcFeature.HELD_LOGINS not in held.content_features
     assert "held" not in AgentProgramInstallRequest.model_validate({**base, "subscription_id": str(uuid4())}).model_dump()
 
 

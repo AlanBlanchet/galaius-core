@@ -83,10 +83,12 @@ class PcFeature(StrEnum):
     PROJECT_FILE_BYTES = "project_file_bytes"
     #: A file's text is read from a byte offset, page by page (`ProjectFileRequest.offset`).
     PROJECT_FILE_OFFSET = "project_file_offset"
-    #: A subscription's login is held by the platform: signed in once with its CLI's long-lived token command
-    #: (`AgentProgramInstallRequest.held`), handed back sealed (`AgentHeldTakeRequest`), put on each of his PCs
-    #: (`AgentHeldPutRequest`).
+    #: A subscription's login held by the platform is handed back sealed (`AgentHeldTakeRequest`) and put on this PC
+    #: (`AgentHeldPutRequest`), each launch of his here then signed in with it.
     HELD_LOGINS = "held_logins"
+    #: A held login is signed in here: its CLI's long-lived token command run under a terminal
+    #: (`AgentProgramInstallRequest.held`); a PC that cannot run one still takes held logins (`HELD_LOGINS`).
+    HELD_SIGN_IN = "held_sign_in"
     #: A message its person sent is taken back (`AgentRetractRequest`): never read when still waiting, its turn stopped
     #: when read, the run's next turn told.
     MESSAGE_RETRACT = "agent_message_retract"

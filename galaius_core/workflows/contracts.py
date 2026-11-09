@@ -3262,7 +3262,7 @@ class AgentProgramInstallRequest(MachineAgentRequestBase):
     def content_features(self) -> frozenset[PcFeature]:
         if self.subscription_id is None:
             return frozenset()
-        return frozenset({PcFeature.SUBSCRIPTIONS, PcFeature.HELD_LOGINS} if self.held else {PcFeature.SUBSCRIPTIONS})
+        return frozenset({PcFeature.SUBSCRIPTIONS, PcFeature.HELD_SIGN_IN} if self.held else {PcFeature.SUBSCRIPTIONS})
 
 
 class AgentToolsRequest(MachineAgentRequestBase):
