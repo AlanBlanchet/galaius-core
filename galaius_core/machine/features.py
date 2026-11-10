@@ -95,6 +95,10 @@ class PcFeature(StrEnum):
     #: A conversation started here moves to another of its owner's PCs and stays the same one (`AgentExportRequest`,
     #: `AgentImportRequest`, `AgentReleaseRequest`).
     RUN_CARRY = "agent_run_carry"
+    #: Its conversations are held by the server, not by this PC: a copy taken between turns never stops its turns here
+    #: (`AgentExportRequest`), one whose CLI session is gone here is packed from its stream, and one arriving without its
+    #: session (`AgentImportRequest`) has it written from that stream at its next turn.
+    RUN_HOLD = "agent_run_hold"
 
 
 @dataclass(frozen=True, slots=True)

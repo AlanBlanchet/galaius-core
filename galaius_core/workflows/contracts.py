@@ -3995,8 +3995,9 @@ RUN_PACK_MAX_FILES = 2000
 
 
 class RunPack(WireModel):
-    """What carrying one conversation to another PC sends, measured before anything is sent: its files, their bytes,
-    and the id of its CLI session (the one its next turn there resumes)."""
+    """What one conversation's copy for the server holds, measured before anything is sent: its files, their bytes,
+    and the id of its CLI session (the one its next turn on any PC resumes; its files may be absent when its PC packs
+    it from its stream, `PcFeature.RUN_HOLD`)."""
 
     files: int = Field(ge=1, le=RUN_PACK_MAX_FILES)
     size: int = Field(ge=0, le=RUN_PACK_MAX_BYTES)
@@ -4021,28 +4022,30 @@ class CarriedRun(WireModel):
 
 
 class AgentExportRequest(MachineAgentRequestBase):
-    """Run `run_id`, started here and between turns, packed for another of its owner's PCs: answered at once with its
-    measure (`MachineAgentAnswer.carried`), its archive uploaded in the background under `transfer` as a folder copy's
-    is (`WorkspaceArchive`, ending with a `WorkspaceUpload`). The archive is a gzip'd tar of plain files: `run/<id>.*`
-    (its record, streams, messages and images) and `session/<path>` (its CLI session's files below that CLI's session
-    folder); never a credential, never a link. From then on no turn of it starts here until `AgentReleaseRequest`
-    says where it went. Refused `under_way` while it works or waits for its owner."""
+    """Run `run_id`, started here and between turns, copied for the server, which holds the conversation and places it
+    on any of its owner's PCs: answered at once with its measure (`MachineAgentAnswer.carried`), its archive uploaded in
+    the background under `transfer` as a folder copy's is (`WorkspaceArchive`, ending with a `WorkspaceUpload`). The
+    archive is a gzip'd tar of plain files: `run/<id>.*` (its record, streams, messages and images) and `session/<path>`
+    (its CLI session's files below that CLI's session folder, left out when they are gone here and its program writes
+    them again from its stream); never a credential, never a link. Its turns here go on as before: only a later
+    `AgentReleaseRequest` naming another PC ends them. Refused `under_way` while it works or waits for its owner."""
 
     op: Literal["agent_export"] = "agent_export"
     run_id: UUID
     transfer: UUID
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 60
-    feature: ClassVar[PcFeature] = PcFeature.RUN_CARRY
+    feature: ClassVar[PcFeature] = PcFeature.RUN_HOLD
 
 
 class AgentImportRequest(MachineAgentRequestBase):
-    """Conversation `run_id` taken from another PC's `AgentExportRequest` archive into the project folder `path`
-    beneath agent root `root` here, on this PC's own login of its CLI, its record built from `run` (`CarriedRun`),
-    listed here from then on, ended as it was; its next message resumes its CLI session. The archive is downloaded,
-    its digest checked, and refused `unsafe_archive` at any file outside `run/<run_id>.*` and the session `run` names,
-    or past `RUN_PACK_MAX_BYTES` / `_FILES`; nothing it holds is ever written over a file here. Refused `exists` when
-    this PC holds that run already, but as a carried copy it took before (taken again, replaced)."""
+    """Conversation `run_id` taken from the server's copy of it (an `AgentExportRequest` archive) into the project folder
+    `path` beneath agent root `root` here, on this PC's own login of its CLI, its record built from `run` (`CarriedRun`),
+    listed here from then on, ended as it was; its next message resumes its CLI session (written from its stream first
+    when the copy came without it). The archive is downloaded, its digest checked, and refused `unsafe_archive` at any
+    file outside `run/<run_id>.*` and the session `run` names, at a copy holding neither that session nor a stream its
+    program writes it from, or past `RUN_PACK_MAX_BYTES` / `_FILES`; nothing it holds is ever written over a file here.
+    Refused `exists` when this PC holds that run already, but as a carried copy it took before (taken again, replaced)."""
 
     op: Literal["agent_import"] = "agent_import"
     run_id: UUID
@@ -4052,12 +4055,11 @@ class AgentImportRequest(MachineAgentRequestBase):
     run: CarriedRun
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 120
-    feature: ClassVar[PcFeature] = PcFeature.RUN_CARRY
+    feature: ClassVar[PcFeature] = PcFeature.RUN_HOLD
 
 
 class AgentReleaseRequest(MachineAgentRequestBase):
-    """How the move `AgentExportRequest` began ended: `to` took conversation `run_id` (it is no longer listed here, its
-    files kept), or None: it did not, its turns start here again."""
+    """Conversation `run_id` now continues on `to` (it is no longer listed here, its files kept), or None: here again."""
 
     op: Literal["agent_release"] = "agent_release"
     run_id: UUID
