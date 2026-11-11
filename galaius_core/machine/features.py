@@ -102,6 +102,8 @@ class PcFeature(StrEnum):
     #: A message it took and could not hand its agent is named (`MachineAgentAnswer.failed_messages`), and a send carrying
     #: earlier ones (`AgentSendRequest.earlier`) queues them first, in order, each under its own id.
     MESSAGE_REPLAY = "agent_message_replay"
+    #: One model is switched on or off from the web (`AgentModelSwitchRequest`): one `models` entry of its agents.json.
+    MODEL_SWITCH = "agent_model_switch"
 
 
 @dataclass(frozen=True, slots=True)

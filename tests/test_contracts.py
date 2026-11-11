@@ -373,6 +373,23 @@ def test_a_place_is_a_plain_folder_path_below_the_working_directory(path: str, v
             MACHINE_AGENT_REQUESTS.validate_python(fields)
 
 
+@pytest.mark.parametrize(("model", "valid"), [
+    ("claude/claude-opus-5-5", True), ("anthropic/claude-opus-4.5", True), ("claude/vertex-x@20251101", True),
+    ("claude-opus-5-5", False), ("claude/", False), ("claude/../agents.json", False), ("claude/a/b", False), ("Claude/x", False), ("claude/x y", False),
+])
+def test_a_model_switch_writes_one_named_entry(model: str, valid: bool) -> None:
+    """His one click on a ranking row: one `<program>/<model>` entry, never a path or a second key (owner 2026-11-10 « Fable 5.2
+    just came out and i don't see it anywhere in here »)."""
+    fields = {"id": str(uuid4()), "machine": {"id": str(uuid4())}, "workspace_id": str(uuid4()), "initiator_account": str(uuid4()),
+              "expires_at": datetime.now(UTC).isoformat(), "signature": "0" * 64, "op": "model", "model": model, "active": True}
+    if valid:
+        request = MACHINE_AGENT_REQUESTS.validate_python(fields)
+        assert request.action and request.needs == {PcFeature.MODEL_SWITCH}
+    else:
+        with pytest.raises(ValidationError):
+            MACHINE_AGENT_REQUESTS.validate_python(fields)
+
+
 @pytest.mark.parametrize(("name", "valid"), [
     ("0b0532af5ed750b2c900.png", True), ("0b0532af5ed750b2c900.jpeg", True),
     ("../0b0532af5ed750b2c90.png", False), ("0b0532af5ed750b2c900/x.png", False), ("0b0532af5ed750b2c900.svg", False), ("shot.png", False), ("", False),

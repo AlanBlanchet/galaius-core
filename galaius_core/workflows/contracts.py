@@ -3438,6 +3438,23 @@ class AgentProviderSwitchRequest(MachineAgentRequestBase):
     feature: ClassVar[PcFeature] = PcFeature.AGENT_SETTINGS
 
 
+#: One model as a PC's `models` switches name it: `<program>/<model id>` (`claude/claude-opus-5-5`), never a path.
+SwitchedModel = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]*/[A-Za-z0-9][A-Za-z0-9_.:@+-]*$", max_length=MODEL_ID_MAX + 40)]
+
+
+class AgentModelSwitchRequest(MachineAgentRequestBase):
+    """Let one model run agents here, or stop it: ONE `models` entry of this PC's agents.json, written on its owner's click
+    (`<program>/<model id>`, as the launcher names it: `claude/claude-opus-5-5`). An earlier version switched off turns its
+    later ones off too; this entry, naming the model itself, decides for it. Writing a value is idempotent: a repeat
+    changes nothing more."""
+
+    op: Literal["model"] = "model"
+    model: SwitchedModel
+    active: bool
+    action: ClassVar[bool] = True
+    feature: ClassVar[PcFeature] = PcFeature.MODEL_SWITCH
+
+
 
 
 class PlacesRequest(MachineAgentRequestBase):
@@ -4314,7 +4331,7 @@ class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
-    | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
+    | AgentSettingsRequest | AgentProviderSwitchRequest | AgentModelSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentExportRequest | AgentImportRequest | AgentReleaseRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest

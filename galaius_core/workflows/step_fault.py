@@ -267,6 +267,17 @@ class PlatformUnpriced(StepFault):
     SAID: ClassVar[str] = "{model} has no price Galaius can bill, so it does not run on Galaius's {provider} key"
 
 
+class ModelSwitchedOff(StepFault):
+    """`model` is switched off on its owner's PC (`switch`: his `models` entry that turns it off, an earlier version of it
+    included): a step never runs it, pinned or chosen; only his click on its row turns it back on."""
+
+    status: ClassVar[int] = 409
+    code: Literal["model_switched_off"] = "model_switched_off"
+    model: str = Field(min_length=1, max_length=200)
+    switch: str = Field(min_length=1, max_length=200)
+    SAID: ClassVar[str] = "{model} is switched off on your PC ({switch}): turn it back on to run it"
+
+
 class NoModelPasses(StepFault):
     """No `task` model passes the step's choice (`criteria`, as its node states them; None: the choice names none)."""
 
@@ -478,7 +489,7 @@ class StorageFault(ReasonedFault):
 
 #: Why a step failed, one member per `code`.
 StepFaultCause = Annotated[VendorRefused | ProviderSilent | ProviderInvalid | EndpointRefused | NoSpeech | OutputLimit | JobTimeout
-                           | NothingReturned | ClipTooShort | ModelRetired | NoKey | InputFault | InputEmpty | NoRunner | PlatformUnpriced
+                           | NothingReturned | ClipTooShort | ModelRetired | NoKey | InputFault | InputEmpty | NoRunner | PlatformUnpriced | ModelSwitchedOff
                            | NoModelPasses | CriteriaInvalid | CriteriaMiswritten | MachineFault | MachineUnfit | CloudLaunch | PoolBudget | StepTimedOut
                            | ServerFault | StorageFault, Field(discriminator="code")]
 
