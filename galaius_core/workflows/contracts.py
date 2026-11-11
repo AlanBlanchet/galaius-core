@@ -3901,12 +3901,12 @@ class MachineWorkspaceJob(WireModel):
 
 
 #: The folder each PC keeps for projects put on it from the web, as a request names it: a token, never a path (the
-#: PC alone knows where it is, a hidden folder apart from its own settings and logins); the ":" keeps it apart from every
-#: `PlacePath`. Never an `agent_roots` or `places` entry: the web can neither add, move nor remove it.
+#: PC alone knows where it is, in its owner's home apart from its own settings and logins); the ":" keeps it apart from
+#: every `PlacePath`. Never an `agent_roots` or `places` entry: the web can neither add, move nor remove it.
 PROJECTS_ROOT = "galaius:projets"
-#: Where `PROJECTS_ROOT` is on each PC: this folder of its owner's home (`~/.galaius/projects`, on Windows
-#: `%USERPROFILE%\.galaius\projects`), whatever its working directory.
-PROJECTS_DIR = ".galaius/projects"
+#: Where `PROJECTS_ROOT` is on each PC: this folder of its owner's home (`~/galaius/projects`, on Windows
+#: `%USERPROFILE%\galaius\projects`), never derived from its working directory (a developer's `~/dev` is not a user's).
+PROJECTS_DIR = "galaius/projects"
 
 
 def _agent_root(value: str) -> str:

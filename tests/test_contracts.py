@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_DIR, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
+from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
 from pydantic import ValidationError
 from galaius_core.identity.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
@@ -495,7 +495,7 @@ def test_a_checkout_origin_is_reported_without_its_credentials(configured: str, 
 
 
 @pytest.mark.parametrize(("root", "named"), [
-    (PROJECTS_ROOT, True), ("galaius/projets", True), (PROJECTS_DIR, False), (".galaius/subscriptions", False),
+    (PROJECTS_ROOT, True), ("galaius/projets", True), (".galaius/projects", False), (".galaius/subscriptions", False),
     ("galaius:projets/../.galaius", False), ("galaius/../.galaius", False), ("other:projets", False),
 ])
 def test_a_request_names_the_projects_root_by_its_token_never_a_hidden_path(root: str, named: bool) -> None:
