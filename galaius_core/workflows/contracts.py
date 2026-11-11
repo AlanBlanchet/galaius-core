@@ -2549,6 +2549,8 @@ class MachineDataAnswer(WireModel):
 MACHINE_AGENT_TAIL = 256 * 1024
 #: How many of a run's read messages a `tail` answer names (`MachineAgentAnswer.read_messages`).
 MACHINE_AGENT_READ = 50
+#: How many earlier messages one send carries ahead of it (`AgentSendRequest.earlier`).
+MESSAGE_EARLIER_MAX = 20
 #: What an agent started from the web may do on a machine — the launcher's touch scopes
 #: (`galaius.agents.vocabulary.TouchScope`), set on the machine by its owner.
 AgentTouchScope = Literal["read_only", "workspace_write", "full_access"]
@@ -3048,16 +3050,42 @@ class AgentStartRequest(MachineAgentRequestBase, AgentStartSpec, SubscriptionCho
 ReadsAt = Literal["now", "next_step", "turn_end"]
 
 
+class EarlierMessage(WireModel):
+    """A message its person sent to a run that never reached its agent — its PC could not open the turn for it
+    (`MachineAgentAnswer.failed_messages`), or it never reached that PC in time — sent again under its own id, verbatim,
+    ahead of the message carrying it (`AgentSendRequest.earlier`). `text`: his words as the server keeps them, for a PC
+    that never got them; a PC that holds the message hands on its own record of it."""
+
+    id: UUID
+    text: str = ""
+
+
+class FailedMessage(WireModel):
+    """A message its PC took and could not hand its agent (`MachineAgentAnswer.failed_messages`): when, and the PC's reason."""
+
+    id: UUID
+    at: float = Field(ge=0)
+    detail: str = Field(default="", max_length=500)
+
+
 class AgentSendRequest(MachineAgentRequestBase, AgentMessageSpec, SubscriptionUse):
     """A message to one run. Its `id` is the message's id on both sides: the run's transcript keeps
     it, `MachineAgentAnswer.read_messages` names it once the agent has read it."""
 
     op: Literal["send"] = "send"
     run_id: UUID
+    #: Messages its person sent to this run that never reached its agent, oldest first: queued before this one, each under
+    #: its own id, so the agent reads them, in order, ahead of it. Asked only of a runner saying `PcFeature.MESSAGE_REPLAY`.
+    earlier: tuple[EarlierMessage, ...] = Field(default=(), max_length=MESSAGE_EARLIER_MAX, exclude_if=lambda value: not value)
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 75
     idempotent_feature: ClassVar[PcFeature | None] = PcFeature.SEND_ONCE
     idempotent_seconds: ClassVar[float] = 3600.0
+
+    @property
+    def content_features(self) -> frozenset[PcFeature]:
+        """Its message's, and `PcFeature.MESSAGE_REPLAY` when it carries `earlier` ones."""
+        return super().content_features | ({PcFeature.MESSAGE_REPLAY} if self.earlier else frozenset())
 
 
 #: Who stopped a run (`StopActor.kind`): a `person` pressing stop on the web, an `agent` (its role, its run), the PC's
@@ -4884,6 +4912,9 @@ class MachineAgentAnswer(WireModel):
     #: the turn running, or a turn opened on it — newest first. An older one drops off the list: an id
     #: missing here once seen is still read.
     read_messages: tuple[UUID, ...] = Field(default=(), max_length=MACHINE_AGENT_READ)
+    #: `tail`: the newest messages to that run its PC took and could not open a turn for (its resume refused), newest first;
+    #: `send`: the `earlier` ones it could not queue. Said by a runner saying `PcFeature.MESSAGE_REPLAY`.
+    failed_messages: tuple[FailedMessage, ...] = Field(default=(), max_length=MACHINE_AGENT_READ, exclude_if=lambda value: not value)
     detail: str = Field(default="", max_length=400)
     #: `send`: when the agent reads it (None: a PC too old to say).
     reads_at: ReadsAt | None = Field(default=None, exclude_if=lambda value: value is None)

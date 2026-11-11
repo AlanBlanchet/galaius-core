@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
+from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, EarlierMessage, FailedMessage, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
 from pydantic import ValidationError
 from galaius_core.identity.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
@@ -458,6 +458,13 @@ def test_a_message_says_words_or_shows_images_and_asks_a_runner_that_takes_them(
     # A conversation's own effort asks only a runner that honours it, and an unset one is never on the wire.
     assert AgentSendRequest(**fields, text="hi", reasoning="medium").needs == {AgentSendRequest.feature, PcFeature.AGENT_REASONING}
     assert "reasoning" not in AgentMessageSpec(text="hi").model_dump(mode="json")
+    # Earlier messages that never reached the agent ask only a runner that replays them; none is never on the wire.
+    earlier = (EarlierMessage(id=uuid4(), text="The price changed... Can you still find some others ?"),)
+    assert AgentSendRequest(**fields, text="plz", earlier=earlier).needs == {AgentSendRequest.feature, PcFeature.MESSAGE_REPLAY}
+    assert "earlier" not in AgentSendRequest(**fields, text="plz").model_dump(mode="json")
+    failed = MachineAgentAnswer(request_id=uuid4(), failed_messages=(FailedMessage(id=earlier[0].id, at=1.0, detail="resume refused"),))
+    assert MachineAgentAnswer.model_validate(failed.model_dump(mode="json")) == failed
+    assert "failed_messages" not in MachineAgentAnswer(request_id=uuid4()).model_dump(mode="json")
 
 
 @pytest.mark.parametrize(("url", "origin"), [

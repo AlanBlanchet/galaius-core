@@ -99,6 +99,9 @@ class PcFeature(StrEnum):
     #: (`AgentExportRequest`), one whose CLI session is gone here is packed from its stream, and one arriving without its
     #: session (`AgentImportRequest`) has it written from that stream at its next turn.
     RUN_HOLD = "agent_run_hold"
+    #: A message it took and could not hand its agent is named (`MachineAgentAnswer.failed_messages`), and a send carrying
+    #: earlier ones (`AgentSendRequest.earlier`) queues them first, in order, each under its own id.
+    MESSAGE_REPLAY = "agent_message_replay"
 
 
 @dataclass(frozen=True, slots=True)
