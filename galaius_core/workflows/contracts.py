@@ -21,8 +21,8 @@ from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, Propert
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
-from galaius_core.identity.providers import AgentProvider, MODEL_APIS
-from galaius_core.identity.subscriptions import LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
+from galaius_core.identity.providers import AGENT_PROGRAMS, AgentProvider, MODEL_APIS
+from galaius_core.identity.subscriptions import SUBSCRIPTIONS_PER_PC, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
 from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequirement, ScriptLanguage
 
 from galaius_core.community import CommunityEntryRef
@@ -4844,6 +4844,13 @@ class AgentRefused(Refused[AgentRefusals]):
     """An agent request a PC refuses (or this server for it), its reason one of `AgentRefusals`."""
 
 
+#: The program states one PC answers (`MachineAgentAnswer.providers`): each program's default login, then EVERY subscription
+#: folder it holds, whichever account's (`SUBSCRIPTIONS_PER_PC` each); a PC several accounts or test PCs share holds many.
+#: 2026-11-11: 11 programs + 14 folders on one PC passed the former 16, so its every programs read failed and each list
+#: of its owner waited on the PC for that failure.
+PROVIDER_STATES_MAX = len(AGENT_PROGRAMS) + 16 * SUBSCRIPTIONS_PER_PC
+
+
 class MachineAgentAnswer(WireModel):
     """The machine's answer to one MachineAgentRequest: `folders` a folder listing (`roots` and the
     startable `roles` when no root was named) plus the permission agents start with; `runs` the runs; `tail` raw stream lines
@@ -4884,7 +4891,7 @@ class MachineAgentAnswer(WireModel):
     retracted: RetractOutcome | None = Field(default=None, exclude_if=lambda value: value is None)
     #: `settings` / `programs` / `program_install`: the CLIs agents may run through here (and, for
     #: `settings`, each tool's model here).
-    providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=16)
+    providers: tuple[AgentProviderState, ...] = Field(default=(), max_length=PROVIDER_STATES_MAX)
     #: `held_take`: the held login, sealed to the request's `seal_key` (None: none held there).
     held: SealedHeld | None = Field(default=None, repr=False, exclude_if=lambda value: value is None)
     tool_models: tuple[ToolRoleModels, ...] = Field(default=(), max_length=16)

@@ -240,3 +240,17 @@ def test_a_text_read_from_a_line_start_is_a_person_s_ask_the_bytes_read_never_ta
 def test_a_project_file_refusal_travels_typed_in_a_machine_answer(reason: str) -> None:
     answer = MachineAgentAnswer(request_id=uuid4(), error="a sentence", refusal=refusal_of(ProjectFileRefused(reason, "a sentence")))
     assert MachineAgentAnswer.model_validate_json(answer.model_dump_json()).refusal == ProjectFileRefusal(reason=reason)
+
+
+def test_a_pc_answers_every_program_and_subscription_folder_it_holds() -> None:
+    """A PC lists each program's default login and EVERY subscription folder it holds, any account's: 11 programs + 14 folders
+    on one PC (2026-11-11) passed the former cap of 16, its every programs read failed and each list waited on it."""
+    from galaius_core import AGENT_PROGRAMS, SUBSCRIPTIONS_PER_PC, AgentProviderState
+    from galaius_core.workflows.contracts import PROVIDER_STATES_MAX
+    state = AgentProviderState(provider="claude", active=True, available=True)
+    shared = len(AGENT_PROGRAMS) + 3 * SUBSCRIPTIONS_PER_PC   # three accounts' subscriptions on one PC
+    assert PROVIDER_STATES_MAX >= shared
+    answer = MachineAgentAnswer(request_id=uuid4(), providers=(state,) * shared)
+    assert len(MachineAgentAnswer.model_validate_json(answer.model_dump_json()).providers) == shared
+    with pytest.raises(ValidationError):
+        MachineAgentAnswer(request_id=uuid4(), providers=(state,) * (PROVIDER_STATES_MAX + 1))
