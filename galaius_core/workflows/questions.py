@@ -6,8 +6,13 @@ coordinator — his entry point — asks him).
 Only a conversation's coordinator asks (a run no other run launched), only for a reason in `Criticality`; every other
 fork its agent decides, says in one line, and keeps working. A question stays open on its run until a message from the
 person carries its `answer_id`: his answer is sent under that id, so a retried tap is the same message and the card
-closes on the one that landed."""
+closes on the one that landed.
 
+Every card ends with his own words (« Autre », owner 2026-11-07: « I'd like a final choice, which is what I want … I could
+just manually type or speak »): no question refuses them. A question names what it is about and what each answer costs him
+(owner 2026-11-12: « You must make your questions more concret if you want something from me »)."""
+
+import re
 from typing import Annotated, Literal, Self, get_args
 from secrets import token_hex
 from time import time
@@ -23,6 +28,8 @@ CRITICALITIES: tuple[Criticality, ...] = get_args(Criticality)
 OPEN_MAX = 3
 #: How an option is named on its button and in his answer, in order.
 QUESTION_LETTERS = "ABCD"
+#: An internal id (a run, commit or question id): it names nothing he knows, so no question to him carries one.
+_INTERNAL_ID = re.compile(r"\b(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{7,}\b")
 #: Every answer id is derived in this namespace from its question's id (`OwnerQuestion.answer_id`).
 _ANSWERS = UUID("6f1c2a52-3b0e-4f43-9b39-6a9f1f7d2c11")
 
@@ -33,16 +40,18 @@ def _line(longest: int) -> type[str]:
 
 
 class QuestionOption(BaseModel):
-    """One answer he can tap: what it is, and what happens when he picks it."""
+    """One answer he can tap: what it is, what happens for him when he picks it, and what that costs him."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     label: _line(60)
     consequence: _line(160)
+    #: What picking it costs him, in time or money (« 2 min de coupure », « 0,15 $ », « rien »).
+    cost: _line(80)
 
 
 class QuestionAnswer(BaseModel):
-    """What he tapped: an option by its index, or his own words (`OwnerQuestion.allow_custom`) — exactly one."""
+    """What he tapped: an option by its index, or his own words (« Autre », on every card) — exactly one."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -63,12 +72,12 @@ class OwnerQuestion(BaseModel):
 
     id: str = Field(default_factory=lambda: token_hex(16), pattern=r"^[0-9a-f]{32}$")
     at: float = Field(default_factory=time)
+    #: What it is about, named as he knows it: the file, screen, server, account or amount it acts on.
+    subject: _line(120)
     question: _line(200)
     options: tuple[QuestionOption, ...] = Field(min_length=2, max_length=len(QUESTION_LETTERS))
     #: The option the agent would take, by index: marked on the card.
     recommended: int = Field(ge=0)
-    #: Whether he may answer in his own words (« Autre »).
-    allow_custom: bool = True
     criticality: Criticality
     #: Why this one cannot be decided without him, in one line.
     reason: _line(160)
@@ -79,6 +88,11 @@ class OwnerQuestion(BaseModel):
             raise ValueError(f"recommended names one of the {len(self.options)} options (0-based)")
         if len({option.label.casefold() for option in self.options}) != len(self.options):
             raise ValueError("each option has its own label")
+        if not self.question.endswith("?"):
+            raise ValueError("question asks one thing of him, ending with « ? »")
+        said = " ".join([self.subject, self.question, self.reason, *(f"{option.label} {option.consequence} {option.cost}" for option in self.options)])
+        if found := _INTERNAL_ID.search(said):
+            raise ValueError(f"« {found.group()} » is an internal id he does not know: name the thing itself (its file, screen, server or account)")
         return self
 
     @property
@@ -92,11 +106,9 @@ class OwnerQuestion(BaseModel):
 
     def answer_text(self, answer: QuestionAnswer) -> str:
         """His answer as the run reads it: which question, then the option he picked or his own words. Raises ValueError
-        for an option the question does not have, or his own words where it allows none."""
+        for an option the question does not have."""
         asked = f"[question {self.short}] « {self.question} » →"
         if answer.text is not None:
-            if not self.allow_custom:
-                raise ValueError("this question takes one of its options only")
             return f"{asked} « {answer.text} »"
         if answer.option is None or answer.option >= len(self.options):
             raise ValueError(f"this question has {len(self.options)} options")
