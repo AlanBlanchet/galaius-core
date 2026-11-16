@@ -1631,6 +1631,10 @@ class AgentCatalogSnapshot(WireModel):
     paradigms: tuple[PromptRevision, ...]
     root_agent: AgentRevisionRef | None = None
     prompt_heads: tuple[PromptExecutionRef, ...] = ()
+    #: The agent programs (`AGENT_PROGRAMS`) that run none of the workspace's agents, on every PC: owner 2026-11-16 « the
+    #: rules should be online, not local ! ». A program not named runs agents wherever it is signed in. Left out of a
+    #: dump when empty, so a catalog nobody switched anything off in keeps its cursor.
+    programs_off: tuple[AgentProvider, ...] = ()
     cursor: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_serializer(mode="wrap")
@@ -1647,11 +1651,12 @@ class AgentCatalogSnapshot(WireModel):
     @classmethod
     def create(cls, agents: tuple[AgentRevision, ...], paradigms: tuple[PromptRevision, ...],
                root_agent: AgentRevisionRef | None = None,
-               prompt_heads: tuple[PromptExecutionRef, ...] = ()):
+               prompt_heads: tuple[PromptExecutionRef, ...] = (), programs_off: tuple[str, ...] = ()):
         agents = tuple(sorted(agents, key=lambda item: str(item.id)))
         paradigms = tuple(sorted(paradigms, key=lambda item: (item.key.namespace, item.key.slug, item.digest)))
         prompt_heads = tuple(sorted(prompt_heads, key=lambda item: (item.key.namespace, item.key.slug)))
-        content = {"agents": agents, "paradigms": paradigms, "root_agent": root_agent, "prompt_heads": prompt_heads}
+        content = {"agents": agents, "paradigms": paradigms, "root_agent": root_agent, "prompt_heads": prompt_heads,
+                   "programs_off": tuple(sorted(set(programs_off)))}
         sealed = cls.model_construct(**content, cursor="").model_dump(mode="json", exclude_defaults=True)
         return cls(**content, cursor=cls.content_cursor(sealed))
 
@@ -1661,7 +1666,7 @@ class AgentCatalogSnapshot(WireModel):
         root and empty prompt heads left out. What is sent is what is sealed (`canonical_content`);
         a projection for an older reader reseals what it sends (`projected`)."""
         payload = {key: value for key, value in content.items() if key != "cursor"
-                   and not (key == "root_agent" and value is None) and not (key == "prompt_heads" and not value)}
+                   and not (key == "root_agent" and value is None) and not (key in ("prompt_heads", "programs_off") and not value)}
         return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
     @classmethod
@@ -1672,6 +1677,8 @@ class AgentCatalogSnapshot(WireModel):
     def coherent_snapshot(self) -> Self:
         if self.content_cursor(self.model_dump(mode="json", exclude_defaults=True)) != self.cursor:
             raise ValueError("agent catalog cursor does not match its content")
+        if list(self.programs_off) != sorted(set(self.programs_off)):
+            raise ValueError("agent catalog lists its switched-off programs once each, sorted")
         agents = {agent.id: agent for agent in self.agents}
         if self.root_agent is not None:
             root = agents.get(self.root_agent.id)
@@ -3431,16 +3438,6 @@ class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
     feature: ClassVar[PcFeature] = PcFeature.SUBSCRIPTIONS
 
 
-class AgentProviderSwitchRequest(MachineAgentRequestBase):
-    """Let one CLI run agents here, or stop it (VS Code: "Providers That Run Agents")."""
-
-    op: Literal["provider"] = "provider"
-    provider: AgentProvider
-    active: bool
-    action: ClassVar[bool] = True
-    feature: ClassVar[PcFeature] = PcFeature.AGENT_SETTINGS
-
-
 class PlacesRequest(MachineAgentRequestBase):
     """The levels, pending widenings, browse switch and fence of this PC."""
 
@@ -4315,7 +4312,7 @@ class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
-    | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
+    | AgentSettingsRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentExportRequest | AgentImportRequest | AgentReleaseRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest

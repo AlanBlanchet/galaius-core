@@ -116,6 +116,14 @@ def test_agent_catalog_is_complete_verifiable_and_rejects_broken_reporting() -> 
     # Existing caches remain readable; new roots and authoritative heads enter the digest.
     legacy = snapshot.model_dump(mode="json", exclude={"root_agent", "prompt_heads"})
     assert AgentCatalogSnapshot.model_validate(legacy) == snapshot
+    # Owner 2026-11-16 « the rules should be online, not local ! »: the programs running none of the workspace's agents are
+    # part of the catalog every PC reads; none switched off leaves the cursor as it was, one switched off moves it.
+    assert "programs_off" not in snapshot.model_dump(mode="json")
+    off = AgentCatalogSnapshot.create((lead, child), (prompt,), programs_off=("codex", "codex"))
+    assert off.programs_off == ("codex",) and off.cursor != snapshot.cursor
+    assert AgentCatalogSnapshot.model_validate_json(off.model_dump_json()) == off
+    with pytest.raises(ValidationError):
+        AgentCatalogSnapshot.create((lead, child), (prompt,), programs_off=("no-such-program",))
     rooted = AgentCatalogSnapshot.create((lead, child), (prompt,),
         AgentRevisionRef(id=lead.id, revision=lead.revision), (reference,))
     assert rooted.cursor != snapshot.cursor
