@@ -17,7 +17,7 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Fie
 
 from galaius_core.billing.cost import NodeCostActual, RunCostActual
 from galaius_core.billing.tokens import TokenCounts
-from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, PropertyKind, ModelComparator, format_criteria, format_criteria_weights
+from galaius_core.models.criteria import CriteriaClause, CriteriaWeight, ModelRelation, PropertyKind, ModelComparator, format_criteria, format_criteria_weights
 from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
@@ -1545,6 +1545,9 @@ class AgentRevision(WireModel):
     model: ConfiguredModelRef | None = None
     criteria: str | None = Field(default=None, min_length=1, max_length=2048)
     criteria_weights: str = Field(default="", max_length=2048)
+    #: How its model choice trades the ranked measure against price and further measures (`ModelRelation`): the online
+    #: record every PC ranks by. The default is left out of a dump.
+    relation: ModelRelation = Field(default_factory=ModelRelation, exclude_if=lambda value: value == ModelRelation())
     resources: tuple[ConnectionResourceRef, ...] = Field(max_length=32)
     capabilities: tuple[AgentCapability, ...] = Field(default=(), max_length=1000)
     #: The MCP servers this agent is connected to, each with its tool switches (`McpBinding`).

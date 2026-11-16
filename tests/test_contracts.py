@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from typing import get_args
 
-from galaius_core import MACHINE_AGENT_REQUESTS, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, EarlierMessage, FailedMessage, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
+from galaius_core import ModelRelation, RelationCriterion, MACHINE_AGENT_REQUESTS, PROJECTS_ROOT, AgentCompactRequest, ContextGauge, TranscriptItem, MachineAgentAnswer, WorkspacePrepareRequest, WorkspaceSpec, AgentMedia, media_key, media_paths, GitRemote, MachineAgentSettings, MachineAgentSettingsChange, ModelChoice, ModelImplementation, ModelTask, format_criteria, model_task_ports, parse_criteria, AGENT_IMAGE_BYTES, AGENT_IMAGES_MAX, AgentMessageSpec, AgentSendRequest, EarlierMessage, FailedMessage, MEDIA_KEY, MACHINE_AGENT_MEDIA, KEPT_FILE_MAX
 from pydantic import ValidationError
 from galaius_core.identity.sealing import SecretsSeal
 from galaius_core.wire import fitted, internals, internals_from, readable
@@ -941,3 +941,15 @@ def test_a_machine_answer_carries_one_typed_refusal_of_any_kind(refusal):
     assert "refusal" not in MachineAgentAnswer(request_id=answer.request_id).model_dump(mode="json")
     older = MachineAgentAnswer.model_validate({"request_id": str(uuid4()), "error": "full", "code": "web_full", "subscription_refusal": {"reason": "lent"}})
     assert older.refusal is None and older.model_extra == {"code": "web_full", "subscription_refusal": {"reason": "lent"}}
+
+
+def test_a_role_record_carries_its_model_relation_and_leaves_the_default_out() -> None:
+    """Owner 2026-11-16 « the rules should be online, not local ! »: the cost / further-measure weights of a role's model
+    choice live on its online record; a record without them reads the default, which a dump leaves out."""
+    relation = ModelRelation(cost=6, criteria=(RelationCriterion(name="aa.output_speed", weight=0.2),))
+    assert ModelRelation.model_validate(relation.model_dump()) == relation
+    assert "relation" not in ModelRelation.model_fields or ModelRelation().model_dump() == {"cost": 3.5, "criteria": ()}
+    with pytest.raises(ValidationError):
+        ModelRelation(cost=21)
+    with pytest.raises(ValidationError):
+        RelationCriterion(name="speed", weight=0.5)

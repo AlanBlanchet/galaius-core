@@ -170,3 +170,36 @@ def parse_criteria_weights(text: str, benchmark_names: set[str] | None = None) -
     if total <= 0:
         raise CriteriaError("criteria weights must have a positive total")
     return {name: value / total for name, value in weights.items()}
+
+
+#: The most index points one doubling of a model's price may have to buy (`ModelRelation.cost`).
+RELATION_COST_MAX = 20.0
+
+
+class RelationCriterion(WireModel):
+    """One more measure a role weighs beside its ranked one (`speed`, `context`, …): its points out of 100 of the
+    measure's range, times `weight`, add to a model's value. `name` is a rankable measure of the criteria vocabulary
+    (`aa.output_speed`), checked where the record is saved."""
+
+    name: CriteriaName = Field(pattern=r"^[a-z][a-z0-9_]*\.[a-z0-9_.-]+$")
+    #: 0: ignored; 1: one point of it counts as much as one point of the ranked measure.
+    weight: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class ModelRelation(WireModel):
+    """How a role trades its ranked measure against price, and any further measure: the sliders of its model choice.
+
+    value = score + Σ criterion.weight × criterion points − cost × log2(price / cheapest price in the pool)
+
+    The highest value runs first; no model is ever left out by it. `cost`: the index points one doubling of the price
+    must buy (0: the best score at any price; the default 3.5 ≈ 2 points per 1.5× the price)."""
+
+    cost: float = Field(default=3.5, ge=0, le=RELATION_COST_MAX, allow_inf_nan=False)
+    criteria: tuple[RelationCriterion, ...] = Field(default=(), max_length=16)
+
+    @model_validator(mode="after")
+    def one_weight_per_measure(self) -> Self:
+        names = [criterion.name for criterion in self.criteria]
+        if len(set(names)) != len(names):
+            raise ValueError("a relation weighs each measure once")
+        return self
