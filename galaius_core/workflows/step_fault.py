@@ -268,14 +268,15 @@ class PlatformUnpriced(StepFault):
 
 
 class ModelSwitchedOff(StepFault):
-    """`model` is switched off on its owner's PC (`switch`: his `models` entry that turns it off, an earlier version of it
-    included): a step never runs it, pinned or chosen; only his click on its row turns it back on."""
+    """A step refused because `model` was switched off on its owner's PC (`switch`: the `models` entry that did it), as
+    recorded by a galaius before 2026-11-16. No model is switched off any more (owner « no hardcoding / deactivating
+    models »): nothing produces this fault; it stays so the steps that recorded it still read."""
 
     status: ClassVar[int] = 409
     code: Literal["model_switched_off"] = "model_switched_off"
     model: str = Field(min_length=1, max_length=200)
     switch: str = Field(min_length=1, max_length=200)
-    SAID: ClassVar[str] = "{model} is switched off on your PC ({switch}): turn it back on to run it"
+    SAID: ClassVar[str] = "{model} was switched off on your PC ({switch}); models are no longer switched off: run it again"
 
 
 class NoModelPasses(StepFault):
