@@ -3438,6 +3438,17 @@ class AgentAllowanceRequest(MachineAgentRequestBase, RunAllowance):
     feature: ClassVar[PcFeature] = PcFeature.SUBSCRIPTIONS
 
 
+class AgentProviderSwitchRequest(MachineAgentRequestBase):
+    """Let one CLI run agents here, or stop it. Retired: programs are switched for every PC of the workspace
+    (`AgentCatalogSnapshot.programs_off`); kept only while the live server still imports it, removed with its next release."""
+
+    op: Literal["provider"] = "provider"
+    provider: AgentProvider
+    active: bool
+    action: ClassVar[bool] = True
+    feature: ClassVar[PcFeature] = PcFeature.AGENT_SETTINGS
+
+
 class PlacesRequest(MachineAgentRequestBase):
     """The levels, pending widenings, browse switch and fence of this PC."""
 
@@ -4312,7 +4323,7 @@ class ScreenOpenRequest(MachineAgentRequestBase, ScreenOpenBody):
 MachineAgentRequest = Annotated[
     AgentFoldersRequest | AgentRunsRequest | AgentTailRequest | AgentStartRequest | AgentSendRequest | AgentStopRequest
     | AgentCompactRequest | AgentOptionsRequest | AgentAnswerRequest | AgentSessionsRequest | AgentContinueRequest | AgentLogsRequest
-    | AgentSettingsRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
+    | AgentSettingsRequest | AgentProviderSwitchRequest | PlacesRequest | PlaceLevelRequest | PlaceCancelRequest | PlaceBrowseRequest
     | PlaceReviewsRequest | PlaceReviewRequest | PlaceDiscardRequest | WorkspacePrepareRequest | WorkspaceCreateRequest | WorkspacePackRequest | WorkspacesRequest | AgentMediaRequest
     | AgentExportRequest | AgentImportRequest | AgentReleaseRequest
     | AgentProgramsRequest | AgentProgramInstallRequest | AgentSignOutRequest | AgentSignInCodeRequest | AgentAllowanceRequest | AgentMoveRequest
