@@ -3844,6 +3844,84 @@ class WorkspaceSkip(WireModel):
     examples: tuple[Annotated[str, Field(max_length=1024)], ...] = Field(default=(), max_length=WORKSPACE_SKIP_EXAMPLES)
 
 
+#: What one `RepoState` names at most of each list (the rest counted in its `*_more`).
+REPO_FILES_MAX = 200
+REPO_BRANCHES_MAX = 64
+#: How many repositories (the folder's own, then its submodules) a `FolderState` names.
+FOLDER_REPOS_MAX = 32
+GitSha = Annotated[str, Field(pattern=r"^[0-9a-f]{40,64}$")]
+
+
+#: Characters no name another PC reports may hold: controls, line separators, and the marks that reorder what a reader
+#: sees (threat review 2026-11-17 D1).
+UNSHOWN = frozenset({*map(chr, range(32)), "\x7f", "\x85", "\u2028", "\u2029", "\u061c", "\u200e", "\u200f", *map(chr, range(0x202A, 0x202F)), *map(chr, range(0x2066, 0x206A))})
+
+
+def _shown(value: str) -> str:
+    if UNSHOWN.intersection(value):
+        raise ValueError("a name another PC reports holds no control, line-separator or direction character")
+    return value
+
+
+def _repo_path(value: str) -> str:
+    if value.startswith("/") or "\\" in value or any(part in ("", ".", "..") for part in value.split("/")):
+        raise ValueError("a path in a repository is relative and has no empty, '.' or '..' part")
+    return _shown(value)
+
+
+#: A path inside one repository of a project folder as another PC reports it (threat review 2026-11-17 C4 / D1: it reaches
+#: a file read on this PC and an agent's card, so never absolute, never `..`, never a control character).
+RepoPath = Annotated[str, Field(min_length=1, max_length=1024), AfterValidator(_repo_path)]
+
+
+class ChangedFile(WireModel):
+    """A tracked file whose content differs from the commit checked out: its path in the repository and the sha256
+    of its bytes now (None: deleted)."""
+
+    path: RepoPath
+    digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class BranchTip(WireModel):
+    """One local branch and the commit it points at."""
+
+    name: Annotated[str, Field(min_length=1, max_length=255), AfterValidator(_shown)]
+    head: GitSha
+
+
+class RepoState(WireModel):
+    """One git repository of a project folder as its PC holds it: `path` below the folder ("" the folder itself, else a
+    submodule's), the branch checked out (None: detached), the commit checked out, its local branches, the repository
+    it comes from (credentials dropped), the tracked files changed and not committed, the files neither tracked nor
+    ignored. Each list names at most `REPO_FILES_MAX` / `REPO_BRANCHES_MAX`, the rest counted in its `*_more`."""
+
+    path: Literal[""] | RepoPath = ""
+    branch: Annotated[str, Field(max_length=255), AfterValidator(_shown)] | None = None
+    head: GitSha | None = None
+    origin: GitRemote | None = None
+    branches: tuple[BranchTip, ...] = Field(default=(), max_length=REPO_BRANCHES_MAX)
+    branches_more: int = Field(default=0, ge=0)
+    changed: tuple[ChangedFile, ...] = Field(default=(), max_length=REPO_FILES_MAX)
+    changed_more: int = Field(default=0, ge=0)
+    untracked: tuple[RepoPath, ...] = Field(default=(), max_length=REPO_FILES_MAX)
+    untracked_more: int = Field(default=0, ge=0)
+    #: How its PC converts line ends (`core.autocrlf` as git reads it there): a copy keeps it, so a Windows checkout's
+    #: CRLF files read unchanged on the PC receiving it.
+    line_ends: Literal["true", "input", "false"] | None = None
+    #: An operation git left under way there (its state is never carried: the files show its conflicts as edits).
+    in_progress: Literal["merge", "rebase", "cherry-pick", "revert", "bisect"] | None = None
+
+
+class FolderState(WireModel):
+    """A project folder as PC `pc` held it at `at`: its git repositories (`repos`: the folder's own first, then its
+    submodules; empty when it is no git checkout or git does not run there). What a conversation moving to another PC
+    says it left behind (`CarriedRun.left`), and what a copy carried (`MachineWorkspaceJob.repos`)."""
+
+    pc: str = Field(min_length=1, max_length=80)
+    at: datetime
+    repos: tuple[RepoState, ...] = Field(default=(), max_length=FOLDER_REPOS_MAX)
+
+
 class WorkspacePack(WireModel):
     """What copying one folder of a PC sends, measured before anything is sent: its files and their
     bytes (within the copy limits, always), whether they are the git checkout's tracked files
@@ -3855,6 +3933,9 @@ class WorkspacePack(WireModel):
     tracked: bool
     origin: GitRemote | None = None
     skipped: tuple[WorkspaceSkip, ...] = Field(default=(), max_length=len(get_args(WorkspaceSkipReason)))
+    #: The folder's git repositories as they are now (its own, then its submodules'): a copy carries each one's history
+    #: on its checked-out branch, and its uncommitted work as its files are now.
+    repos: tuple[RepoState, ...] = Field(default=(), max_length=FOLDER_REPOS_MAX)
 
     @model_validator(mode="after")
     def one_per_reason(self) -> Self:
@@ -3927,6 +4008,9 @@ class MachineWorkspaceJob(WireModel):
     code: WorkspaceFailureCode | None = None
     done: int | None = Field(default=None, ge=0)
     total: int | None = Field(default=None, ge=0)
+    #: A ready copy's git repositories as they arrived (empty: it came without history: the PC it came from had none,
+    #: git does not run on one of the two, or the history did not fit the copy).
+    repos: tuple[RepoState, ...] = Field(default=(), max_length=FOLDER_REPOS_MAX)
 
     @model_validator(mode="after")
     def coherent(self) -> Self:
@@ -3995,6 +4079,9 @@ class WorkspaceCreateSpec(WorkspaceSpec):
 
     name: WorkspaceName
     copy_of: WorkspaceArchive | None = None
+    #: The copy was asked to carry its git history (`WorkspacePackRequest.history`): only then does the PC read the
+    #: archive's `.galaius-carried-git/` (threat review 2026-11-17 C1: never a repository's own folder of that name).
+    history: bool = False
 
 
 class WorkspaceCreateRequest(MachineAgentRequestBase, WorkspaceCreateSpec):
@@ -4013,6 +4100,9 @@ class WorkspacePackRequest(MachineAgentRequestBase):
     root: AgentRootPath
     path: FolderPath = ""
     transfer: UUID | None = None
+    #: The archive also carries each repository's history on its checked-out branch (`PcFeature.CARRIED_GIT`; asked only
+    #: of a copy for a PC that says it, an older one would write it out as files).
+    history: bool = False
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 60
     feature: ClassVar[PcFeature] = PcFeature.WORKSPACE_COPY
@@ -4039,6 +4129,8 @@ class RunPack(WireModel):
     files: int = Field(ge=1, le=RUN_PACK_MAX_FILES)
     size: int = Field(ge=0, le=RUN_PACK_MAX_BYTES)
     session: UUID
+    #: Its project folder on that PC as it is now, between turns: what a PC taking it later names as left there.
+    folder: FolderState | None = None
 
 
 class CarriedRun(WireModel):
@@ -4056,6 +4148,9 @@ class CarriedRun(WireModel):
     session: UUID
     moved_from: str = Field(min_length=1, max_length=80)
     moved_at: datetime
+    #: Its project folder on the PC it last ran on, as that PC packed it with its last copy (`RunPack.folder`): the
+    #: PC taking it tells its agents what stayed there. That PC's own claim, shown to agents only.
+    left: FolderState | None = None
 
 
 class AgentExportRequest(MachineAgentRequestBase):

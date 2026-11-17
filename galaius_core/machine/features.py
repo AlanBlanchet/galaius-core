@@ -102,6 +102,10 @@ class PcFeature(StrEnum):
     #: A message it took and could not hand its agent is named (`MachineAgentAnswer.failed_messages`), and a send carrying
     #: earlier ones (`AgentSendRequest.earlier`) queues them first, in order, each under its own id.
     MESSAGE_REPLAY = "agent_message_replay"
+    #: A project folder's copy carries its git history: the sending PC packs each repository's checked-out branch with its
+    #: files (`WorkspacePackRequest.history`), the receiving one makes it a git checkout again on that branch, its
+    #: uncommitted work as its files are; and a conversation's copy names its project folder there (`RunPack.folder`).
+    CARRIED_GIT = "carried_git"
 
 
 @dataclass(frozen=True, slots=True)
