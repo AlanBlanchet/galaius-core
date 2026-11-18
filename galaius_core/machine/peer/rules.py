@@ -32,3 +32,6 @@ BROKER_CONNECTIONS: Final = 16
 #: Seconds the source waits for the server, and (a start) for the target PC's answer.
 PEER_ANSWER_SECONDS: Final = 20.0
 PEER_START_SECONDS: Final = 60.0
+#: What may cross one PC's link in an hour, every class but a project copy (which has its own one-time cap): past it the peer calls of that PC answer
+#: `link_ceiling` until the hour moves on. His own web requests are never counted against it.
+LINK_CEILING_BYTES_PER_HOUR: Final = 50 * 1024 * 1024
