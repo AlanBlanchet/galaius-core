@@ -327,11 +327,11 @@ from galaius_core.machine.pool import (
 from galaius_core.machine.peer.placed import PEER_NOTICE, PlacedBy, peer_header
 from galaius_core.machine.peer.refusal import PeerRefusal, PeerRefusalCode
 from galaius_core.machine.peer.fleet import LinkTraffic, PcFleet, PcLinkState, PcProblem, PcState, TrafficClass
-from galaius_core.machine.peer.wire import PeerAnswer, PeerCall, PeerCallAny, PeerEnvelope, PeerEvents, PeerFleetCall, PeerHello, PeerKey, PeerMessage, PeerReply, PeerSealed, PeerSent, PeerStart, PeerStarted, PeerStop, PeerStopped, PeerWindow, RunRef
+from galaius_core.machine.peer.wire import PeerAnswer, PeerCall, PeerCallAny, PeerEnvelope, PeerEvents, PeerFleetCall, PeerHello, PeerKey, PeerMessage, PeerProject, PeerProjects, PeerProjectsCall, PeerReply, PeerSealed, PeerSent, PeerStart, PeerStarted, PeerStop, PeerStopped, PeerWindow, RunRef
 from galaius_core.machine.features import CONNECT_COMMAND, UPDATE_COMMAND, PcFeature, PcFeatures
 
 __all__ = [
-    "PcFeature", "PcFeatures", "PEER_NOTICE", "PlacedBy", "peer_header", "PeerRefusal", "PeerRefusalCode", "LinkTraffic", "PcFleet", "PcLinkState", "PcProblem", "PcState", "TrafficClass", "PeerAnswer", "PeerCall", "PeerCallAny", "PeerEnvelope", "PeerEvents", "PeerFleetCall", "PeerHello", "PeerKey", "PeerMessage", "PeerReply", "PeerSealed", "PeerSent", "PeerStart", "PeerStarted", "PeerStop", "PeerStopped", "PeerWindow", "RunRef", "UPDATE_COMMAND", "CONNECT_COMMAND", "Refused",
+    "PcFeature", "PcFeatures", "PEER_NOTICE", "PlacedBy", "peer_header", "PeerRefusal", "PeerRefusalCode", "LinkTraffic", "PcFleet", "PcLinkState", "PcProblem", "PcState", "TrafficClass", "PeerAnswer", "PeerCall", "PeerCallAny", "PeerEnvelope", "PeerEvents", "PeerFleetCall", "PeerHello", "PeerKey", "PeerMessage", "PeerProject", "PeerProjects", "PeerProjectsCall", "PeerReply", "PeerSealed", "PeerSent", "PeerStart", "PeerStarted", "PeerStop", "PeerStopped", "PeerWindow", "RunRef", "UPDATE_COMMAND", "CONNECT_COMMAND", "Refused",
     "TokenCounts",
     "MACHINE_TOOLS", "MachineToolName", "MachineToolPhase", "MachineToolSpec", "MachineToolState",
     "NOTIFICATION_STATUS_WORD", "STATUS_TEXT", "NotificationStatus", "StatusPlural", "StatusText", "StatusWord",

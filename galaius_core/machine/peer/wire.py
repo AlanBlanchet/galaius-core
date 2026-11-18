@@ -50,6 +50,10 @@ class PeerFleetCall(PeerCall):
     kind: Literal["peer_fleet"] = "peer_fleet"
 
 
+class PeerProjectsCall(PeerCall):
+    kind: Literal["peer_projects"] = "peer_projects"
+
+
 class PeerStart(PeerCall):
     kind: Literal["peer_start"] = "peer_start"
     key: PeerKey
@@ -86,7 +90,7 @@ class PeerStop(PeerCall):
     run_id: UUID
 
 
-PeerCallAny = Annotated[PeerFleetCall | PeerStart | PeerMessage | PeerEvents | PeerStop, Field(discriminator="kind")]
+PeerCallAny = Annotated[PeerFleetCall | PeerProjectsCall | PeerStart | PeerMessage | PeerEvents | PeerStop, Field(discriminator="kind")]
 
 
 class PeerEnvelope(WireRequest):
@@ -120,12 +124,24 @@ class PeerStopped(Kinded):
     replayed: bool = False
 
 
+class PeerProject(WireModel):
+    id: UUID
+    name: str = Field(max_length=200)
+
+
+class PeerProjects(Kinded):
+    """The projects its owner may use, by name: what `PeerStart.project` is chosen from."""
+
+    kind: Literal["peer_projects"] = "peer_projects"
+    projects: Annotated[tuple[PeerProject, ...], Field(max_length=200)] = ()
+
+
 class PeerWindow(Kinded):
     kind: Literal["peer_window"] = "peer_window"
     events: MachineRunEvents
 
 
-PeerAnswer = Annotated[PcFleet | PeerStarted | PeerSent | PeerStopped | PeerWindow, Field(discriminator="kind")]
+PeerAnswer = Annotated[PcFleet | PeerProjects | PeerStarted | PeerSent | PeerStopped | PeerWindow, Field(discriminator="kind")]
 
 
 class PeerReply(WireModel):

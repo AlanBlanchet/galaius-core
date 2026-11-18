@@ -3,13 +3,14 @@ from uuid import uuid4
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from galaius_core import (AgentStartSpec, PcFeature, PcFleet, PcState, PeerEnvelope, PeerEvents, PeerFleetCall, PeerHello, PeerMessage, PeerRefusal, PeerReply,
+from galaius_core import (AgentStartSpec, PcFeature, PcFleet, PcState, PeerEnvelope, PeerEvents, PeerFleetCall, PeerHello, PeerMessage, PeerProjectsCall, PeerRefusal, PeerReply,
                           PeerSent, PeerStart, PeerStop, PlacedBy, RunRef, peer_header)
 from galaius_core.machine.peer.rules import PEER_MESSAGE_MAX, PEER_TEXT_MAX
 
 RUN = RunRef(run_id=uuid4(), conversation_id=uuid4())
 CALLS = [
     PeerFleetCall(),
+    PeerProjectsCall(),
     PeerStart(key="a1", target=uuid4(), project=uuid4(), role="tester", text="judge branch x", by=RUN),
     PeerMessage(key="a2", machine=uuid4(), run_id=uuid4(), text="done", by=RUN, by_verified=True),
     PeerEvents(machine=uuid4(), run_id=uuid4(), cursor=0, wait_s=20),
