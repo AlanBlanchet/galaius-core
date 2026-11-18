@@ -186,3 +186,6 @@ class OperatorAuditEvent(WireModel):
     target_kind: AuditTargetKind
     target_id: UUID | None = None
     created_at: datetime
+    #: Set when a PC acted for the person (`actor_account_id` is its owner): the PC's id, and the run on it that asked as that PC claimed it (never a grant).
+    by_machine: UUID | None = Field(default=None, exclude_if=lambda value: value is None)
+    by_run: UUID | None = Field(default=None, exclude_if=lambda value: value is None)

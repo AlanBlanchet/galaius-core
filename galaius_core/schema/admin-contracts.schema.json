@@ -146,6 +146,32 @@
           "default": null,
           "title": "Actor Account Id"
         },
+        "by_machine": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "By Machine"
+        },
+        "by_run": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "By Run"
+        },
         "created_at": {
           "format": "date-time",
           "title": "Created At",
