@@ -123,6 +123,9 @@
             "machine_place.widening_withdrawn",
             "machine_place.review_discarded",
             "machine.access_set",
+            "machine.peer_start",
+            "machine.peer_switch",
+            "machine.peer_clear",
             "member.access_changed",
             "member.invited",
             "member.removed"

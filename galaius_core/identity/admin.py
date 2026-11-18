@@ -181,7 +181,7 @@ class OperatorAuditEvent(WireModel):
         "machine_agent.settings_changed", "machine_agent.workspace_prepared", "machine_agent.program_installed", "machine_agent.sign_in_code_handed", "machine_agent.held_taken", "machine_agent.held_put", "machine_agent.message_withdrawn", "machine_agent.subscription_signed_out", "machine_agent.allowance_given", "machine_agent.moved", "machine_agent.web_limit_changed",
         "project_secret.set", "project_secret.deleted", "project_secret.delivered",
         "machine_place.level_changed", "machine_place.widening_requested", "machine_place.widening_withdrawn", "machine_place.review_discarded",
-        "machine.access_set", "member.access_changed", "member.invited", "member.removed",
+        "machine.access_set", "machine.peer_start", "machine.peer_switch", "machine.peer_clear", "member.access_changed", "member.invited", "member.removed",
     ]
     target_kind: AuditTargetKind
     target_id: UUID | None = None
