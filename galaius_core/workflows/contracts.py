@@ -34,6 +34,7 @@ from galaius_core.tools.machine import MACHINE_TOOLS, MachineToolName, MachineTo
 from galaius_core.machine.screen import ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
 from galaius_core.machine.places import PlaceLevel, place_path, PlacePath, FolderPath, MachinePlaceChange, MachinePlaceEntry, MachinePlaceReview, MachinePlacesView
 from galaius_core.machine.features import PcFeature
+from galaius_core.machine.peer.placed import PlacedBy
 
 #: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
 #: PC capability's (`MACHINE_TOOLS`).
@@ -2830,13 +2831,19 @@ class AgentStartSpec(AgentMessageSpec):
     #: Hand the project's secrets (the server's vault) to this run, as the .env of its checkout; off
     #: unless asked for this start, so a run started without it has none to leak.
     with_secrets: bool = Field(default=False, exclude_if=lambda value: value is False)
+    #: The run starts inside the OS fence built for it even where the PC's own `fence_agents` is off, and never without one: a
+    #: PC that cannot build it refuses (`MachineAgentAnswer.fenced` says what it did). Set for a peer-placed run.
+    require_fence: bool = Field(default=False, exclude_if=lambda value: value is False)
+    #: Set only by the server, signed with the request: this run was placed by another PC of its owner (`PlacedBy`).
+    placed_by: PlacedBy | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @property
     def content_features(self) -> frozenset[PcFeature]:
         """A message's, and `PcFeature.START_PERMISSION` when it says what the run may do, `PcFeature.PROJECT_SECRETS` when it
-        names its project."""
+        names its project, `PcFeature.PEER_RUNS` when it is placed by another PC or asks a fence: a runner released before
+        keeps unknown fields and would start such a run unfenced, so the server never asks one that does not name it."""
         return super().content_features | {feature for feature, said in ((PcFeature.START_PERMISSION, self.permission), (PcFeature.PROJECT_SECRETS, self.project))
-                                           if said is not None}
+                                           if said is not None} | ({PcFeature.PEER_RUNS} if self.placed_by is not None or self.require_fence else set())
 
     @model_validator(mode="after")
     def role_for_an_agent(self) -> Self:

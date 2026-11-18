@@ -106,6 +106,11 @@ class PcFeature(StrEnum):
     #: files (`WorkspacePackRequest.history`), the receiving one makes it a git checkout again on that branch, its
     #: uncommitted work as its files are; and a conversation's copy names its project folder there (`RunPack.folder`).
     CARRIED_GIT = "carried_git"
+    #: It takes a run placed by another of its owner's PCs (`AgentStartSpec.placed_by`, `AgentStartSpec.require_fence`): builds the
+    #: run's own fence where `fence_agents` is off, and answers `MachineAgentAnswer.fenced`.
+    PEER_RUNS = "peer_runs"
+    #: Its runner sends the server `PeerEnvelope` calls on its channel and presents its `PeerHello` at each hello.
+    PEER_BROKER = "peer_broker"
 
 
 @dataclass(frozen=True, slots=True)
