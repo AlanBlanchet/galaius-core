@@ -31,6 +31,8 @@ class PeerHello(WireRequest):
 
     instance: UUID
     seal: str | None = Field(default=None, min_length=16, max_length=96)
+    #: This PC's owner switched peer runs off HERE (`galaius machine peer off`): the server latches its own switch off; only his web session turns it on.
+    off: bool = False
 
 
 class PeerSealed(WireModel):
