@@ -5006,6 +5006,8 @@ class MachineAgentAnswer(WireModel):
     #: With `runs`: its conversations started from the web working now and its maximum (None: a PC too old to say).
     web: WebLoad | None = None
     run_id: UUID | None = None
+    #: A start's answer: the run began inside the OS fence built for it (False: unfenced; None: a runner released before this said none).
+    fenced: bool | None = Field(default=None, exclude_if=lambda value: value is None)
     lines: tuple[str, ...] = Field(default=(), max_length=4000)
     cursor: int | None = Field(default=None, ge=0)
     #: `tail`: the newest messages to that run (`AgentSendRequest.id`) its agent has read — handed to
