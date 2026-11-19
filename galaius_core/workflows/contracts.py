@@ -2623,49 +2623,106 @@ def media_paths(text: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(match["double"] or match["single"] or match["bare"] for match in MEDIA_PATH.finditer(text)))
 
 
-#: Every file kept for a run and shown in its person's chat: what each file tool writes (`FILE_TOOL_REGISTRY`). Every file
-#: rule below is built from this table.
+#: The content types the file tools serve their own formats with: every file `FILE_TOOL_REGISTRY` writes. A file of any
+#: other suffix is kept and served all the same, as a download of `FILE_DEFAULT_TYPE`.
 FILE_TYPES: tuple[tuple[str, str], ...] = tuple(dict.fromkeys(row for tool in FILE_TOOL_REGISTRY for row in tool.writes))
 FILE_CONTENT_TYPES: dict[str, str] = dict(FILE_TYPES)
+FILE_DEFAULT_TYPE = "application/octet-stream"
 #: The agent tools whose answer names the files they kept (`file_token`): every one of `FILE_TOOL_REGISTRY`.
 FILE_TOOLS: frozenset[str] = frozenset(tool.tool for tool in FILE_TOOL_REGISTRY)
-_FILE_SUFFIX = "|".join(re.escape(suffix[1:]) for suffix, _ in FILE_TYPES)
-#: A run's kept file as the web names it: `file_key` of its bytes, kept by a file tool (`FILE_TOOLS`) for that run.
-FILE_KEY = rf"^[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})$"
-#: Any name a run's media goes by on the web: an image's (`MEDIA_KEY`) or a created file's (`FILE_KEY`).
+#: What follows a file's hash in its key: the plain suffix its name ends in, none at all when it has none. Any file is kept
+#: (an agent's, one handed over, one a person attached); no format is told apart from another here.
+_KEY_SUFFIX = r"(?:\.[a-z0-9]{1,16})?"
+#: A kept file as the web and the agents name it: `file_key` of its bytes. The same bytes, the same key, on every PC.
+FILE_KEY = rf"^[0-9a-f]{{20}}{_KEY_SUFFIX}$"
+#: Any name a run's media goes by on the web: an image's (`MEDIA_KEY`) or a kept file's (`FILE_KEY`).
 MEDIA_NAME = f"{MEDIA_KEY}|{FILE_KEY}"
+FileKey = Annotated[str, Field(pattern=FILE_KEY)]
 
 
 def media_kind(name: str) -> Literal["image", "file"] | None:
-    """What a run's media `name` names (`MEDIA_NAME`): an image, a created file; None for no name of either."""
+    """What a run's media `name` names (`MEDIA_NAME`): an image, a kept file; None for no name of either."""
     return "image" if re.fullmatch(MEDIA_KEY, name) else "file" if re.fullmatch(FILE_KEY, name) else None
+
+
+def file_content_type(key: str) -> str:
+    """The content type a kept file is served with: its format's when a file tool writes it, else `FILE_DEFAULT_TYPE`."""
+    return FILE_CONTENT_TYPES.get(PurePosixPath(key).suffix, FILE_DEFAULT_TYPE)
 
 
 #: How a kept file reaches the web: its file tool's own answer names it (`file_token`), never a step's input, so a
 #: refused call names nothing; the PC serves only the copy that tool kept under that key.
-FILE_TOKEN = re.compile(rf"\[galaius-file (?P<key>[0-9a-f]{{20}}\.(?:{_FILE_SUFFIX})) (?P<name>[^\]\n\r]{{1,200}})\]")
+FILE_TOKEN = re.compile(rf"\[galaius-file (?P<key>[0-9a-f]{{20}}{_KEY_SUFFIX}) (?P<name>[^\]\n\r]{{1,200}})\]")
+#: Who made a file a person attached to a conversation: no run, the person.
+OWNER_MAKER = "owner"
+#: Most source files one file's story names.
+FILE_SOURCES_MAX = 20
+_STORY_TOKEN = re.compile(rf"\[galaius-story (?P<key>[0-9a-f]{{20}}{_KEY_SUFFIX}) maker=(?P<maker>[0-9A-Za-z-]{{1,64}}) at=(?P<at>\d+(?:\.\d+)?)"
+                          rf"(?: from=(?P<sources>[0-9a-z.,]+))?(?: replaces=(?P<replaces>[0-9a-f]{{20}}{_KEY_SUFFIX}))?\]")
+
+
+class FileStory(WireModel):
+    """What a kept file's key carries with it, for every file alike: who made it (`maker`: a run id, `OWNER_MAKER` for a
+    file a person attached), from which kept files (`sources`) and in place of which (`replaces`) — both said by the agent
+    that made it, never read from a name — and when."""
+
+    maker: str = Field(min_length=1, max_length=64, pattern=r"^[0-9A-Za-z-]+$")
+    sources: tuple[FileKey, ...] = Field(default=(), max_length=FILE_SOURCES_MAX)
+    replaces: FileKey | None = None
+    at: float = Field(default=0.0, ge=0)
+
+
+class HandedFile(WireModel):
+    """A kept file as a message names it to the agent that reads it: its key, the name it is shown as, its story."""
+
+    key: FileKey
+    name: str = Field(min_length=1, max_length=200)
+    story: FileStory
 
 
 def file_key(content: bytes | Iterable[bytes], suffix: str) -> str:
-    """The name a kept file goes by on the web: sha256 of its bytes (given whole, or as its parts in order), plus its
-    format's suffix."""
-    if suffix not in FILE_CONTENT_TYPES:
-        raise ValueError("not a file kept for a run")
+    """The name a kept file goes by: sha256 of its bytes (given whole, or as its parts in order), plus its plain suffix
+    (`.docx`; "" for a file with none). ValueError: a suffix that is not plain."""
+    if not re.fullmatch(_KEY_SUFFIX, suffix):
+        raise ValueError(f"{suffix!r}: not a plain file suffix")
     digest = hashlib.sha256()
     for part in (content,) if isinstance(content, bytes) else content:
         digest.update(part)
     return digest.hexdigest()[:20] + suffix
 
 
-def file_token(key: str, name: str) -> str:
-    """The words a file tool's answer (`FILE_TOOLS`) carries for the file kept under `key` and shown as `name`."""
+def key_suffix(name: str) -> str:
+    """`name`'s suffix as a key keeps it: lowercased when plain (`.DOCX` -> `.docx`), "" when it has none or one that is not."""
+    suffix = PurePosixPath(name).suffix.lower()
+    return suffix if re.fullmatch(_KEY_SUFFIX, suffix) else ""
+
+
+def file_token(key: str, name: str, story: FileStory | None = None) -> str:
+    """The words a file tool's answer (`FILE_TOOLS`) carries for the file kept under `key` and shown as `name`, then
+    `story`'s own token when it has one."""
     shown = re.sub(r"[\]\n\r]", " ", name)[:200]
-    return f"[galaius-file {key} {shown}]"
+    token = f"[galaius-file {key} {shown}]"
+    if story is None:
+        return token
+    return f"{token} [galaius-story {key} maker={story.maker} at={story.at:.3f}" \
+           + (f" from={','.join(story.sources)}" if story.sources else "") + (f" replaces={story.replaces}" if story.replaces else "") + "]"
 
 
 def created_files(text: str) -> tuple[tuple[str, str], ...]:
     """The (key, name) of each file a file tool's answer names (`file_token`, `FILE_TOOLS`), in order, each once."""
     return tuple(dict.fromkeys((match["key"], match["name"]) for match in FILE_TOKEN.finditer(text)))
+
+
+def file_stories(text: str) -> dict[str, FileStory]:
+    """The story each file token in a file tool's answer carries (`file_token`), by key; a file with no story token has no entry."""
+    stories: dict[str, FileStory] = {}
+    for match in _STORY_TOKEN.finditer(text):
+        try:
+            stories.setdefault(match["key"], FileStory(maker=match["maker"], at=float(match["at"]), replaces=match["replaces"],
+                                                       sources=tuple((match["sources"] or "").split(",")) if match["sources"] else ()))
+        except ValidationError:
+            continue
+    return stories
 
 
 #: How a file tool's answer that wrote nothing opens (`FILE_TOOLS`), its reason after it: the chat words that call as
@@ -2741,7 +2798,7 @@ class AgentFile(MediaBytes):
     (`FILE_TYPES`), the whole file's `size`, and its bytes from `offset`: `MACHINE_AGENT_MEDIA` of them, fewer only
     for its last part. A file of at most `MACHINE_AGENT_MEDIA` bytes comes whole in one part."""
 
-    content_type: Literal[tuple(dict.fromkeys(FILE_CONTENT_TYPES.values()))]  # type: ignore[valid-type]
+    content_type: str = Field(pattern=r"^[a-z0-9][a-z0-9.+-]*/[a-z0-9][a-z0-9.+-]*$", max_length=127)
     offset: int = Field(default=0, ge=0)
     size: int = Field(ge=0, le=KEPT_FILE_MAX)
 
@@ -2756,7 +2813,7 @@ class AgentFile(MediaBytes):
     def of(cls, content: bytes, key: str, offset: int = 0, size: int | None = None) -> Self:
         """The part `content` from `offset` of the file kept under `key` (`FILE_KEY`), `size` bytes whole (None: `content`
         is the whole file), served as its key's format."""
-        return cls(content_type=FILE_CONTENT_TYPES[PurePosixPath(key).suffix], data=base64.b64encode(content).decode("ascii"), offset=offset,
+        return cls(content_type=file_content_type(key), data=base64.b64encode(content).decode("ascii"), offset=offset,
                    size=len(content) if size is None else size)
 
     @property
@@ -3697,11 +3754,13 @@ class TranscriptMedia(WireModel):
     label: str
     kind: Literal["image", "file"] = "image"
     src: str = ""
+    #: A file's story (`FileStory`), when its maker said it: the same fields for every file, whatever its format.
+    story: FileStory | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @classmethod
-    def file(cls, key: str, name: str, base: str) -> Self:
-        """The file create_file kept under `key`, shown as `name`, fetched at `base` + its key."""
-        return cls(name=key, label=name, kind="file", src=base + key)
+    def file(cls, key: str, name: str, base: str, story: FileStory | None = None) -> Self:
+        """The file a file tool kept under `key`, shown as `name`, fetched at `base` + its key."""
+        return cls(name=key, label=name, kind="file", src=base + key, story=story)
 
 
 class TranscriptItem(WireModel):

@@ -811,7 +811,7 @@ def test_a_created_file_reaches_the_web_only_by_its_answers_token_keyed_on_its_b
         assert refused_file(recorded) == "'.env': a path inside your working folder"
     assert (refused_file(answer), refused_file(json.dumps({"result": answer})), created_files(json.dumps({"result": answer}))) == (None, None, ((key, "summary  .docx"),))
     with pytest.raises(ValueError):
-        file_key(b"MZ", ".exe")
+        file_key(b"MZ", ".e/xe")
 
 
 def test_every_media_job_is_one_request_shape_and_its_tool_keeps_files_its_chat_shows():
@@ -961,3 +961,25 @@ def test_a_role_record_carries_its_model_relation_and_leaves_the_default_out() -
         ModelRelation(cost=21)
     with pytest.raises(ValidationError):
         RelationCriterion(name="speed", weight=0.5)
+
+
+@pytest.mark.parametrize("name", ["a.docx", "b.xlsx", "c.png", "d.mkv", "e.tar.gz", "f.blend", "g", "h.UNKNOWNFORMAT"])
+def test_every_file_goes_by_one_key_and_one_story_whatever_its_format(name) -> None:
+    """A file kept under its bytes' hash carries the same story for every format: no suffix is told apart, and the
+    story survives the token a tool's answer carries it in."""
+    from galaius_core import FILE_KEY, FileStory, TranscriptMedia, created_files, file_content_type, file_key, file_stories, file_token, key_suffix
+    key = file_key(name.encode(), key_suffix(name))
+    source = file_key(b"source", ".csv")
+    story = FileStory(maker="1f0e-run", sources=(source,), replaces=file_key(b"older", key_suffix(name)), at=5.0)
+    answer = file_token(key, name, story)
+    assert re.fullmatch(FILE_KEY, key) and created_files(answer) == ((key, name),) and file_stories(answer) == {key: story}
+    assert file_stories(file_token(key, name)) == {} and file_content_type(key)
+    card = TranscriptMedia.file(key, name, "/m/", story)
+    assert TranscriptMedia.model_validate_json(card.model_dump_json()).story == story
+
+
+def test_a_story_a_tool_answer_forges_is_refused_not_trusted() -> None:
+    from galaius_core import file_key, file_stories
+    key = file_key(b"x", ".txt")
+    assert file_stories(f"[galaius-story {key} maker=../etc at=1]") == {}
+    assert file_stories(f"[galaius-story {key} maker=run at=1 from={key},{key}")  == {}
