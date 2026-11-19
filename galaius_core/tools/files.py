@@ -21,3 +21,6 @@ CREATE_FILE_TYPES: tuple[tuple[str, str], ...] = (
     (".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
 )
 CREATE_FILE = FileTool(tool="create_file", writes=CREATE_FILE_TYPES)
+#: `keep_file`: a file an agent made any way it likes (a shell, a program on the PC, another tool) kept under its key. It writes
+#: nothing of its own, so it adds no format.
+KEEP_FILE = FileTool(tool="keep_file", writes=())

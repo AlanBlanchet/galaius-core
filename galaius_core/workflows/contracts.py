@@ -28,7 +28,7 @@ from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequ
 from galaius_core.community import CommunityEntryRef
 from galaius_core.workflows.run_state import RunRow, RunState, state_of
 from galaius_core.wire import Cause, Kinded, Reasoned, ReasonT, WireModel, WireRequest, members
-from galaius_core.tools.files import CREATE_FILE, CREATE_FILE_TYPES, FileTool
+from galaius_core.tools.files import CREATE_FILE, CREATE_FILE_TYPES, KEEP_FILE, FileTool
 from galaius_core.media import MEDIA_TOOLS
 from galaius_core.tools.machine import MACHINE_TOOLS, MachineToolName, MachineToolState
 from galaius_core.machine.screen import ScreenOpenBody, ScreenOpened, ScreenOpenRefusal, ScreenReadiness
@@ -36,9 +36,9 @@ from galaius_core.machine.places import PlaceLevel, place_path, PlacePath, Folde
 from galaius_core.machine.features import PcFeature
 from galaius_core.machine.peer.placed import PlacedBy
 
-#: Every agent tool that keeps files for its run, in one list: `create_file`, each media job's (`MEDIA_TOOLS`), then each
+#: Every agent tool that keeps files for its run, in one list: `create_file`, `keep_file`, each media job's (`MEDIA_TOOLS`), then each
 #: PC capability's (`MACHINE_TOOLS`).
-FILE_TOOL_REGISTRY: tuple[FileTool, ...] = (CREATE_FILE, *MEDIA_TOOLS.values(), *(tool for spec in MACHINE_TOOLS.values() for tool in spec.tools))
+FILE_TOOL_REGISTRY: tuple[FileTool, ...] = (CREATE_FILE, KEEP_FILE, *MEDIA_TOOLS.values(), *(tool for spec in MACHINE_TOOLS.values() for tool in spec.tools))
 
 ValueType = Literal["text", "number", "boolean", "json", "artifact", "image", "mask", "mesh", "boxes", "video", "audio", "any"]
 WorkflowValue = str | int | float | bool | dict[str, object] | list[object]
