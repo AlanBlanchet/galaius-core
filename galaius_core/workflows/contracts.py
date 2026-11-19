@@ -2640,8 +2640,11 @@ MEDIA_NAME = f"{MEDIA_KEY}|{FILE_KEY}"
 FileKey = Annotated[str, Field(pattern=FILE_KEY)]
 
 
-def media_kind(name: str) -> Literal["image", "file"] | None:
-    """What a run's media `name` names (`MEDIA_NAME`): an image, a kept file; None for no name of either."""
+def media_kind(name: str, kept: bool = False) -> Literal["image", "file"] | None:
+    """What a run's media `name` names (`MEDIA_NAME`): an image, a kept file; None for no name of either. A picture kept as a
+    file has the shape of both names: it is a file when `kept` says so (a card's own link does), else an image."""
+    if kept:
+        return "file" if re.fullmatch(FILE_KEY, name) else None
     return "image" if re.fullmatch(MEDIA_KEY, name) else "file" if re.fullmatch(FILE_KEY, name) else None
 
 
@@ -3006,11 +3009,15 @@ class AgentMediaRequest(MachineAgentRequestBase):
     name: str = Field(pattern=MEDIA_NAME)
     #: A kept file's part from this byte (0: its first); an image is always whole.
     offset: int = Field(default=0, ge=0, lt=KEPT_FILE_MAX, exclude_if=lambda value: value == 0)
+    #: `name` is a file a file tool kept (`FILE_KEY`), not an image: asked for a picture kept as a file, whose name an image's also is.
+    kept: bool = Field(default=False, exclude_if=lambda value: not value)
     feature: ClassVar[PcFeature] = PcFeature.AGENT_MEDIA
 
     @model_validator(mode="after")
     def parts_of_files(self) -> Self:
-        if self.offset and media_kind(self.name) != "file":
+        if self.kept and media_kind(self.name, True) is None:
+            raise ValueError("not a kept file's name")
+        if self.offset and media_kind(self.name, self.kept) != "file":
             raise ValueError("an image comes whole")
         return self
 
@@ -3760,7 +3767,7 @@ class TranscriptMedia(WireModel):
     @classmethod
     def file(cls, key: str, name: str, base: str, story: FileStory | None = None) -> Self:
         """The file a file tool kept under `key`, shown as `name`, fetched at `base` + its key."""
-        return cls(name=key, label=name, kind="file", src=base + key, story=story)
+        return cls(name=key, label=name, kind="file", src=f"{base}{key}?kept=1", story=story)
 
 
 class TranscriptItem(WireModel):
