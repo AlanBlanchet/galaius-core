@@ -3009,15 +3009,15 @@ class AgentMediaRequest(MachineAgentRequestBase):
     name: str = Field(pattern=MEDIA_NAME)
     #: A kept file's part from this byte (0: its first); an image is always whole.
     offset: int = Field(default=0, ge=0, lt=KEPT_FILE_MAX, exclude_if=lambda value: value == 0)
-    #: `name` is a file a file tool kept (`FILE_KEY`), not an image: asked for a picture kept as a file, whose name an image's also is.
-    kept: bool = Field(default=False, exclude_if=lambda value: not value)
+    #: `name` is a kept file (`FILE_KEY`), not an image: asked for a picture kept as a file, whose name an image's also is.
+    as_file: bool = Field(default=False, exclude_if=lambda value: not value)
     feature: ClassVar[PcFeature] = PcFeature.AGENT_MEDIA
 
     @model_validator(mode="after")
     def parts_of_files(self) -> Self:
-        if self.kept and media_kind(self.name, True) is None:
+        if self.as_file and media_kind(self.name, True) is None:
             raise ValueError("not a kept file's name")
-        if self.offset and media_kind(self.name, self.kept) != "file":
+        if self.offset and media_kind(self.name, self.as_file) != "file":
             raise ValueError("an image comes whole")
         return self
 
