@@ -73,6 +73,8 @@ class PcFeature(StrEnum):
     AGENT_REASONING = "agent_reasoning"
     #: The files its file tools kept for its runs are served in parts from any offset (`AgentFile`).
     AGENT_FILES = "agent_file_parts"
+    #: A message or a start names kept files by key (`AgentMessageSpec.files`): it pulls each from the server's relay and keeps it for the run.
+    AGENT_FILE_PULL = "agent_file_pull"
     #: It reports and installs `MACHINE_TOOLS`.
     MACHINE_TOOLS = "machine_tools"
     #: Its screen is watched, and driven, from the web (`ScreenDesk`).

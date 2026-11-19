@@ -983,3 +983,15 @@ def test_a_story_a_tool_answer_forges_is_refused_not_trusted() -> None:
     key = file_key(b"x", ".txt")
     assert file_stories(f"[galaius-story {key} maker=../etc at=1]") == {}
     assert file_stories(f"[galaius-story {key} maker=run at=1 from={key},{key}")  == {}
+
+
+def test_a_message_names_kept_files_by_key_and_asks_a_runner_that_pulls_them() -> None:
+    from galaius_core import PcFeature, AgentMessageSpec, AttachedFile, file_key
+    key = file_key(b"x", ".pdf")
+    spec = AgentMessageSpec(files=(AttachedFile(key=key, name="a b.pdf"),))  # a file alone is a message
+    assert spec.content_features == {PcFeature.AGENT_FILE_PULL} and "files" not in AgentMessageSpec(text="hi").model_dump(mode="json")
+    for name in ("a/b.pdf", "", "x\\y", "a\nb"):
+        with pytest.raises(ValidationError):
+            AttachedFile(key=key, name=name)
+    with pytest.raises(ValidationError):
+        AttachedFile(key="../../etc/passwd", name="x")

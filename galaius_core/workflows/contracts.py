@@ -2834,6 +2834,22 @@ AGENT_IMAGE_DATA = (AGENT_IMAGE_BYTES * 4) // 3 + 8
 AGENT_IMAGES_WIRE = AGENT_IMAGES_MAX * AGENT_IMAGE_DATA + 1024 * 1024
 
 
+#: The largest file a person attaches to a conversation, and how many one message carries.
+ATTACHED_FILE_MAX = 100 * 1024 * 1024
+ATTACHED_FILES_MAX = 10
+#: Where the server's relay keeps files by key for a company's PCs: a person's upload, a file one PC hands another. A PC reads it in
+#: parts of `MACHINE_AGENT_MEDIA` bytes at `offset`, under its own token (`FILE_RELAY_PART_ROUTE`); the person uploads at `FILE_UPLOAD_ROUTE`.
+FILE_UPLOAD_ROUTE = "/v1/workspaces/{workspace_id}/files"
+FILE_RELAY_PART_ROUTE = "/v1/machine/files/{key}"
+
+
+class AttachedFile(WireModel):
+    """A kept file a message names: its key (`file_key` of its bytes, already in the server's relay) and the name it is shown as."""
+
+    key: FileKey
+    name: str = Field(min_length=1, max_length=200, pattern=r"^[^/\\\x00-\x1f]+$")
+
+
 class PcContent(WireRequest):
     """A request part that may carry content a PC's runner needs a feature for (images, an effort): none unless it says so."""
 
@@ -2850,6 +2866,9 @@ class AgentMessageSpec(PcContent):
 
     text: str = Field(default="")
     images: tuple[AgentMedia, ...] = Field(default=(), max_length=AGENT_IMAGES_MAX, exclude_if=lambda value: not value)
+    #: Kept files he attached, by key (`AttachedFile`): the PC pulls each from the server's relay and keeps it for the run, as a file
+    #: it was handed by its maker "owner". Left out when empty; asked only of a runner saying `PcFeature.AGENT_FILE_PULL`.
+    files: tuple[AttachedFile, ...] = Field(default=(), max_length=ATTACHED_FILES_MAX, exclude_if=lambda value: not value)
     #: The effort this conversation runs at from this message on, over its role's (`AgentRevision.reasoning`); None: as it
     #: is. Asked only of a runner saying `PcFeature.AGENT_REASONING`.
     reasoning: ReasoningLevel | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -2858,12 +2877,13 @@ class AgentMessageSpec(PcContent):
     def content_features(self) -> frozenset[PcFeature]:
         """The runner features what it carries needs: `PcFeature.AGENT_IMAGES` when it shows images, `PcFeature.AGENT_REASONING`
         when it sets its conversation's effort."""
-        return frozenset({*((PcFeature.AGENT_IMAGES,) if self.images else ()), *((PcFeature.AGENT_REASONING,) if self.reasoning else ())})
+        return frozenset({*((PcFeature.AGENT_IMAGES,) if self.images else ()), *((PcFeature.AGENT_REASONING,) if self.reasoning else ()),
+                          *((PcFeature.AGENT_FILE_PULL,) if self.files else ())})
 
     @model_validator(mode="after")
     def said_or_shown(self) -> Self:
-        if not self.text.strip() and not self.images:
-            raise ValueError("a message says something or shows an image")
+        if not self.text.strip() and not self.images and not self.files:
+            raise ValueError("a message says something, shows an image or names a file")
         if any(len(image.data) > AGENT_IMAGE_DATA for image in self.images):
             raise ValueError(f"an image sent to an agent is at most {AGENT_IMAGE_BYTES // (1024 * 1024)} MiB")
         return self
@@ -3313,6 +3333,12 @@ class AgentContinueRequest(MachineAgentRequestBase, AgentMessageSpec, Subscripti
     session_id: UUID
     action: ClassVar[bool] = True
     seconds: ClassVar[float] = 135
+
+    @model_validator(mode="after")
+    def no_files_in_an_editor_copy(self) -> Self:
+        if self.files:
+            raise ValueError("a copy of an editor conversation takes no attached file")
+        return self
 
 
 class AgentLogsRequest(MachineAgentRequestBase):
