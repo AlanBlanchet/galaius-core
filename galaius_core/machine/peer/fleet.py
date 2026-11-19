@@ -22,6 +22,8 @@ class LinkTraffic(WireModel):
     per_hour_bytes: int = Field(ge=0)
     ceiling_per_hour_bytes: int = Field(ge=1)
     top_class: TrafficClass | None = None
+    #: Bytes of the last hour by class: what the idle traffic of a PC is made of.
+    by_class: dict[TrafficClass, int] = Field(default_factory=dict)
 
 
 class PcState(WireModel):
@@ -34,6 +36,8 @@ class PcState(WireModel):
     last_seen_at: datetime | None = None
     problem: PcProblem | None = None
     dispatchable: bool = False
+    #: Why it is not `dispatchable`, in one plain sentence (None when it is).
+    why_not: str | None = Field(default=None, max_length=200)
     runs_agents: bool | None = None
     peer_runs: bool | None = None
     peer_out: bool | None = None
