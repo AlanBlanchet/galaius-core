@@ -3,7 +3,7 @@
 A call is authored by a PC (an unknown field is refused). No call names a folder, a path outside a project, a model, an
 image or a secret: the server resolves the project to the target's folder and the target's own ranking picks the model."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -12,7 +12,7 @@ from galaius_core.machine.peer.fleet import PcFleet
 from galaius_core.machine.peer.refusal import PeerRefusal
 from galaius_core.machine.peer.rules import PEER_KEY_MAX, PEER_KEY_PATTERN, PEER_MESSAGE_MAX, PEER_TEXT_MAX
 from galaius_core.wire import Kinded, WireModel, WireRequest
-from galaius_core.workflows.contracts import AgentRole, AgentTouchScope, MachineRunEvents, ReasoningLevel
+from galaius_core.workflows.contracts import AgentRole, AgentTouchScope, HandedFile, MachineRunEvents, ReasoningLevel
 
 PeerKey = Annotated[str, Field(min_length=1, max_length=PEER_KEY_MAX, pattern=PEER_KEY_PATTERN)]
 ProjectPathBeneath = Annotated[str, Field(max_length=1024)]
@@ -75,6 +75,15 @@ class PeerMessage(PeerCall):
     machine: UUID
     run_id: UUID
     text: Annotated[str, Field(min_length=1, max_length=PEER_MESSAGE_MAX)]
+    #: Kept files of the calling run handed over by key (`HandedFile`): the server reads each from the source PC into its relay, the target PC pulls it
+    #: and keeps it for the run with this story. Needs `by` (the run that holds them).
+    files: tuple[HandedFile, ...] = Field(default=(), max_length=10, exclude_if=lambda value: not value)
+
+    @model_validator(mode="after")
+    def held_by_a_run(self) -> Self:
+        if self.files and self.by is None:
+            raise ValueError("files are handed by a run: name it in `by`")
+        return self
 
 
 class PeerEvents(PeerCall):

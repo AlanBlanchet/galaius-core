@@ -2673,6 +2673,8 @@ class FileStory(WireModel):
     sources: tuple[FileKey, ...] = Field(default=(), max_length=FILE_SOURCES_MAX)
     replaces: FileKey | None = None
     at: float = Field(default=0.0, ge=0)
+    #: The name of the PC that holds its bytes, set by the server where it shows a file; None where it does not know (a token never carries it).
+    machine: str | None = Field(default=None, max_length=120, exclude_if=lambda value: value is None)
 
 
 class HandedFile(WireModel):
@@ -2848,6 +2850,9 @@ class AttachedFile(WireModel):
 
     key: FileKey
     name: str = Field(min_length=1, max_length=200, pattern=r"^[^/\\\x00-\x1f]+$")
+    #: Set only by the server, for a file one PC of the company handed another (`PeerMessage.files`): its story as its maker's PC said it. A
+    #: person's attachment carries none (the PC keeps it as made by `OWNER_MAKER`), and the server refuses one from the web that does.
+    story: FileStory | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class PcContent(WireRequest):
