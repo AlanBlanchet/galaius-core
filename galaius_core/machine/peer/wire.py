@@ -3,7 +3,7 @@
 A call is authored by a PC (an unknown field is refused). No call names a folder, a path outside a project, a model, an
 image or a secret: the server resolves the project to the target's folder and the target's own ranking picks the model."""
 
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -76,14 +76,8 @@ class PeerMessage(PeerCall):
     run_id: UUID
     text: Annotated[str, Field(min_length=1, max_length=PEER_MESSAGE_MAX)]
     #: Kept files of the calling run handed over by key (`HandedFile`): the server reads each from the source PC into its relay, the target PC pulls it
-    #: and keeps it for the run with this story. Needs `by` (the run that holds them).
+    #: and keeps it for the run with this story. The server refuses files without `by` (the run that holds them).
     files: tuple[HandedFile, ...] = Field(default=(), max_length=10, exclude_if=lambda value: not value)
-
-    @model_validator(mode="after")
-    def held_by_a_run(self) -> Self:
-        if self.files and self.by is None:
-            raise ValueError("files are handed by a run: name it in `by`")
-        return self
 
 
 class PeerEvents(PeerCall):
