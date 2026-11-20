@@ -22,7 +22,7 @@ FETCHED_KINDS: frozenset[str] = frozenset({"npm", "pypi"})
 and an oci image needs a container socket: neither is started."""
 McpNeedVia = Literal["env", "header", "argument"]
 McpRoute = Literal["package", "remote"]
-McpBlock = Literal["needs_input", "no_route", "kind_not_fetched", "not_stdio", "host_refused", "record_unreadable", "program_shipped"]
+McpBlock = Literal["needs_input", "no_route", "kind_not_fetched", "not_stdio", "host_refused", "record_unreadable", "program_shipped", "start_not_package"]
 BLOCK_TEXT: dict[McpBlock, str] = {
     "needs_input": "needs a key or a setting only its user can give",
     "no_route": "its record names neither a package nor a hosted address",
@@ -30,6 +30,7 @@ BLOCK_TEXT: dict[McpBlock, str] = {
     "not_stdio": "its package is not a local program speaking over standard input",
     "host_refused": "its address is not an exact public host name Galaius may open",
     "record_unreadable": "part of its record could not be read",
+    "start_not_package": "its start is a program or a script, not a package: Galaius does not run one",
     "program_shipped": "it ships with an installed program, which it would control: found and shown, never started",
 }
 FOUND_BY = Literal["registry", "github-registry", "link", "program"]
@@ -159,9 +160,10 @@ class McpServerFacts(WireModel):
     @classmethod
     def made(cls, name: str, found_by: FOUND_BY, *, version: str = "", package: McpPackage | None = None, remote: str | None = None,
              needs: tuple[McpNeed, ...] = (), unread: bool = False, vouched: bool = False, first_published: datetime | None = None,
-             shipped: bool = False) -> "McpServerFacts":
+             shipped: bool = False, unpackaged: bool = False) -> "McpServerFacts":
         """The facts of a server from its parts, its route and what blocks it decided here (one place, whichever registry, link
-        or program the parts came from). `unread`: part of its record could not be read."""
+        or program the parts came from). `unread`: part of its record could not be read; `unpackaged`: its start is a command that
+        names no package (a script, a binary), which is never run."""
         host = https_host(remote)
         packaged = package is not None and package.kind in FETCHED_KINDS and package.stdio
         hosted = host is not None and not reserved_host(host)
@@ -169,7 +171,7 @@ class McpServerFacts(WireModel):
         blocked: list[McpBlock] = []
         if route is None:
             if package is None and remote is None:
-                blocked.append("no_route")
+                blocked.append("start_not_package" if unpackaged else "no_route")
             if package is not None and package.kind not in FETCHED_KINDS:
                 blocked.append("kind_not_fetched")
             if package is not None and package.kind in FETCHED_KINDS and not package.stdio:

@@ -58,6 +58,7 @@ def need(name="TOKEN", via="env", required=True):
     ({"remote": "https://127.0.0.1/mcp"}, None, ("host_refused",)),
     ({"package": McpPackage(kind="npm", identifier="a-b"), "shipped": True}, "package", ("program_shipped",)),
     ({"package": McpPackage(kind="npm", identifier="a-b"), "unread": True}, "package", ("record_unreadable",)),
+    ({"unpackaged": True}, None, ("start_not_package",)),                                                                       # a script or a binary is never run
 ])
 def test_what_blocks_a_server_is_decided_in_one_place(parts, route, blocked):
     facts = McpServerFacts.made("x/y", "registry", **parts)
