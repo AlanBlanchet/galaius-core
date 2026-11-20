@@ -33,6 +33,13 @@ def test_vendor_period_maps_to_nearest_window(minutes, window) -> None:
     assert UsageWindow.nearest(minutes) == window
 
 
+def test_every_pool_window_is_a_window_name_the_wire_accepts() -> None:
+    """One table: a family added to `POOL_WINDOWS` without its `UsageWindowName` would make every report carrying it raise."""
+    from typing import get_args
+    from galaius_core import POOL_WINDOWS, UsageWindowName
+    assert set(POOL_WINDOWS) <= set(get_args(UsageWindowName)) and set(UsageWindow.MINUTES) == set(get_args(UsageWindowName))
+
+
 def test_a_model_familys_pool_is_a_window_of_its_own_never_the_nearest_of_a_vendors_period() -> None:
     assert [UsageWindow(window=name, used_percent=1, observed_at=NOW).family for name in ("weekly", "five_hour", "weekly_fable", "weekly_opus", "weekly_sonnet")] == [None, None, "fable", "opus", "sonnet"]
     assert UsageWindow.nearest(10080) == "weekly"
