@@ -23,6 +23,7 @@ from uuid import UUID
 
 from pydantic import BeforeValidator, ConfigDict, Field, model_validator
 
+from galaius_core.tools.mcp_found import McpMatched, McpServerFacts
 from galaius_core.wire import WireModel, WireRequest
 
 CommunityKind = Literal["prompt", "agent", "skill", "mcp", "pipeline"]
@@ -126,6 +127,8 @@ class CommunityPrompt(WireModel):
     """Downloads of its package over the last month on its registry; None: no package."""
     source_updated_at: datetime | None = None
     """Its source's last change — its repository's last push, its package's last release — as last read; None: not read."""
+    server: McpServerFacts | None = None
+    """An MCP server's package, hosts, needs and whether it may be started (`McpServerFacts`); None: not read, or not a server."""
 
     @model_validator(mode="after")
     def screened_agents_only(self) -> "CommunityPrompt":
@@ -172,6 +175,8 @@ class CommunityPage(WireModel):
     entries: tuple[CommunityPrompt, ...]
     next: str | None
     sort: CommunitySort
+    matched: McpMatched | None = None
+    """An MCP search (`kind="mcp"`): how many servers its registry holds for the words, from how many publishers."""
 
 
 class CommunityQuery(WireRequest):

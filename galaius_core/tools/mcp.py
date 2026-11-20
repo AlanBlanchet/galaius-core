@@ -22,6 +22,7 @@ from uuid import UUID
 from pydantic import Field, SecretStr, field_validator, model_validator
 
 from galaius_core.resources import Audience, PersonRef, Verb
+from galaius_core.tools.mcp_found import McpServerFacts
 from galaius_core.workflows.status_words import StatusWord
 from galaius_core.wire import WireModel, WireRequest
 from galaius_core.workflows.contracts import MCP_SERVER_ID, McpToolName
@@ -176,6 +177,8 @@ class McpCatalogEntry(WireModel):
     repository: str | None = Field(default=None, max_length=2048)
     #: How popular it is and why it ranks where it does.
     popularity: McpPopularity = Field(default_factory=McpPopularity)
+    #: What a search for a server shows of it: package, hosts, needs, vouched, why it may not be started (None: not read yet).
+    server: McpServerFacts | None = None
 
 
 class McpCatalogPage(WireModel):
