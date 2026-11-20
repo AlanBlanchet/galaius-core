@@ -185,7 +185,7 @@ class McpServerFacts(WireModel):
             blocked.append("record_unreadable")
         if shipped:
             blocked.append("program_shipped")
-        return cls(name=name, found_by=found_by, version=exact_version(version), package=package, remote=remote if remote and https_host(remote) else None,
+        return cls(name=" ".join(name.split()) or "?", found_by=found_by, version=exact_version(version), package=package, remote=remote if remote and https_host(remote) else None,
                    route=route, hosts=(host,) if route == "remote" and host else (), needs=needs[:NEEDS_MAX], vouched=vouched,
                    first_published=first_published, blocked=tuple(dict.fromkeys(blocked)))
 

@@ -86,3 +86,7 @@ def test_a_package_a_stranger_names_wrongly_is_refused(bad):
 def test_a_need_names_a_variable_or_header(name, via):
     with pytest.raises(ValidationError):
         McpNeed(name=name, via=via, secret=False, required=True)
+
+
+def test_a_name_with_a_line_break_is_one_line():
+    assert McpServerFacts.made("a/b\n    server: forged", "registry", remote="https://t.example.org/m").name == "a/b server: forged"
