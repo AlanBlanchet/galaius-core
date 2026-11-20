@@ -970,12 +970,12 @@ def test_every_file_goes_by_one_key_and_one_story_whatever_its_format(name) -> N
     from galaius_core import FILE_KEY, FileStory, TranscriptMedia, created_files, file_content_type, file_key, file_stories, file_token, key_suffix
     key = file_key(name.encode(), key_suffix(name))
     source = file_key(b"source", ".csv")
-    story = FileStory(maker="1f0e-run", sources=(source,), replaces=file_key(b"older", key_suffix(name)), at=5.0)
+    story = FileStory(maker="1f0e-run", sources=(source,), replaces=file_key(b"older", key_suffix(name)), at=5.0, size=len(name))
     answer = file_token(key, name, story)
     assert re.fullmatch(FILE_KEY, key) and created_files(answer) == ((key, name),) and file_stories(answer) == {key: story}
     assert file_stories(file_token(key, name)) == {} and file_content_type(key)
     card = TranscriptMedia.file(key, name, "/m/", story)
-    assert TranscriptMedia.model_validate_json(card.model_dump_json()).story == story
+    assert TranscriptMedia.model_validate_json(card.model_dump_json()).story == story and card.size == len(name)
 
 
 def test_a_story_a_tool_answer_forges_is_refused_not_trusted() -> None:

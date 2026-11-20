@@ -2660,7 +2660,7 @@ FILE_TOKEN = re.compile(rf"\[galaius-file (?P<key>[0-9a-f]{{20}}{_KEY_SUFFIX}) (
 OWNER_MAKER = "owner"
 #: Most source files one file's story names.
 FILE_SOURCES_MAX = 20
-_STORY_TOKEN = re.compile(rf"\[galaius-story (?P<key>[0-9a-f]{{20}}{_KEY_SUFFIX}) maker=(?P<maker>[0-9A-Za-z-]{{1,64}}) at=(?P<at>\d+(?:\.\d+)?)"
+_STORY_TOKEN = re.compile(rf"\[galaius-story (?P<key>[0-9a-f]{{20}}{_KEY_SUFFIX}) maker=(?P<maker>[0-9A-Za-z-]{{1,64}}) at=(?P<at>\d+(?:\.\d+)?)(?: size=(?P<size>\d+))?"
                           rf"(?: from=(?P<sources>[0-9a-z.,]+))?(?: replaces=(?P<replaces>[0-9a-f]{{20}}{_KEY_SUFFIX}))?\]")
 
 
@@ -2673,6 +2673,8 @@ class FileStory(WireModel):
     sources: tuple[FileKey, ...] = Field(default=(), max_length=FILE_SOURCES_MAX)
     replaces: FileKey | None = None
     at: float = Field(default=0.0, ge=0)
+    #: Its size in bytes, as its maker's PC kept it; None where it did not say (a file kept before stories).
+    size: int | None = Field(default=None, ge=0, le=KEPT_FILE_MAX, exclude_if=lambda value: value is None)
     #: The name of the PC that holds its bytes, set by the server where it shows a file; None where it does not know (a token never carries it).
     machine: str | None = Field(default=None, max_length=120, exclude_if=lambda value: value is None)
 
@@ -2710,7 +2712,7 @@ def file_token(key: str, name: str, story: FileStory | None = None) -> str:
     if story is None:
         return token
     return f"{token} [galaius-story {key} maker={story.maker} at={story.at:.3f}" \
-           + (f" from={','.join(story.sources)}" if story.sources else "") + (f" replaces={story.replaces}" if story.replaces else "") + "]"
+           + (f" size={story.size}" if story.size is not None else "") + (f" from={','.join(story.sources)}" if story.sources else "") + (f" replaces={story.replaces}" if story.replaces else "") + "]"
 
 
 def created_files(text: str) -> tuple[tuple[str, str], ...]:
@@ -2723,7 +2725,7 @@ def file_stories(text: str) -> dict[str, FileStory]:
     stories: dict[str, FileStory] = {}
     for match in _STORY_TOKEN.finditer(text):
         try:
-            stories.setdefault(match["key"], FileStory(maker=match["maker"], at=float(match["at"]), replaces=match["replaces"],
+            stories.setdefault(match["key"], FileStory(maker=match["maker"], at=float(match["at"]), replaces=match["replaces"], size=None if match["size"] is None else int(match["size"]),
                                                        sources=tuple((match["sources"] or "").split(",")) if match["sources"] else ()))
         except ValidationError:
             continue
@@ -3794,11 +3796,13 @@ class TranscriptMedia(WireModel):
     src: str = ""
     #: A file's story (`FileStory`), when its maker said it: the same fields for every file, whatever its format.
     story: FileStory | None = Field(default=None, exclude_if=lambda value: value is None)
+    #: A file's size in bytes, when its story says it (`FileStory.size`); None otherwise.
+    size: int | None = Field(default=None, ge=0, exclude_if=lambda value: value is None)
 
     @classmethod
     def file(cls, key: str, name: str, base: str, story: FileStory | None = None) -> Self:
         """The file a file tool kept under `key`, shown as `name`, fetched at `base` + its key."""
-        return cls(name=key, label=name, kind="file", src=f"{base}{key}?kept=1", story=story)
+        return cls(name=key, label=name, kind="file", src=f"{base}{key}?kept=1", story=story, size=None if story is None else story.size)
 
 
 class TranscriptItem(WireModel):
