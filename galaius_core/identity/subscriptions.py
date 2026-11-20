@@ -15,7 +15,11 @@ from galaius_core.wire import Reasoned, ReasonT, WireModel, WireRequest
 SUBSCRIPTIONS_PER_PC = 8
 #: The usage periods a vendor meters a subscription over. A vendor's own token maps onto the nearest
 #: (`UsageWindow.nearest`): Claude `seven_day` is `weekly`, Codex `window_minutes: 10080` is `weekly`.
-UsageWindowName = Literal["five_hour", "weekly", "monthly"]
+UsageWindowName = Literal["five_hour", "weekly", "monthly", "weekly_fable", "weekly_opus", "weekly_sonnet"]
+#: The weekly pools a vendor meters per MODEL FAMILY beside the account's whole week (Claude Code: `seven_day_opus`, `seven_day_sonnet`,
+#: `seven_day_overage_included` = its « Fable limit »), as windows of their own: the family's token, per window name. A pool at its
+#: end shuts that family on that login only; the account's other windows (`weekly`) say nothing of it.
+POOL_WINDOWS: dict[str, str] = {"weekly_fable": "fable", "weekly_opus": "opus", "weekly_sonnet": "sonnet"}
 #: What a run does when its subscription reaches a cap: `finish` lets the current turn end and starts
 #: no new turn or session on it until the window drops; `cut` stops the run at that reading.
 AtCap = Literal["finish", "cut"]
@@ -30,12 +34,18 @@ class UsageWindow(WireModel):
     resets_at: datetime | None = None
     observed_at: datetime
 
-    MINUTES: ClassVar[dict[UsageWindowName, int]] = {"five_hour": 5 * 60, "weekly": 7 * 24 * 60, "monthly": 30 * 24 * 60}
+    MINUTES: ClassVar[dict[UsageWindowName, int]] = {"five_hour": 5 * 60, "weekly": 7 * 24 * 60, "monthly": 30 * 24 * 60,
+                                                    **{name: 7 * 24 * 60 for name in POOL_WINDOWS}}
+
+    @property
+    def family(self) -> str | None:
+        """The model family's token ("fable") when this is a family's own pool (`POOL_WINDOWS`), None for the account's windows."""
+        return POOL_WINDOWS.get(self.window)
 
     @classmethod
     def nearest(cls, minutes: float) -> UsageWindowName:
         """The window whose length is closest to `minutes` (a vendor naming its period by length)."""
-        return min(cls.MINUTES, key=lambda name: abs(cls.MINUTES[name] - minutes))
+        return min((name for name in cls.MINUTES if name not in POOL_WINDOWS), key=lambda name: abs(cls.MINUTES[name] - minutes))
 
 
 class SubscriptionCap(WireModel):

@@ -160,7 +160,7 @@ from galaius_core.identity.providers import (
 )
 from galaius_core.identity.subscriptions import (
     SUBSCRIPTIONS_PER_PC, AtCap, Lent, RunAllowance, RunSubscription, SubscriptionAllowance, SubscriptionCap, SubscriptionChoice, SubscriptionChoices, SubscriptionLimits,
-    SubscriptionRefusal, SubscriptionDeclined, CapReached, UsageLimited, SubscriptionRefusals, SubscriptionDeclinedReason, CapReachedReason, UsageLimitedReason, RunMove, LoginIdentity, LoginUsage, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName,
+    SubscriptionRefusal, SubscriptionDeclined, CapReached, UsageLimited, SubscriptionRefusals, SubscriptionDeclinedReason, CapReachedReason, UsageLimitedReason, RunMove, LoginIdentity, LoginUsage, SubscriptionUsage, SubscriptionUsageReport, SubscriptionUse, UsageWindow, UsageWindowName, POOL_WINDOWS,
 )
 from galaius_core.billing.tokens import TokenCounts
 from galaius_core.workflows.contracts import (
@@ -342,7 +342,7 @@ __all__ = [
     "MEDIA_INPUT_BYTES", "MEDIA_TOOLS", "MediaAnswer", "MediaFile", "MediaImage", "MediaKind", "MediaQuote", "MediaRequest", "MediaSpec", "Model3DSpec", "MusicSpec", "SoundSpec", "SpeechSpec", "TranslationSpec",
     "AGENT_PROGRAMS", "DEFAULT_PROGRAM", "KEY_HARNESS", "KeySignIn", "key_held", "MODEL_APIS", "PROVIDERS", "AgentProgram", "ApiKeyLogin", "HeldLoginForm", "LimitSignal", "ModelApi", "OnlineSignIn", "Provider", "ProviderCli", "ProviderId", "TermsRead", "TermsVerdict", "DeviceCodeSignIn", "PasteCodeSignIn", "SignIn", "program_name", "SUBSCRIPTIONS_PER_PC", "AtCap", "Lent", "RunAllowance", "RunSubscription", "SubscriptionAllowance", "SubscriptionCap", "SubscriptionChoice", "SubscriptionChoices", "SubscriptionLimits",
     "SubscriptionRefusal", "SubscriptionDeclined", "CapReached", "UsageLimited", "SubscriptionRefusals", "SubscriptionDeclinedReason", "CapReachedReason", "UsageLimitedReason", "RunMove", "LoginIdentity", "LoginUsage", "SubscriptionUsage", "SubscriptionUsageReport", "SubscriptionUse",
-    "UsageWindow", "UsageWindowName",
+    "UsageWindow", "UsageWindowName", "POOL_WINDOWS",
     "CHARGE_WORDS", "DEFAULT_MONTHLY_CAP_USD", "LOCAL_PROVIDERS", "ChargeKind", "PaidProviderSwitch", "PaidProviderUpdate", "PaidUseCapUpdate", "PaidUsePolicy", "Cause", "Caused", "FailureCause", "ClipTooShort", "CriteriaInvalid", "CriteriaMiswritten", "CriteriaReason", "EndpointReason", "EndpointRefused", "InputEmpty", "InputFault", "InputReason", "JobTimeout", "ModelRetired", "NoKey", "NoModelPasses", "NoRunner", "MachineFault", "MachineReason", "MachineUnfit", "OnMachine", "CloudLaunch", "CloudRefusal", "PoolBudget", "TimedOut", "StepTimedOut", "ServerFault", "ServerReason", "StorageFault", "StorageGrant", "StorageReason", "NoSpeech", "NothingReturned", "OutputLimit", "PlatformUnpriced", "ModelSwitchedOff", "ProviderInvalid", "ProviderSilent", "ReasonedFault", "Returned", "StepFault", "StepFaultCause", "VendorReason", "VendorRefused", "CapRefused", "MonthlyCapReached", "PaidUseOff", "PaidUseReason", "PaidUseRefused", "PaidUseRefusal", "PaidUseSpend", "TurnCapReached", "PaidUseState", "ProviderChargeState", "charge_kind", "charge_word", "month_start",
     "PortableToolSettings", "PortableToolSettingsUpdate", "PortableToolSettingsValues",
     "ToolUsageIngestRecord", "ToolUsageIngestRequest", "ToolUsageRecord",

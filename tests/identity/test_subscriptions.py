@@ -21,6 +21,7 @@ def usage(**percent: float) -> tuple[UsageWindow, ...]:
     (SubscriptionLimits(weekly_percent=80), usage(weekly=91), ("weekly", 90), ("weekly", 90, "finish")),
     (SubscriptionLimits(), usage(weekly=100), ("weekly", 90), None),  # an allowance never sets a cap
     (SubscriptionLimits(five_hour_percent=50, weekly_percent=80), usage(five_hour=60, weekly=85), ("weekly", 90), ("five_hour", 50, "finish")),  # nor raises another window's
+    (SubscriptionLimits(weekly_percent=80), usage(weekly=20, weekly_fable=100), None, None),  # a model family's own pool is never the account's week (2026-11-20, Fable at 100 %, week 66 %)
 ])
 def test_cap_reached_says_window_cap_and_mode(limits, windows, allowance, reached) -> None:
     cap = limits.reached(windows, allowance and SubscriptionAllowance(window=allowance[0], up_to_percent=allowance[1]))
@@ -30,6 +31,11 @@ def test_cap_reached_says_window_cap_and_mode(limits, windows, allowance, reache
 @pytest.mark.parametrize(("minutes", "window"), [(300, "five_hour"), (10080, "weekly"), (43200, "monthly"), (360, "five_hour")])
 def test_vendor_period_maps_to_nearest_window(minutes, window) -> None:
     assert UsageWindow.nearest(minutes) == window
+
+
+def test_a_model_familys_pool_is_a_window_of_its_own_never_the_nearest_of_a_vendors_period() -> None:
+    assert [UsageWindow(window=name, used_percent=1, observed_at=NOW).family for name in ("weekly", "five_hour", "weekly_fable", "weekly_opus", "weekly_sonnet")] == [None, None, "fable", "opus", "sonnet"]
+    assert UsageWindow.nearest(10080) == "weekly"
 
 
 @pytest.mark.parametrize(("model", "fields"), [(SubscriptionUse, {"limits": SubscriptionLimits()}), (SubscriptionUse, {"lent": True, "subscription_id": uuid4()}),

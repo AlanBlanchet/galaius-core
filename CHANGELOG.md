@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `UsageWindowName` gains `weekly_fable`, `weekly_opus`, `weekly_sonnet` (`POOL_WINDOWS`, `UsageWindow.family`): a model family's own weekly pool as a window
+  beside the account's week; `SubscriptionLimits` never caps it as the week, `UsageWindow.nearest` never picks it.
 - `AgentRevision.relations` (`AgentRelation`: caller role or `*`, callers one / many, callees one / per_project / many,
   `max_live`, derived `kind` 1-1 / 1-N / N-1 / N-N) replaces `AgentRevision.instances`: who may call a role and how many
   of its runs answer, every relation of a role keeping the same `callees`; `AgentRelation.answering` picks the relation a
