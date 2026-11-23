@@ -247,7 +247,10 @@ def _written_out(value: Any) -> Any:
 class WireModel(BaseModel):
     """A contract read from the other side: unknown fields are kept (see module docstring)."""
 
-    model_config = ConfigDict(extra="allow", frozen=True)
+    #: `defer_build`: a model's validator is built at its first validation, not at import. Some 500 contracts live here and
+    #: every galaius process (the CLI, each agent's MCP server, each Stop hook) imports them, most using a handful:
+    #: building them all at import was ~0.5 s of CPU per process (`tests/test_wire.py` pins the setting).
+    model_config = ConfigDict(extra="allow", frozen=True, defer_build=True)
 
     @model_validator(mode="before")
     @classmethod

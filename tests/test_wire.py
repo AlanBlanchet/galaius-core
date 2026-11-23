@@ -162,3 +162,10 @@ def test_catalog_hash_matches_wire_bytes_with_different_reader_writer_schemas(ne
         assert NewReader.model_validate(raw).cursor == snapshot.cursor
     # Sealing never takes over a caller's own dump options or the contract's schema.
     assert "cursor" not in snapshot.model_dump(exclude={"cursor"}) and "agents" in AgentCatalogSnapshot.model_json_schema(mode="serialization")["properties"]
+
+
+@pytest.mark.parametrize("model", contracts(WireModel), ids=lambda model: model.__qualname__)
+def test_a_contract_builds_its_validator_when_first_validated_not_at_import(model: type[BaseModel]) -> None:
+    """Every galaius process imports ~500 contracts and uses a handful: building them at import cost ~0.5 s of CPU each
+    (`WireModel.model_config`: `defer_build`), owner 2026-11-23 « it always feels laggy and slow »."""
+    assert model.model_config.get("defer_build") is True
