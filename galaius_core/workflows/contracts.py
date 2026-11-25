@@ -4722,14 +4722,15 @@ class ShutEntry(WireModel):
     """One thing that cannot run, with the instant it can be asked again: the unit the model walk reads (owner 2026-11-25 « we select the
     ones under it until we find one »). `model` names a model (`model` set) or every model of one family (`family`, a vendor's pool
     token); neither: every model of the login (a window, a signed-out login). `login` is the login's name as the owner sees it, never
-    its credentials. `until` is epoch seconds; `count` the refusals in a row that earned it."""
+    its credentials. `until` is epoch seconds, None for a lost login (no instant brings it back but a sign-in); `count` the refusals in
+    a row that earned it."""
 
     provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     login: str = Field(default="", max_length=120)
     model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
     family: str | None = Field(default=None, max_length=40)
     reason: ShutReason
-    until: float = Field(ge=0)
+    until: float | None = Field(default=None, ge=0)
     count: int = Field(default=1, ge=1)
 
 
