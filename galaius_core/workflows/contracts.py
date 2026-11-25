@@ -4712,6 +4712,52 @@ class PassedOverCandidate(WireModel):
     until: float | None = Field(default=None, ge=0)
 
 
+#: Why one (program, login, model) cannot take a turn now: a usage window or a model family's pool read as shut (`limit`, `pool`), the
+#: vendor's API overloaded (`overload`), the login signed out (`login_lost`), the vendor refusing this model to this login
+#: (`unsupported`), a conversation larger than the model's window (`context`).
+ShutReason = Literal["limit", "pool", "overload", "login_lost", "unsupported", "context"]
+
+
+class ShutEntry(WireModel):
+    """One thing that cannot run, with the instant it can be asked again: the unit the model walk reads (owner 2026-11-25 « we select the
+    ones under it until we find one »). `model` names a model (`model` set) or every model of one family (`family`, a vendor's pool
+    token); neither: every model of the login (a window, a signed-out login). `login` is the login's name as the owner sees it, never
+    its credentials. `until` is epoch seconds; `count` the refusals in a row that earned it."""
+
+    provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    login: str = Field(default="", max_length=120)
+    model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
+    family: str | None = Field(default=None, max_length=40)
+    reason: ShutReason
+    until: float = Field(ge=0)
+    count: int = Field(default=1, ge=1)
+
+
+#: What one row of an agent's model table is now, for the reader's logins: `now` the row the next start takes, `ready` open below it,
+#: `out` shut until `until` (its `reason` says why), `off` its program switched off by the owner, `signed_out` its login lost.
+TableRowState = Literal["now", "ready", "out", "off", "signed_out"]
+
+
+class TableRow(WireModel):
+    """One row of an agent's model table, in the order a start walks it: the server's list for (agent, reader), shown as it is
+    walked. `score` is the criterion's own measure for the row (`score_measure` names it), never a second ranking."""
+
+    rank: int = Field(ge=1)
+    provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    model: str = Field(max_length=MODEL_ID_MAX)
+    catalog_id: str | None = Field(default=None, max_length=MODEL_ID_MAX)
+    login: str = Field(default="", max_length=120)
+    score: float | None = None
+    score_measure: str | None = Field(default=None, max_length=80)
+    #: `subscription` rows cost a share of his week, `key` rows cash, `free` neither.
+    cost_mark: Literal["subscription", "key", "free"] | None = None
+    state: TableRowState
+    reason: ShutReason | None = None
+    until: float | None = Field(default=None, ge=0)
+    #: Why this row sits below the one above it, in the criterion's own words (the measure that put it there).
+    why_below: str | None = Field(default=None, max_length=200)
+
+
 class RunReplacement(WireModel):
     """The run that took over a launch its vendor refused before its first turn: a later run of the same role under the
     same launcher (same parent run, else same conversation). The refused run is no stop to continue, only a launch that
