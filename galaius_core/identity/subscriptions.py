@@ -299,6 +299,28 @@ class LoginUsage(LoginIdentity):
     windows: tuple[UsageWindow, ...] = Field(default=(), max_length=8)
 
 
+#: Why one (program, login, model) cannot take a turn now: a usage window or a model family's pool read as shut (`limit`, `pool`), the
+#: vendor's API overloaded (`overload`), the login signed out (`login_lost`), the vendor refusing this model to this login
+#: (`unsupported`), a conversation larger than the model's window (`context`).
+ShutReason = Literal["limit", "pool", "overload", "login_lost", "unsupported", "context"]
+
+
+class ShutEntry(WireModel):
+    """One thing that cannot run, with the instant it can be asked again: the unit the model walk reads (owner 2026-11-25 « we select the
+    ones under it until we find one »). `model` names a model (`model` set) or every model of one family (`family`, a vendor's pool
+    token); neither: every model of the login (a window, a signed-out login). `login` is the login's name as the owner sees it, never
+    its credentials. `until` is epoch seconds, None for a lost login (no instant brings it back but a sign-in); `count` the refusals in
+    a row that earned it."""
+
+    provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    login: str = Field(default="", max_length=120)
+    model: str | None = Field(default=None, max_length=120)
+    family: str | None = Field(default=None, max_length=40)
+    reason: ShutReason
+    until: float | None = Field(default=None, ge=0)
+    count: int = Field(default=1, ge=1)
+
+
 class SubscriptionUsageReport(WireModel):
     """What a PC pushes to its server when the usage of a subscription (`usage`) or of a program's default
     login (`logins`) moved (`due`)."""
@@ -307,6 +329,9 @@ class SubscriptionUsageReport(WireModel):
     usage: tuple[SubscriptionUsage, ...] = Field(default=(), max_length=64)
     #: One per agent program at most (`AGENT_PROGRAMS`: every provider row that runs agents, its key's included).
     logins: tuple[LoginUsage, ...] = Field(default=(), max_length=64)
+    #: What cannot run on this PC now (`ShutEntry`), every one standing: the server merges them per login across the owner's PCs and
+    #: draws each agent's model table from them. Sent whole whenever it changed, an empty list included (the last shut ended).
+    shut: tuple[ShutEntry, ...] = Field(default=(), max_length=256)
 
     REPORT_POINTS: ClassVar[float] = 1.0
     REPORT_SECONDS: ClassVar[float] = 60.0

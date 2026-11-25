@@ -23,3 +23,11 @@ def test_a_table_row_out_carries_its_reason_and_instant() -> None:
     assert (row.state, row.reason, row.until) == ("out", "overload", 5.0)
     with pytest.raises(ValidationError):
         TableRow(rank=0, provider="claude", model="opus", state="now")
+
+
+def test_a_usage_report_carries_what_cannot_run_on_the_pc() -> None:
+    from galaius_core import SubscriptionUsageReport
+
+    report = SubscriptionUsageReport(shut=(ShutEntry(provider="claude", login="", reason="login_lost"), ShutEntry(provider="claude", family="fable", reason="pool", until=9.0)))
+    assert SubscriptionUsageReport.model_validate_json(report.model_dump_json()).shut == report.shut
+    assert SubscriptionUsageReport().shut == ()

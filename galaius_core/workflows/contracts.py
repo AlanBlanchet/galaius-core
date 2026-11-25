@@ -22,7 +22,7 @@ from galaius_core.prompts import PromptExecutionRef, PromptRevision
 from galaius_core.models.task import ModelTask
 from galaius_core.failure import Caused, FailureCause
 from galaius_core.identity.providers import AGENT_PROGRAMS, AgentProvider, MODEL_APIS
-from galaius_core.identity.subscriptions import SUBSCRIPTIONS_PER_PC, LoginIdentity, RunAllowance, RunMove, RunSubscription, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
+from galaius_core.identity.subscriptions import SUBSCRIPTIONS_PER_PC, LoginIdentity, RunAllowance, RunMove, RunSubscription, ShutReason, SubscriptionChoices, SubscriptionRefusals, SubscriptionUse, UsageWindow
 from galaius_core.machine.need import AcceleratorKind, MachineName, ResourceRequirement, ScriptLanguage
 
 from galaius_core.community import CommunityEntryRef
@@ -4694,7 +4694,7 @@ ASKED_BY_MAX = 32
 LaunchSkipReason = Literal[
     "cli_missing", "provider_off", "unauthenticated", "auth_check_failed", "permission_mode_unsupported",
     "images_unsupported", "tool_policy_unsupported", "sandbox_unavailable", "model_capability_unsupported",
-    "quota_exceeded", "subscription_capped", "subscription_missing",
+    "quota_exceeded", "overloaded", "subscription_capped", "subscription_missing",
 ]
 
 
@@ -4710,28 +4710,6 @@ class PassedOverCandidate(WireModel):
     model: str = Field(max_length=MODEL_ID_MAX)
     reason: LaunchSkipReason
     until: float | None = Field(default=None, ge=0)
-
-
-#: Why one (program, login, model) cannot take a turn now: a usage window or a model family's pool read as shut (`limit`, `pool`), the
-#: vendor's API overloaded (`overload`), the login signed out (`login_lost`), the vendor refusing this model to this login
-#: (`unsupported`), a conversation larger than the model's window (`context`).
-ShutReason = Literal["limit", "pool", "overload", "login_lost", "unsupported", "context"]
-
-
-class ShutEntry(WireModel):
-    """One thing that cannot run, with the instant it can be asked again: the unit the model walk reads (owner 2026-11-25 « we select the
-    ones under it until we find one »). `model` names a model (`model` set) or every model of one family (`family`, a vendor's pool
-    token); neither: every model of the login (a window, a signed-out login). `login` is the login's name as the owner sees it, never
-    its credentials. `until` is epoch seconds, None for a lost login (no instant brings it back but a sign-in); `count` the refusals in
-    a row that earned it."""
-
-    provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
-    login: str = Field(default="", max_length=120)
-    model: str | None = Field(default=None, max_length=MODEL_ID_MAX)
-    family: str | None = Field(default=None, max_length=40)
-    reason: ShutReason
-    until: float | None = Field(default=None, ge=0)
-    count: int = Field(default=1, ge=1)
 
 
 #: What one row of an agent's model table is now, for the reader's logins: `now` the row the next start takes, `ready` open below it,
