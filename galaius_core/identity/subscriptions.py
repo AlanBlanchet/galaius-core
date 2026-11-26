@@ -302,14 +302,14 @@ class LoginUsage(LoginIdentity):
 #: Why one (program, login, model) cannot take a turn now: a usage window or a model family's pool read as shut (`limit`, `pool`), the
 #: vendor's API overloaded (`overload`), the login signed out (`login_lost`), the vendor refusing this model to this login
 #: (`unsupported`), a conversation larger than the model's window (`context`).
-ShutReason = Literal["limit", "pool", "overload", "login_lost", "unsupported", "context"]
+ShutReason = Literal["limit", "pool", "overload", "login_lost"]
 
 
 class ShutEntry(WireModel):
     """One thing that cannot run, with the instant it can be asked again: the unit the model walk reads (owner 2026-11-25 « we select the
     ones under it until we find one »). `model` names a model (`model` set) or every model of one family (`family`, a vendor's pool
-    token); neither: every model of the login (a window, a signed-out login). `login` is the login's name as the owner sees it, never
-    its credentials. `until` is epoch seconds, None for a lost login (no instant brings it back but a sign-in); `count` the refusals in
+    token); neither: every model of the login (a window, a signed-out login). `login` is the id of the subscription it is on its PC
+    ("" that PC's own login), never its credentials. `until` is epoch seconds, None for a lost login (no instant brings it back but a sign-in); `count` the refusals in
     a row that earned it."""
 
     provider: str = Field(max_length=40, pattern=r"^[a-z0-9][a-z0-9_-]*$")
@@ -319,6 +319,12 @@ class ShutEntry(WireModel):
     reason: ShutReason
     until: float | None = Field(default=None, ge=0)
     count: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def _one_scope(self) -> Self:
+        if self.model is not None and self.family is not None:
+            raise ValueError("a shut entry names a model or a family, not both")
+        return self
 
 
 class SubscriptionUsageReport(WireModel):

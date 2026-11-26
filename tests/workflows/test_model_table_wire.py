@@ -31,3 +31,10 @@ def test_a_usage_report_carries_what_cannot_run_on_the_pc() -> None:
     report = SubscriptionUsageReport(shut=(ShutEntry(provider="claude", login="", reason="login_lost"), ShutEntry(provider="claude", family="fable", reason="pool", until=9.0)))
     assert SubscriptionUsageReport.model_validate_json(report.model_dump_json()).shut == report.shut
     assert SubscriptionUsageReport().shut == ()
+
+
+def test_an_entry_names_one_scope_and_only_a_shut_row_says_why() -> None:
+    with pytest.raises(ValidationError):
+        ShutEntry(provider="claude", model="opus", family="opus", reason="pool", until=1.0)
+    with pytest.raises(ValidationError):
+        TableRow(rank=1, provider="claude", model="opus", state="now", until=5.0)

@@ -4736,6 +4736,12 @@ class TableRow(WireModel):
     #: Why this row sits below the one above it, in the criterion's own words (the measure that put it there).
     why_below: str | None = Field(default=None, max_length=200)
 
+    @model_validator(mode="after")
+    def _reason_of_a_shut_row_only(self) -> Self:
+        if self.state not in ("out", "signed_out") and (self.reason is not None or self.until is not None):
+            raise ValueError(f"a {self.state!r} row carries no reason and no instant")
+        return self
+
 
 class RunReplacement(WireModel):
     """The run that took over a launch its vendor refused before its first turn: a later run of the same role under the
