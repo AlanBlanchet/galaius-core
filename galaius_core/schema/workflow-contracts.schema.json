@@ -68,6 +68,15 @@
           "title": "Paradigms",
           "type": "array"
         },
+        "programs_off": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "type": "string"
+          },
+          "title": "Programs Off",
+          "type": "array"
+        },
         "prompt_heads": {
           "default": [],
           "items": {
@@ -190,6 +199,54 @@
       "title": "AgentImplementation",
       "type": "object"
     },
+    "AgentRelation": {
+      "additionalProperties": true,
+      "description": "Who may call a role and how many of its runs answer, read as a database relationship (owner 2026-11-08 \u00ab A bit like a\ndatabase relationship, right? Where you have, uh, one to many, many to one, et cetera, many to many. Can we have this\nsort of thing for agents? We need to actually control them correctly. \u00bb). Written on the CALLED role's revision\n(`AgentRevision.relations`) and checked where a spawn starts a run, nowhere else.\n\n`caller`: the calling role, `*` every caller (the person at a terminal included). `callees`: how many runs of the role\nanswer (`AgentCallees`); `callers`: how many caller runs one of them serves (`AgentCallers`) \u2014 a role keeping one run\n(`one`, `per_project`) serves every caller by definition. `max_live`: at most this many runs of the role at work or\nwaiting to start for one caller run at once (None: only the PC's places count).",
+      "properties": {
+        "callees": {
+          "default": "many",
+          "enum": [
+            "one",
+            "per_project",
+            "many"
+          ],
+          "title": "Callees",
+          "type": "string"
+        },
+        "caller": {
+          "default": "*",
+          "maxLength": 120,
+          "pattern": "^(\\*|[a-z0-9]+(?:-[a-z0-9]+)*)$",
+          "title": "Caller",
+          "type": "string"
+        },
+        "callers": {
+          "default": "one",
+          "enum": [
+            "one",
+            "many"
+          ],
+          "title": "Callers",
+          "type": "string"
+        },
+        "max_live": {
+          "anyOf": [
+            {
+              "maximum": 64,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Live"
+        }
+      },
+      "title": "AgentRelation",
+      "type": "object"
+    },
     "AgentRevision": {
       "additionalProperties": true,
       "properties": {
@@ -251,6 +308,20 @@
           "maxItems": 1000,
           "title": "Capabilities",
           "type": "array"
+        },
+        "compact_at": {
+          "anyOf": [
+            {
+              "maximum": 967000,
+              "minimum": 100000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Compact At"
         },
         "created_at": {
           "format": "date-time",
@@ -388,6 +459,26 @@
           ],
           "title": "Reasoning",
           "type": "string"
+        },
+        "relation": {
+          "$ref": "#/$defs/ModelRelation"
+        },
+        "relations": {
+          "default": [
+            {
+              "callees": "many",
+              "caller": "*",
+              "callers": "one",
+              "kind": "1-N"
+            }
+          ],
+          "items": {
+            "$ref": "#/$defs/AgentRelation"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Relations",
+          "type": "array"
         },
         "reports_to": {
           "anyOf": [
@@ -784,6 +875,130 @@
         "y"
       ],
       "title": "CanvasPoint",
+      "type": "object"
+    },
+    "ClipTooShort": {
+      "additionalProperties": true,
+      "description": "The provider makes a `resolution` clip only `seconds` long.",
+      "properties": {
+        "code": {
+          "const": "clip_too_short",
+          "default": "clip_too_short",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "resolution": {
+          "maxLength": 20,
+          "minLength": 1,
+          "title": "Resolution",
+          "type": "string"
+        },
+        "seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Seconds",
+          "type": "integer"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "resolution",
+        "seconds"
+      ],
+      "title": "ClipTooShort",
+      "type": "object"
+    },
+    "CloudLaunch": {
+      "additionalProperties": true,
+      "description": "The step's machine is a cloud `instance` launched in `region` at `usd_per_hour`: the step ends here and a rerun\nonce it connects places on it; `dry_run` when no cloud credentials are configured, so nothing was launched.",
+      "properties": {
+        "code": {
+          "const": "cloud_launch",
+          "default": "cloud_launch",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "instance": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Instance",
+          "type": "string"
+        },
+        "region": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Region",
+          "type": "string"
+        },
+        "usd_per_hour": {
+          "minimum": 0,
+          "title": "Usd Per Hour",
+          "type": "number"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "dry_run",
+        "instance",
+        "region",
+        "usd_per_hour"
+      ],
+      "title": "CloudLaunch",
       "type": "object"
     },
     "ConfiguredModelRef": {
@@ -1206,6 +1421,144 @@
             }
           ],
           "default": null
+        },
+        "cause": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "clip_too_short": "#/$defs/ClipTooShort",
+                  "cloud_launch": "#/$defs/CloudLaunch",
+                  "criteria_invalid": "#/$defs/CriteriaInvalid",
+                  "criteria_miswritten": "#/$defs/CriteriaMiswritten",
+                  "endpoint_refused": "#/$defs/EndpointRefused",
+                  "input_empty": "#/$defs/InputEmpty",
+                  "input_fault": "#/$defs/InputFault",
+                  "insufficient_credits": "#/$defs/InsufficientCredits",
+                  "job_timeout": "#/$defs/JobTimeout",
+                  "machine_fault": "#/$defs/MachineFault",
+                  "model_retired": "#/$defs/ModelRetired",
+                  "model_switched_off": "#/$defs/ModelSwitchedOff",
+                  "monthly_cap_reached": "#/$defs/MonthlyCapReached",
+                  "no_fit": "#/$defs/MachineUnfit",
+                  "no_key": "#/$defs/NoKey",
+                  "no_model_passes": "#/$defs/NoModelPasses",
+                  "no_runner": "#/$defs/NoRunner",
+                  "no_speech": "#/$defs/NoSpeech",
+                  "nothing_returned": "#/$defs/NothingReturned",
+                  "output_limit": "#/$defs/OutputLimit",
+                  "paid_use_not_enabled": "#/$defs/PaidUseOff",
+                  "platform_unpriced": "#/$defs/PlatformUnpriced",
+                  "pool_budget": "#/$defs/PoolBudget",
+                  "provider_invalid": "#/$defs/ProviderInvalid",
+                  "provider_silent": "#/$defs/ProviderSilent",
+                  "server_fault": "#/$defs/ServerFault",
+                  "storage_fault": "#/$defs/StorageFault",
+                  "timed_out": "#/$defs/StepTimedOut",
+                  "turn_cap_reached": "#/$defs/TurnCapReached",
+                  "vendor_refused": "#/$defs/VendorRefused"
+                },
+                "propertyName": "code"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PaidUseOff"
+                },
+                {
+                  "$ref": "#/$defs/MonthlyCapReached"
+                },
+                {
+                  "$ref": "#/$defs/TurnCapReached"
+                },
+                {
+                  "$ref": "#/$defs/InsufficientCredits"
+                },
+                {
+                  "$ref": "#/$defs/VendorRefused"
+                },
+                {
+                  "$ref": "#/$defs/ProviderSilent"
+                },
+                {
+                  "$ref": "#/$defs/ProviderInvalid"
+                },
+                {
+                  "$ref": "#/$defs/EndpointRefused"
+                },
+                {
+                  "$ref": "#/$defs/NoSpeech"
+                },
+                {
+                  "$ref": "#/$defs/OutputLimit"
+                },
+                {
+                  "$ref": "#/$defs/JobTimeout"
+                },
+                {
+                  "$ref": "#/$defs/NothingReturned"
+                },
+                {
+                  "$ref": "#/$defs/ClipTooShort"
+                },
+                {
+                  "$ref": "#/$defs/ModelRetired"
+                },
+                {
+                  "$ref": "#/$defs/NoKey"
+                },
+                {
+                  "$ref": "#/$defs/InputFault"
+                },
+                {
+                  "$ref": "#/$defs/InputEmpty"
+                },
+                {
+                  "$ref": "#/$defs/NoRunner"
+                },
+                {
+                  "$ref": "#/$defs/PlatformUnpriced"
+                },
+                {
+                  "$ref": "#/$defs/ModelSwitchedOff"
+                },
+                {
+                  "$ref": "#/$defs/NoModelPasses"
+                },
+                {
+                  "$ref": "#/$defs/CriteriaInvalid"
+                },
+                {
+                  "$ref": "#/$defs/CriteriaMiswritten"
+                },
+                {
+                  "$ref": "#/$defs/MachineFault"
+                },
+                {
+                  "$ref": "#/$defs/MachineUnfit"
+                },
+                {
+                  "$ref": "#/$defs/CloudLaunch"
+                },
+                {
+                  "$ref": "#/$defs/PoolBudget"
+                },
+                {
+                  "$ref": "#/$defs/StepTimedOut"
+                },
+                {
+                  "$ref": "#/$defs/ServerFault"
+                },
+                {
+                  "$ref": "#/$defs/StorageFault"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause"
         },
         "created_at": {
           "format": "date-time",
@@ -1715,6 +2068,170 @@
       "title": "CriteriaClause",
       "type": "object"
     },
+    "CriteriaInvalid": {
+      "additionalProperties": true,
+      "description": "The step's choice names `name`, which `task` models do not offer (`reason`).",
+      "properties": {
+        "code": {
+          "const": "criteria_invalid",
+          "default": "criteria_invalid",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "not_a_property",
+            "no_percentile",
+            "not_a_benchmark"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "task": {
+          "enum": [
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d",
+            "depth-estimation",
+            "keypoint-detection",
+            "image-to-text",
+            "text-to-music",
+            "text-to-sound"
+          ],
+          "title": "Task",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "reason",
+        "task"
+      ],
+      "title": "CriteriaInvalid",
+      "type": "object"
+    },
+    "CriteriaMiswritten": {
+      "additionalProperties": true,
+      "description": "The step's choice writes `name`, a `task` property, as another kind than the one it is (`kind`).",
+      "properties": {
+        "code": {
+          "const": "criteria_miswritten",
+          "default": "criteria_miswritten",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "kind": {
+          "enum": [
+            "flag",
+            "number",
+            "choice"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "task": {
+          "enum": [
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d",
+            "depth-estimation",
+            "keypoint-detection",
+            "image-to-text",
+            "text-to-music",
+            "text-to-sound"
+          ],
+          "title": "Task",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "kind",
+        "name",
+        "task"
+      ],
+      "title": "CriteriaMiswritten",
+      "type": "object"
+    },
     "CriteriaWeight": {
       "additionalProperties": true,
       "description": "One `name=weight` ranking clause: a weight ORDERS what already passed, never admits.",
@@ -1774,6 +2291,62 @@
         "input_schema"
       ],
       "title": "DelegatedAgentTool",
+      "type": "object"
+    },
+    "EndpointRefused": {
+      "additionalProperties": true,
+      "description": "The server refused a provider's address or answer, for this host's safety.",
+      "properties": {
+        "code": {
+          "const": "endpoint_refused",
+          "default": "endpoint_refused",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "reason": {
+          "enum": [
+            "not_https",
+            "unresolved",
+            "private_address",
+            "too_large",
+            "redirects",
+            "foreign_host"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "title": "EndpointRefused",
       "type": "object"
     },
     "FunctionImplementation": {
@@ -1966,6 +2539,333 @@
       "title": "HttpAgentTool",
       "type": "object"
     },
+    "InputEmpty": {
+      "additionalProperties": true,
+      "description": "The step's required input `port` has no value, wired or set.",
+      "properties": {
+        "code": {
+          "const": "input_empty",
+          "default": "input_empty",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "port": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Port",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "port"
+      ],
+      "title": "InputEmpty",
+      "type": "object"
+    },
+    "InputFault": {
+      "additionalProperties": true,
+      "description": "The step's inputs or settings cannot run its model.",
+      "properties": {
+        "code": {
+          "const": "input_fault",
+          "default": "input_fault",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "reason": {
+          "enum": [
+            "image_missing",
+            "audio_not_file",
+            "machine_missing",
+            "image_unused",
+            "no_storage",
+            "model_unconfigured",
+            "request_too_large",
+            "model_unregistered"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "title": "InputFault",
+      "type": "object"
+    },
+    "InsufficientCredits": {
+      "additionalProperties": true,
+      "description": "The wallet cannot cover `estimate_usd`: a run whose estimate would take the balance below zero, or a step on\nGalaius's `provider` key (None: the whole run). `runs_paused`: the last auto top-up failed (the gate then does not charge the card again).",
+      "properties": {
+        "balance_usd": {
+          "title": "Balance Usd",
+          "type": "number"
+        },
+        "code": {
+          "const": "insufficient_credits",
+          "default": "insufficient_credits",
+          "title": "Code",
+          "type": "string"
+        },
+        "estimate_usd": {
+          "title": "Estimate Usd",
+          "type": "number"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "runs_paused": {
+          "title": "Runs Paused",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "balance_usd",
+        "code",
+        "estimate_usd",
+        "runs_paused"
+      ],
+      "title": "InsufficientCredits",
+      "type": "object"
+    },
+    "JobTimeout": {
+      "additionalProperties": true,
+      "description": "A provider job still unfinished after `seconds`: the step stopped waiting for its `what`, the provider may finish it.",
+      "properties": {
+        "code": {
+          "const": "job_timeout",
+          "default": "job_timeout",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Seconds",
+          "type": "number"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        },
+        "what": {
+          "enum": [
+            "content",
+            "text",
+            "image",
+            "audio",
+            "music",
+            "sound",
+            "video",
+            "vector",
+            "pose",
+            "mesh",
+            "depth_map",
+            "predictions",
+            "pages",
+            "match"
+          ],
+          "title": "What",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "seconds",
+        "what"
+      ],
+      "title": "JobTimeout",
+      "type": "object"
+    },
+    "MachineFault": {
+      "additionalProperties": true,
+      "description": "A step's machine did not run it (`MachineReason`).",
+      "properties": {
+        "code": {
+          "const": "machine_fault",
+          "default": "machine_fault",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "feature": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PcFeature"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "machine": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Machine"
+        },
+        "reason": {
+          "enum": [
+            "offline",
+            "disconnected",
+            "unanswered",
+            "outdated",
+            "unplaced",
+            "unsaved",
+            "not_allowed",
+            "script_unapproved",
+            "cloud_forbidden",
+            "pool_forbidden",
+            "pool_empty",
+            "pool_unscrubbed",
+            "pool_claimed",
+            "pool_failed",
+            "declined"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        },
+        "waited_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Waited S"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "title": "MachineFault",
+      "type": "object"
+    },
     "MachineRef": {
       "additionalProperties": true,
       "properties": {
@@ -1979,6 +2879,89 @@
         "id"
       ],
       "title": "MachineRef",
+      "type": "object"
+    },
+    "MachineUnfit": {
+      "additionalProperties": true,
+      "description": "No connected machine, pooled peer or cloud launch meets the step's `requirement` (and its script `language`):\n`cloud` why a cloud launch did not either, when one was tried.",
+      "properties": {
+        "cloud": {
+          "anyOf": [
+            {
+              "enum": [
+                "fits",
+                "limit",
+                "sovereign",
+                "failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cloud"
+        },
+        "code": {
+          "const": "no_fit",
+          "default": "no_fit",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "enum": [
+                "python",
+                "shell",
+                "powershell",
+                "cmd"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "requirement": {
+          "$ref": "#/$defs/ResourceRequirement"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "requirement"
+      ],
+      "title": "MachineUnfit",
       "type": "object"
     },
     "MailAgentTool": {
@@ -2700,6 +3683,427 @@
       "title": "ModelProperty",
       "type": "object"
     },
+    "ModelRelation": {
+      "additionalProperties": true,
+      "description": "How a role trades its ranked measure against price, and any further measure: the sliders of its model choice.\n\nvalue = score + \u03a3 criterion.weight \u00d7 criterion points \u2212 cost \u00d7 log2(price / cheapest price in the pool)\n\nThe highest value runs first; no model is ever left out by it. `cost`: the index points one doubling of the price\nmust buy (0: the best score at any price; the default 3.5 \u2248 2 points per 1.5\u00d7 the price).",
+      "properties": {
+        "cost": {
+          "default": 3.5,
+          "maximum": 20.0,
+          "minimum": 0,
+          "title": "Cost",
+          "type": "number"
+        },
+        "criteria": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RelationCriterion"
+          },
+          "maxItems": 16,
+          "title": "Criteria",
+          "type": "array"
+        }
+      },
+      "title": "ModelRelation",
+      "type": "object"
+    },
+    "ModelRetired": {
+      "additionalProperties": true,
+      "description": "The provider shut the step's model down on `on`: `successor` is the model it names in its place.",
+      "properties": {
+        "code": {
+          "const": "model_retired",
+          "default": "model_retired",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "on": {
+          "format": "date",
+          "title": "On",
+          "type": "string"
+        },
+        "successor": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Successor",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "on",
+        "successor"
+      ],
+      "title": "ModelRetired",
+      "type": "object"
+    },
+    "ModelSwitchedOff": {
+      "additionalProperties": true,
+      "description": "A step refused because `model` was switched off on its owner's PC (`switch`: the `models` entry that did it), as\nrecorded by a galaius before 2026-11-16. No model is switched off any more (owner \u00ab no hardcoding / deactivating\nmodels \u00bb): nothing produces this fault; it stays so the steps that recorded it still read.",
+      "properties": {
+        "code": {
+          "const": "model_switched_off",
+          "default": "model_switched_off",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "switch": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Switch",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "model",
+        "switch"
+      ],
+      "title": "ModelSwitchedOff",
+      "type": "object"
+    },
+    "MonthlyCapReached": {
+      "additionalProperties": true,
+      "description": "The month already at its limit for `provider`.",
+      "properties": {
+        "code": {
+          "const": "monthly_cap_reached",
+          "default": "monthly_cap_reached",
+          "title": "Code",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "reason": {
+          "const": "cap_reached",
+          "default": "cap_reached",
+          "title": "Reason",
+          "type": "string"
+        },
+        "spend": {
+          "$ref": "#/$defs/PaidUseSpend"
+        }
+      },
+      "required": [
+        "code",
+        "provider",
+        "reason",
+        "spend"
+      ],
+      "title": "MonthlyCapReached",
+      "type": "object"
+    },
+    "NoKey": {
+      "additionalProperties": true,
+      "description": "The organisation holds no key for `provider`: one is added in Connections.",
+      "properties": {
+        "code": {
+          "const": "no_key",
+          "default": "no_key",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "provider"
+      ],
+      "title": "NoKey",
+      "type": "object"
+    },
+    "NoModelPasses": {
+      "additionalProperties": true,
+      "description": "No `task` model passes the step's choice (`criteria`, as its node states them; None: the choice names none).",
+      "properties": {
+        "code": {
+          "const": "no_model_passes",
+          "default": "no_model_passes",
+          "title": "Code",
+          "type": "string"
+        },
+        "criteria": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Criteria"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "task": {
+          "enum": [
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d",
+            "depth-estimation",
+            "keypoint-detection",
+            "image-to-text",
+            "text-to-music",
+            "text-to-sound"
+          ],
+          "title": "Task",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "task"
+      ],
+      "title": "NoModelPasses",
+      "type": "object"
+    },
+    "NoRunner": {
+      "additionalProperties": true,
+      "description": "No runner makes `task` with `provider`'s `model`: the step names a model its provider does not serve for it.",
+      "properties": {
+        "code": {
+          "const": "no_runner",
+          "default": "no_runner",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "task": {
+          "enum": [
+            "text-generation",
+            "text-to-image",
+            "text-to-video",
+            "object-detection",
+            "image-segmentation",
+            "feature-extraction",
+            "text-to-speech",
+            "automatic-speech-recognition",
+            "image-to-3d",
+            "text-to-3d",
+            "depth-estimation",
+            "keypoint-detection",
+            "image-to-text",
+            "text-to-music",
+            "text-to-sound"
+          ],
+          "title": "Task",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "model",
+        "provider",
+        "task"
+      ],
+      "title": "NoRunner",
+      "type": "object"
+    },
+    "NoSpeech": {
+      "additionalProperties": true,
+      "description": "A transcription heard no speech in its audio.",
+      "properties": {
+        "code": {
+          "const": "no_speech",
+          "default": "no_speech",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "NoSpeech",
+      "type": "object"
+    },
     "NodeCostActual": {
       "additionalProperties": true,
       "description": "What one node's run actually cost, after it ran \u2014 the provider's own charge (`cost_usd`)\nand the platform's fee on top of it (`fee_usd`), the two lines a metered call always shows.",
@@ -2763,6 +4167,144 @@
           "minimum": 1,
           "title": "Attempt",
           "type": "integer"
+        },
+        "cause": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "clip_too_short": "#/$defs/ClipTooShort",
+                  "cloud_launch": "#/$defs/CloudLaunch",
+                  "criteria_invalid": "#/$defs/CriteriaInvalid",
+                  "criteria_miswritten": "#/$defs/CriteriaMiswritten",
+                  "endpoint_refused": "#/$defs/EndpointRefused",
+                  "input_empty": "#/$defs/InputEmpty",
+                  "input_fault": "#/$defs/InputFault",
+                  "insufficient_credits": "#/$defs/InsufficientCredits",
+                  "job_timeout": "#/$defs/JobTimeout",
+                  "machine_fault": "#/$defs/MachineFault",
+                  "model_retired": "#/$defs/ModelRetired",
+                  "model_switched_off": "#/$defs/ModelSwitchedOff",
+                  "monthly_cap_reached": "#/$defs/MonthlyCapReached",
+                  "no_fit": "#/$defs/MachineUnfit",
+                  "no_key": "#/$defs/NoKey",
+                  "no_model_passes": "#/$defs/NoModelPasses",
+                  "no_runner": "#/$defs/NoRunner",
+                  "no_speech": "#/$defs/NoSpeech",
+                  "nothing_returned": "#/$defs/NothingReturned",
+                  "output_limit": "#/$defs/OutputLimit",
+                  "paid_use_not_enabled": "#/$defs/PaidUseOff",
+                  "platform_unpriced": "#/$defs/PlatformUnpriced",
+                  "pool_budget": "#/$defs/PoolBudget",
+                  "provider_invalid": "#/$defs/ProviderInvalid",
+                  "provider_silent": "#/$defs/ProviderSilent",
+                  "server_fault": "#/$defs/ServerFault",
+                  "storage_fault": "#/$defs/StorageFault",
+                  "timed_out": "#/$defs/StepTimedOut",
+                  "turn_cap_reached": "#/$defs/TurnCapReached",
+                  "vendor_refused": "#/$defs/VendorRefused"
+                },
+                "propertyName": "code"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PaidUseOff"
+                },
+                {
+                  "$ref": "#/$defs/MonthlyCapReached"
+                },
+                {
+                  "$ref": "#/$defs/TurnCapReached"
+                },
+                {
+                  "$ref": "#/$defs/InsufficientCredits"
+                },
+                {
+                  "$ref": "#/$defs/VendorRefused"
+                },
+                {
+                  "$ref": "#/$defs/ProviderSilent"
+                },
+                {
+                  "$ref": "#/$defs/ProviderInvalid"
+                },
+                {
+                  "$ref": "#/$defs/EndpointRefused"
+                },
+                {
+                  "$ref": "#/$defs/NoSpeech"
+                },
+                {
+                  "$ref": "#/$defs/OutputLimit"
+                },
+                {
+                  "$ref": "#/$defs/JobTimeout"
+                },
+                {
+                  "$ref": "#/$defs/NothingReturned"
+                },
+                {
+                  "$ref": "#/$defs/ClipTooShort"
+                },
+                {
+                  "$ref": "#/$defs/ModelRetired"
+                },
+                {
+                  "$ref": "#/$defs/NoKey"
+                },
+                {
+                  "$ref": "#/$defs/InputFault"
+                },
+                {
+                  "$ref": "#/$defs/InputEmpty"
+                },
+                {
+                  "$ref": "#/$defs/NoRunner"
+                },
+                {
+                  "$ref": "#/$defs/PlatformUnpriced"
+                },
+                {
+                  "$ref": "#/$defs/ModelSwitchedOff"
+                },
+                {
+                  "$ref": "#/$defs/NoModelPasses"
+                },
+                {
+                  "$ref": "#/$defs/CriteriaInvalid"
+                },
+                {
+                  "$ref": "#/$defs/CriteriaMiswritten"
+                },
+                {
+                  "$ref": "#/$defs/MachineFault"
+                },
+                {
+                  "$ref": "#/$defs/MachineUnfit"
+                },
+                {
+                  "$ref": "#/$defs/CloudLaunch"
+                },
+                {
+                  "$ref": "#/$defs/PoolBudget"
+                },
+                {
+                  "$ref": "#/$defs/StepTimedOut"
+                },
+                {
+                  "$ref": "#/$defs/ServerFault"
+                },
+                {
+                  "$ref": "#/$defs/StorageFault"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause"
         },
         "code": {
           "enum": [
@@ -3173,6 +4715,75 @@
       "title": "NodeUsage",
       "type": "object"
     },
+    "NothingReturned": {
+      "additionalProperties": true,
+      "description": "The model answered without the `what` the step asked for; `filtered`: the provider said its safety filter held it\nback (`detail`: the provider's stated reason, verbatim).",
+      "properties": {
+        "code": {
+          "const": "nothing_returned",
+          "default": "nothing_returned",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "filtered": {
+          "default": false,
+          "title": "Filtered",
+          "type": "boolean"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        },
+        "what": {
+          "enum": [
+            "content",
+            "text",
+            "image",
+            "audio",
+            "music",
+            "sound",
+            "video",
+            "vector",
+            "pose",
+            "mesh",
+            "depth_map",
+            "predictions",
+            "pages",
+            "match"
+          ],
+          "title": "What",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "what"
+      ],
+      "title": "NothingReturned",
+      "type": "object"
+    },
     "ObjectStorageAgentTool": {
       "additionalProperties": true,
       "description": "One S3-compatible or Azure Blob operation against a named bucket/container, bound to a\npinned `object_storage` connection. The connection is provider-agnostic (AWS S3, Scaleway,\nOVH, MinIO, Cloudflare R2, Azure Blob all reach this same tool shape); `bucket` is pinned per\ntool the way `HttpAgentTool.path` is pinned per tool, never left to agent-chosen free text.",
@@ -3228,6 +4839,189 @@
       "title": "ObjectStorageAgentTool",
       "type": "object"
     },
+    "OutputLimit": {
+      "additionalProperties": true,
+      "description": "The model stopped at its output ceiling before it finished: `ceiling` tokens (thinking included) when the step set\nit, None when the provider's own default held.",
+      "properties": {
+        "ceiling": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ceiling"
+        },
+        "code": {
+          "const": "output_limit",
+          "default": "output_limit",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "OutputLimit",
+      "type": "object"
+    },
+    "PaidUseOff": {
+      "additionalProperties": true,
+      "description": "Paid use of `provider` was never switched on for the organisation.",
+      "properties": {
+        "code": {
+          "const": "paid_use_not_enabled",
+          "default": "paid_use_not_enabled",
+          "title": "Code",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "reason": {
+          "const": "switched_off",
+          "default": "switched_off",
+          "title": "Reason",
+          "type": "string"
+        },
+        "spend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PaidUseSpend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "code",
+        "provider",
+        "reason"
+      ],
+      "title": "PaidUseOff",
+      "type": "object"
+    },
+    "PaidUseSpend": {
+      "additionalProperties": true,
+      "description": "What this calendar month has actually cost, against the ceiling \u2014 the figure every agent\ncard, the model picker and the alert show, all reading this one shape.",
+      "properties": {
+        "cap_usd": {
+          "minimum": 0,
+          "title": "Cap Usd",
+          "type": "number"
+        },
+        "fee_usd": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Fee Usd",
+          "type": "number"
+        },
+        "period_start": {
+          "format": "date-time",
+          "title": "Period Start",
+          "type": "string"
+        },
+        "spent_usd": {
+          "minimum": 0,
+          "title": "Spent Usd",
+          "type": "number"
+        }
+      },
+      "required": [
+        "period_start",
+        "spent_usd",
+        "cap_usd"
+      ],
+      "title": "PaidUseSpend",
+      "type": "object"
+    },
+    "PcFeature": {
+      "description": "A request kind (or part of one) a PC's runner answers, as its hello names it. A runner names every member of the\ngalaius-core it ships with, and never one it was released before: the server asks a PC only what it names, adapts\nwhere an older PC can be served another way, and else says that PC is outdated. A hello is read as `PcFeatures`.\nMembers are only ever added: retiring one is a migration of every run cause naming it.",
+      "enum": [
+        "file_query",
+        "script_file",
+        "file_read",
+        "agent_control",
+        "agent_settings",
+        "web_settings",
+        "workspaces",
+        "start_permission",
+        "project_secrets",
+        "places",
+        "agent_media",
+        "tool_gateway",
+        "token_swap",
+        "workspace_copy",
+        "places_direct",
+        "agent_programs",
+        "agent_subscription_choices",
+        "agent_subscription_moves",
+        "agent_subscription_moves_wait",
+        "agent_login_moves",
+        "agent_send_once",
+        "agent_start_once",
+        "web_limit",
+        "sign_in_paste",
+        "agent_compact",
+        "projects_root",
+        "agent_images",
+        "agent_reasoning",
+        "agent_file_parts",
+        "agent_file_pull",
+        "machine_tools",
+        "screen_view",
+        "project_files",
+        "project_file_bytes",
+        "project_file_offset",
+        "held_logins",
+        "held_sign_in",
+        "agent_message_retract",
+        "agent_run_carry",
+        "agent_run_hold",
+        "agent_message_replay",
+        "carried_git",
+        "peer_runs",
+        "peer_broker"
+      ],
+      "title": "PcFeature",
+      "type": "string"
+    },
     "Placement": {
       "additionalProperties": true,
       "description": "Where a node runs: on the server (hosted APIs), or on one enrolled machine (local\ncheckpoints, the owner's own GPU \u2014 data stays on it). A machine placement is either PINNED\n(`machine` set: the owner or the graph editor named an exact machine) or AUTO (`requirement`\nset, `machine` unset: the run-time placement scheduler \u2014 `MachineChannel.dispatch`, server-\nside \u2014 resolves the cheapest fit at dispatch time instead: the workspace's own online\nhardware first, then a pooled peer machine, then an on-demand cloud launch, or a named refusal\nwhen nothing fits). Never both, never neither, for `target == \"machine\"`.",
@@ -3265,6 +5059,63 @@
         }
       },
       "title": "Placement",
+      "type": "object"
+    },
+    "PlatformUnpriced": {
+      "additionalProperties": true,
+      "description": "`model` has no price Galaius can bill: it never runs on Galaius's `provider` key, only on the organisation's own.",
+      "properties": {
+        "code": {
+          "const": "platform_unpriced",
+          "default": "platform_unpriced",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "model": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "model",
+        "provider"
+      ],
+      "title": "PlatformUnpriced",
       "type": "object"
     },
     "Plumbing": {
@@ -3324,6 +5175,61 @@
         "pattern"
       ],
       "title": "PlumbingCondition",
+      "type": "object"
+    },
+    "PoolBudget": {
+      "additionalProperties": true,
+      "description": "A pooled run would bring the workspace's pooled spend this period to `projected_usd`, over its `ceiling_usd`.",
+      "properties": {
+        "ceiling_usd": {
+          "minimum": 0,
+          "title": "Ceiling Usd",
+          "type": "number"
+        },
+        "code": {
+          "const": "pool_budget",
+          "default": "pool_budget",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "projected_usd": {
+          "minimum": 0,
+          "title": "Projected Usd",
+          "type": "number"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "ceiling_usd",
+        "code",
+        "projected_usd"
+      ],
+      "title": "PoolBudget",
       "type": "object"
     },
     "PortAddress": {
@@ -3594,9 +5500,120 @@
       "title": "PromptRevision",
       "type": "object"
     },
+    "ProviderInvalid": {
+      "additionalProperties": true,
+      "description": "The provider answered something that is not the answer its API promises (`detail`: the part it got wrong).",
+      "properties": {
+        "code": {
+          "const": "provider_invalid",
+          "default": "provider_invalid",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "ProviderInvalid",
+      "type": "object"
+    },
+    "ProviderSilent": {
+      "additionalProperties": true,
+      "description": "The provider did not answer in time, or its address could not be reached.",
+      "properties": {
+        "code": {
+          "const": "provider_silent",
+          "default": "provider_silent",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "ProviderSilent",
+      "type": "object"
+    },
+    "RelationCriterion": {
+      "additionalProperties": true,
+      "description": "One more measure a role weighs beside its ranked one (`speed`, `context`, \u2026): its points out of 100 of the\nmeasure's range, times `weight`, add to a model's value. `name` is a rankable measure of the criteria vocabulary\n(`aa.output_speed`), checked where the record is saved.",
+      "properties": {
+        "name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z0-9_.-]+$",
+          "title": "Name",
+          "type": "string"
+        },
+        "weight": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "weight"
+      ],
+      "title": "RelationCriterion",
+      "type": "object"
+    },
     "ResourceRequirement": {
       "additionalProperties": true,
-      "description": "What one workflow node needs to run, derived from the model registry / the user's model\nrecord. Every field optional: unset means \"no constraint from this axis\", never zero \u2014 a node\nwith no declared requirement places on any connected machine, today's behaviour unchanged.\n\nDefined here (not in `.cloud`, which uses it) because `Placement` (below) carries one for an\nAUTO machine placement, and `Placement` predates `.cloud` in the dependency order \u2014 `.cloud`\nimports this and `resources_fit` from here rather than the reverse, so the placement contract\nnever needs a cross-module forward reference.",
+      "description": "What one workflow node needs to run, derived from the model registry / the user's model\nrecord. Every field optional: unset means \"no constraint from this axis\", never zero \u2014 a node\nwith no declared requirement places on any connected machine, today's behaviour unchanged.",
       "properties": {
         "cpu_count": {
           "anyOf": [
@@ -4046,6 +6063,59 @@
       "title": "SendMessageTool",
       "type": "object"
     },
+    "ServerFault": {
+      "additionalProperties": true,
+      "description": "The server could not finish the run (`ServerReason`).",
+      "properties": {
+        "code": {
+          "const": "server_fault",
+          "default": "server_fault",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "reason": {
+          "enum": [
+            "restarted",
+            "crashed",
+            "config_unavailable"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "title": "ServerFault",
+      "type": "object"
+    },
     "SovereigntyRequired": {
       "additionalProperties": true,
       "description": "A workflow's HARD placement constraint (threat-model #6): \"sovereign required\" REFUSES\ndispatch to a node whose PREDICTED figure fails to meet `min_sovereignty`, and REFUSES to\naccept a run whose ACTUAL figure fails it after the fact \u2014 never a soft warning, never a\nsilent autoscaler fallback to a cheaper non-sovereign region. Declared once per\n`WorkflowInterface`; `meets_requirement` is the ONE place both the pre-dispatch scheduler and\nthe post-run auditor check it, so the two can never drift into different rules.",
@@ -4112,6 +6182,156 @@
         "input_schema"
       ],
       "title": "SshAgentTool",
+      "type": "object"
+    },
+    "StepTimedOut": {
+      "additionalProperties": true,
+      "description": "The step ran past its `seconds`; `waiting` what it still waited on (its `machine` to connect), if anything.",
+      "properties": {
+        "code": {
+          "const": "timed_out",
+          "default": "timed_out",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "machine": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Machine"
+        },
+        "seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Seconds",
+          "type": "number"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        },
+        "waiting": {
+          "anyOf": [
+            {
+              "const": "machine",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Waiting"
+        }
+      },
+      "required": [
+        "code",
+        "seconds"
+      ],
+      "title": "StepTimedOut",
+      "type": "object"
+    },
+    "StorageFault": {
+      "additionalProperties": true,
+      "description": "A workspace's file storage did not serve the step (`StorageReason`); `not_granted` names the `grant` its\nconnection lacks.",
+      "properties": {
+        "code": {
+          "const": "storage_fault",
+          "default": "storage_fault",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "grant": {
+          "anyOf": [
+            {
+              "enum": [
+                "list",
+                "read",
+                "write"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Grant"
+        },
+        "reason": {
+          "enum": [
+            "credential_missing",
+            "credential_malformed",
+            "provider_unsupported",
+            "not_granted",
+            "refused",
+            "answer_invalid",
+            "too_large"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "title": "StorageFault",
       "type": "object"
     },
     "SubgraphImplementation": {
@@ -4904,6 +7124,53 @@
       "title": "TriggerScheduleState",
       "type": "object"
     },
+    "TurnCapReached": {
+      "additionalProperties": true,
+      "description": "A turn not sent: its worst case (`worst_usd`) on top of what the month already holds without it (`held_usd`:\nspent, and the worst cases of the turns in flight) would cross the limit.",
+      "properties": {
+        "code": {
+          "const": "turn_cap_reached",
+          "default": "turn_cap_reached",
+          "title": "Code",
+          "type": "string"
+        },
+        "held_usd": {
+          "minimum": 0,
+          "title": "Held Usd",
+          "type": "number"
+        },
+        "provider": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "reason": {
+          "const": "cap_reached",
+          "default": "cap_reached",
+          "title": "Reason",
+          "type": "string"
+        },
+        "spend": {
+          "$ref": "#/$defs/PaidUseSpend"
+        },
+        "worst_usd": {
+          "minimum": 0,
+          "title": "Worst Usd",
+          "type": "number"
+        }
+      },
+      "required": [
+        "code",
+        "held_usd",
+        "provider",
+        "reason",
+        "spend",
+        "worst_usd"
+      ],
+      "title": "TurnCapReached",
+      "type": "object"
+    },
     "UsageSummary": {
       "additionalProperties": true,
       "properties": {
@@ -4971,6 +7238,89 @@
         "value_type"
       ],
       "title": "VariableSpec",
+      "type": "object"
+    },
+    "VendorRefused": {
+      "additionalProperties": true,
+      "description": "The provider refused the call: `vendor_status` its HTTP answer, when it gave one (None: its job reported the\nfailure itself).",
+      "properties": {
+        "code": {
+          "const": "vendor_refused",
+          "default": "vendor_refused",
+          "title": "Code",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "platform_provider": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform Provider"
+        },
+        "reason": {
+          "enum": [
+            "key_refused",
+            "key_forbidden",
+            "model_unknown",
+            "no_funds",
+            "rate_limited",
+            "unfinished",
+            "failed"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "vendor_code": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Code"
+        },
+        "vendor_status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor Status"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ],
+      "title": "VendorRefused",
       "type": "object"
     },
     "WebhookAgentTool": {
@@ -5905,6 +8255,144 @@
     "WorkflowRun": {
       "additionalProperties": true,
       "properties": {
+        "cause": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "clip_too_short": "#/$defs/ClipTooShort",
+                  "cloud_launch": "#/$defs/CloudLaunch",
+                  "criteria_invalid": "#/$defs/CriteriaInvalid",
+                  "criteria_miswritten": "#/$defs/CriteriaMiswritten",
+                  "endpoint_refused": "#/$defs/EndpointRefused",
+                  "input_empty": "#/$defs/InputEmpty",
+                  "input_fault": "#/$defs/InputFault",
+                  "insufficient_credits": "#/$defs/InsufficientCredits",
+                  "job_timeout": "#/$defs/JobTimeout",
+                  "machine_fault": "#/$defs/MachineFault",
+                  "model_retired": "#/$defs/ModelRetired",
+                  "model_switched_off": "#/$defs/ModelSwitchedOff",
+                  "monthly_cap_reached": "#/$defs/MonthlyCapReached",
+                  "no_fit": "#/$defs/MachineUnfit",
+                  "no_key": "#/$defs/NoKey",
+                  "no_model_passes": "#/$defs/NoModelPasses",
+                  "no_runner": "#/$defs/NoRunner",
+                  "no_speech": "#/$defs/NoSpeech",
+                  "nothing_returned": "#/$defs/NothingReturned",
+                  "output_limit": "#/$defs/OutputLimit",
+                  "paid_use_not_enabled": "#/$defs/PaidUseOff",
+                  "platform_unpriced": "#/$defs/PlatformUnpriced",
+                  "pool_budget": "#/$defs/PoolBudget",
+                  "provider_invalid": "#/$defs/ProviderInvalid",
+                  "provider_silent": "#/$defs/ProviderSilent",
+                  "server_fault": "#/$defs/ServerFault",
+                  "storage_fault": "#/$defs/StorageFault",
+                  "timed_out": "#/$defs/StepTimedOut",
+                  "turn_cap_reached": "#/$defs/TurnCapReached",
+                  "vendor_refused": "#/$defs/VendorRefused"
+                },
+                "propertyName": "code"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PaidUseOff"
+                },
+                {
+                  "$ref": "#/$defs/MonthlyCapReached"
+                },
+                {
+                  "$ref": "#/$defs/TurnCapReached"
+                },
+                {
+                  "$ref": "#/$defs/InsufficientCredits"
+                },
+                {
+                  "$ref": "#/$defs/VendorRefused"
+                },
+                {
+                  "$ref": "#/$defs/ProviderSilent"
+                },
+                {
+                  "$ref": "#/$defs/ProviderInvalid"
+                },
+                {
+                  "$ref": "#/$defs/EndpointRefused"
+                },
+                {
+                  "$ref": "#/$defs/NoSpeech"
+                },
+                {
+                  "$ref": "#/$defs/OutputLimit"
+                },
+                {
+                  "$ref": "#/$defs/JobTimeout"
+                },
+                {
+                  "$ref": "#/$defs/NothingReturned"
+                },
+                {
+                  "$ref": "#/$defs/ClipTooShort"
+                },
+                {
+                  "$ref": "#/$defs/ModelRetired"
+                },
+                {
+                  "$ref": "#/$defs/NoKey"
+                },
+                {
+                  "$ref": "#/$defs/InputFault"
+                },
+                {
+                  "$ref": "#/$defs/InputEmpty"
+                },
+                {
+                  "$ref": "#/$defs/NoRunner"
+                },
+                {
+                  "$ref": "#/$defs/PlatformUnpriced"
+                },
+                {
+                  "$ref": "#/$defs/ModelSwitchedOff"
+                },
+                {
+                  "$ref": "#/$defs/NoModelPasses"
+                },
+                {
+                  "$ref": "#/$defs/CriteriaInvalid"
+                },
+                {
+                  "$ref": "#/$defs/CriteriaMiswritten"
+                },
+                {
+                  "$ref": "#/$defs/MachineFault"
+                },
+                {
+                  "$ref": "#/$defs/MachineUnfit"
+                },
+                {
+                  "$ref": "#/$defs/CloudLaunch"
+                },
+                {
+                  "$ref": "#/$defs/PoolBudget"
+                },
+                {
+                  "$ref": "#/$defs/StepTimedOut"
+                },
+                {
+                  "$ref": "#/$defs/ServerFault"
+                },
+                {
+                  "$ref": "#/$defs/StorageFault"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause"
+        },
         "cost": {
           "anyOf": [
             {

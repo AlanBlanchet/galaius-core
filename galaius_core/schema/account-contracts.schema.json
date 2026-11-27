@@ -29,12 +29,7 @@
           "type": "string"
         },
         "locale": {
-          "enum": [
-            "en",
-            "fr"
-          ],
-          "title": "Locale",
-          "type": "string"
+          "$ref": "#/$defs/Locale"
         },
         "verified": {
           "title": "Verified",
@@ -68,12 +63,7 @@
           "title": "Display Name"
         },
         "locale": {
-          "enum": [
-            "en",
-            "fr"
-          ],
-          "title": "Locale",
-          "type": "string"
+          "$ref": "#/$defs/Locale"
         }
       },
       "title": "AccountUpdate",
@@ -672,6 +662,15 @@
       "title": "InviteProject",
       "type": "object"
     },
+    "Locale": {
+      "description": "A language Galaius is written in.",
+      "enum": [
+        "en",
+        "fr"
+      ],
+      "title": "Locale",
+      "type": "string"
+    },
     "LoginRequest": {
       "additionalProperties": false,
       "properties": {
@@ -1262,13 +1261,8 @@
           "type": "string"
         },
         "locale": {
-          "default": "en",
-          "enum": [
-            "en",
-            "fr"
-          ],
-          "title": "Locale",
-          "type": "string"
+          "$ref": "#/$defs/Locale",
+          "default": "en"
         },
         "password": {
           "format": "password",
