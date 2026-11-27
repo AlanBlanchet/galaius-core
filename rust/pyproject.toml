@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "galaius-rules"
+version = "0.1.0"
+license = "MIT"
+requires-python = ">=3.11"
+
+[tool.maturin]
+module-name = "galaius_rules"
+features = ["python", "pyo3/extension-module"]
+
+[tool.uv]
+# A path dependency is rebuilt only when one of these moves.
+cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "Cargo.lock" }, { file = "src/**/*.rs" }]

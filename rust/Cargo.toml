@@ -1,0 +1,21 @@
+[package]
+name = "galaius-rules"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "The rules every reader of galaius data applies, in Rust, with Python bindings."
+
+[lib]
+name = "galaius_rules"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+#: The Python module (maturin builds it); a Rust user of the rules needs none of it.
+python = ["dep:pyo3"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["abi3-py311"], optional = true }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
